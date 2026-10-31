@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barbershop SaaS — UI Mockup</title>
+<script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+<style>
+  body { font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .num { font-variant-numeric: tabular-nums; }
+  .phone { width: 340px; height: 720px; border-radius: 46px; padding: 10px; background: #0b0b0c; box-shadow: 0 30px 60px -20px rgba(0,0,0,.45), inset 0 0 0 2px #2a2a2e; flex-shrink: 0; }
+  .screen { width: 100%; height: 100%; border-radius: 36px; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  .notch { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 96px; height: 26px; background: #0b0b0c; border-radius: 20px; z-index: 30; }
+  .scroll { overflow-y: auto; scrollbar-width: none; }
+  .scroll::-webkit-scrollbar { display: none; }
+  .grain { background-image: radial-gradient(circle at 20% 0%, rgba(245,158,11,.35), transparent 45%), radial-gradient(circle at 100% 100%, rgba(245,158,11,.18), transparent 40%); }
+  .stripe { background: repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 10px, transparent 10px 20px); }
+  .pulse-dot { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .4; transform: scale(.8);} }
+  .tab-btn[aria-selected="true"] { background: #f59e0b; color: #18181b; }
+  .chip-sel { background: #18181b !important; color: #fff !important; border-color: #18181b !important; }
+  .fade-in { animation: fade .35s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none; } }
+  svg.i { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: inline-block; flex-shrink: 0; }
+</style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased">
+
+<!-- Header -->
+<header class="max-w-[1400px] mx-auto px-6 pt-8 pb-4">
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-amber-500 font-semibold text-sm"><i data-i="scissors"></i> BarberOS · UI Concept</div>
+      <h1 class="text-3xl font-extrabold tracking-tight mt-1">Contoh Tampilan Barbershop SaaS</h1>
+      <p class="text-[var(--muted-foreground)] text-sm mt-1">Tema <b>Charcoal &amp; Gold</b> · mobile-first · data simulasi. Beberapa elemen bisa diklik (pilih jam, tombol barber).</p>
+    </div>
+    <nav class="flex flex-wrap gap-1 p-1 rounded-2xl border border-[var(--border)] bg-[var(--card)]" role="tablist">
+      <button class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold" data-tab="customer" aria-selected="true">Customer</button>
+      <button class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold" data-tab="barber">Barber</button>
+      <button class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold" data-tab="cashier">Admin / Kasir</button>
+      <button class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold" data-tab="owner">Owner</button>
+      <button class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold" data-tab="tv">TV Antrean</button>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-[1400px] mx-auto px-6 pb-16">
+
+<!-- ===================== CUSTOMER ===================== -->
+<section data-panel="customer" class="fade-in">
+  <div class="flex gap-8 overflow-x-auto py-6 scroll">
+
+    <!-- C1: Beranda -->
+    <div>
+      <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">1 · Beranda</p>
+      <div class="phone"><div class="screen bg-zinc-100 text-zinc-900">
+        <div class="notch"></div>
+        <div class="scroll flex-1">
+          <!-- hero -->
+          <div class="bg-zinc-900 text-white grain px-5 pt-12 pb-20 relative">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-9 h-9 rounded-xl bg-amber-500 text-zinc-900 grid place-items-center text-lg"><i data-i="scissors"></i></div>
+                <div class="leading-tight"><p class="font-bold text-sm">Barber King</p><p class="text-xs text-zinc-400 flex items-center gap-1"><i data-i="pin"></i> Sudirman</p></div>
+              </div>
+              <div class="relative w-10 h-10 rounded-full bg-white/10 grid place-items-center text-lg"><i data-i="bell"></i><span class="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-amber-400"></span></div>
+            </div>
+            <p class="mt-6 text-zinc-400 text-sm">Halo, Rafael 👋</p>
+            <h2 class="text-2xl font-extrabold leading-tight">Mau tampil fresh<br>hari ini?</h2>
+          </div>
+          <!-- active queue card -->
+          <div class="px-4 -mt-14 relative">
+            <div class="rounded-3xl bg-white shadow-xl shadow-zinc-900/10 p-4 border border-zinc-100">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold tracking-wider text-zinc-400">ANTREAN AKTIF</span>
+                <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600"><span class="w-1.5 h-1.5 rounded-full bg-zinc-500 pulse-dot"></span>Menunggu</span>
+              </div>
+              <div class="flex items-end justify-between mt-2">
+                <p class="text-5xl font-extrabold tracking-tight num">A-012</p>
+                <div class="text-right"><p class="text-xs text-zinc-400">Estimasi</p><p class="text-lg font-bold num">~20 mnt</p></div>
+              </div>
+              <div class="mt-3 h-2 rounded-full bg-zinc-100 overflow-hidden"><div class="h-full w-[68%] rounded-full bg-gradient-to-r from-amber-400 to-amber-600"></div></div>
+              <div class="flex items-center justify-between mt-3 text-xs text-zinc-500">
+                <span><b class="text-zinc-900">2 antrean</b> lagi</span>
+                <span class="flex items-center gap-1.5"><span class="w-5 h-5 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white grid place-items-center text-[12px] font-bold">A</span>Andi · Haircut</span>
+              </div>
+            </div>
+          </div>
+          <!-- quick actions -->
+          <div class="grid grid-cols-2 gap-3 px-4 mt-4">
+            <button class="rounded-2xl bg-amber-500 text-zinc-900 p-4 text-left shadow-lg shadow-amber-500/30">
+              <div class="w-10 h-10 rounded-xl bg-zinc-900/10 grid place-items-center text-xl"><i data-i="calendar"></i></div>
+              <p class="font-bold mt-3">Booking</p><p class="text-xs opacity-75">Pilih jam &amp; barber</p>
+            </button>
+            <button class="rounded-2xl bg-zinc-900 text-white p-4 text-left">
+              <div class="w-10 h-10 rounded-xl bg-white/10 grid place-items-center text-xl"><i data-i="ticket"></i></div>
+              <p class="font-bold mt-3">Ambil Antrean</p><p class="text-xs text-zinc-400">Datang langsung</p>
+            </button>
+          </div>
+          <!-- services -->
+          <div class="flex items-center justify-between px-5 mt-6"><h3 class="font-bold">Layanan populer</h3><span class="text-xs font-semibold text-amber-600">Lihat semua</span></div>
+          <div class="flex gap-3 px-4 mt-3 overflow-x-auto scroll pb-1">
+            <div class="min-w-[130px] rounded-2xl bg-white p-3 border border-zinc-100">
+              <div class="h-16 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-950 stripe grid place-items-center text-amber-400 text-2xl"><i data-i="scissors"></i></div>
+              <p class="font-semibold text-sm mt-2">Haircut</p><p class="text-xs text-zinc-400">45 mnt</p><p class="font-bold text-sm mt-1">Rp50.000</p>
+            </div>
+            <div class="min-w-[130px] rounded-2xl bg-white p-3 border border-zinc-100">
+              <div class="h-16 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 grid place-items-center text-zinc-900 text-2xl"><i data-i="sparkle"></i></div>
+              <p class="font-semibold text-sm mt-2">Shave</p><p class="text-xs text-zinc-400">20 mnt</p><p class="font-bold text-sm mt-1">Rp30.000</p>
+            </div>
+            <div class="min-w-[130px] rounded-2xl bg-white p-3 border border-zinc-100">
+              <div class="h-16 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 grid place-items-center text-white text-2xl"><i data-i="droplet"></i></div>
+              <p class="font-semibold text-sm mt-2">Hair Wash</p><p class="text-xs text-zinc-400">15 mnt</p><p class="font-bold text-sm mt-1">Rp25.000</p>
+            </div>
+          </div>
+          <!-- barbers -->
+          <div class="flex items-center justify-between px-5 mt-6"><h3 class="font-bold">Barber kami</h3><span class="text-xs font-semibold text-amber-600">Semua</span></div>
+          <div class="px-4 mt-3 space-y-2 pb-28">
+            <div class="flex items-center gap-3 bg-white rounded-2xl p-3 border border-zinc-100">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white grid place-items-center font-bold">A</div>
+              <div class="flex-1"><p class="font-semibold text-sm">Andi</p><p class="text-xs text-zinc-400">Fade · Pompadour</p></div>
+              <span class="flex items-center gap-1 text-xs font-bold"><i data-i="star" class="text-amber-500"></i>4.9</span>
+            </div>
+            <div class="flex items-center gap-3 bg-white rounded-2xl p-3 border border-zinc-100">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white grid place-items-center font-bold">B</div>
+              <div class="flex-1"><p class="font-semibold text-sm">Bima</p><p class="text-xs text-zinc-400">Crop · Undercut</p></div>
+              <span class="flex items-center gap-1 text-xs font-bold"><i data-i="star" class="text-amber-500"></i>4.8</span>
+            </div>
+          </div>
+        </div>
+        <!-- bottom nav -->
+        <div class="absolute bottom-0 inset-x-0 px-3 pb-3">
+          <div class="flex justify-around items-center bg-zinc-900 text-zinc-500 rounded-2xl py-2.5 shadow-xl">
+            <a class="flex flex-col items-center gap-0.5 text-amber-400"><i data-i="home" class="text-xl"></i><span class="text-[12px] font-semibold">Beranda</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="ticket" class="text-xl"></i><span class="text-[12px]">Antrean</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="clock" class="text-xl"></i><span class="text-[12px]">Riwayat</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="user" class="text-xl"></i><span class="text-[12px]">Profil</span></a>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- C2: Booking -->
+    <div>
+      <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">2 · Booking — pilih jadwal</p>
+      <div class="phone"><div class="screen bg-white text-zinc-900">
+        <div class="notch"></div>
+        <div class="px-5 pt-12">
+          <div class="flex items-center justify-between">
+            <button class="w-10 h-10 rounded-full bg-zinc-100 grid place-items-center text-lg"><i data-i="left"></i></button>
+            <p class="font-bold">Booking</p>
+            <span class="text-xs font-semibold text-zinc-400">3 / 4</span>
+          </div>
+          <div class="flex gap-1.5 mt-4">
+            <div class="h-1.5 flex-1 rounded-full bg-amber-500"></div><div class="h-1.5 flex-1 rounded-full bg-amber-500"></div><div class="h-1.5 flex-1 rounded-full bg-amber-500"></div><div class="h-1.5 flex-1 rounded-full bg-zinc-200"></div>
+          </div>
+          <div class="flex text-[12px] text-zinc-400 mt-1.5 justify-between font-medium"><span>Layanan</span><span>Barber</span><span class="text-zinc-900 font-semibold">Jadwal</span><span>Konfirmasi</span></div>
+        </div>
+        <div class="scroll flex-1 px-5 pt-5 pb-36">
+          <h3 class="text-xl font-extrabold">Kapan mau datang?</h3>
+          <p class="text-sm text-zinc-500">Oktober 2026</p>
+          <div class="flex gap-2 mt-3 overflow-x-auto scroll pb-1" id="dates">
+            <button class="date min-w-[58px] rounded-2xl border border-zinc-200 py-2.5 text-center chip-sel"><p class="text-xs opacity-70">Sen</p><p class="text-lg font-bold num">27</p></button>
+            <button class="date min-w-[58px] rounded-2xl border border-zinc-200 py-2.5 text-center"><p class="text-xs text-zinc-400">Sel</p><p class="text-lg font-bold num">28</p></button>
+            <button class="date min-w-[58px] rounded-2xl border border-zinc-200 py-2.5 text-center"><p class="text-xs text-zinc-400">Rab</p><p class="text-lg font-bold num">29</p></button>
+            <button class="date min-w-[58px] rounded-2xl border border-zinc-200 py-2.5 text-center"><p class="text-xs text-zinc-400">Kam</p><p class="text-lg font-bold num">30</p></button>
+            <button class="date min-w-[58px] rounded-2xl border border-zinc-200 py-2.5 text-center"><p class="text-xs text-zinc-400">Jum</p><p class="text-lg font-bold num">31</p></button>
+          </div>
+          <div class="mt-5 flex items-center gap-2 text-sm font-semibold"><span class="text-amber-500">☀</span> Pagi</div>
+          <div class="grid grid-cols-3 gap-2 mt-2 times">
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">10.00</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">10.30</button>
+            <button disabled class="rounded-xl bg-zinc-100 text-zinc-300 line-through py-2.5 text-sm font-semibold num">11.00</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num chip-sel">11.30</button>
+            <button disabled class="rounded-xl bg-zinc-100 text-zinc-300 line-through py-2.5 text-sm font-semibold num">12.00</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">12.30</button>
+          </div>
+          <div class="mt-5 flex items-center gap-2 text-sm font-semibold"><span class="text-orange-500">◐</span> Siang &amp; Sore</div>
+          <div class="grid grid-cols-3 gap-2 mt-2 times">
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">13.00</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">13.30</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">14.00</button>
+            <button disabled class="rounded-xl bg-zinc-100 text-zinc-300 line-through py-2.5 text-sm font-semibold num">14.30</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">15.00</button>
+            <button class="slot rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold num">15.30</button>
+          </div>
+          <div class="mt-4 flex items-center gap-4 text-xs text-zinc-400">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-zinc-900"></span>Dipilih</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded border border-zinc-300"></span>Tersedia</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-zinc-100"></span>Penuh</span>
+          </div>
+        </div>
+        <div class="absolute bottom-0 inset-x-0 bg-white border-t border-zinc-100 px-5 pt-3 pb-5 rounded-t-3xl shadow-[0_-10px_30px_-10px_rgba(0,0,0,.12)]">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white grid place-items-center font-bold">A</div>
+            <div class="flex-1 leading-tight"><p class="text-sm font-semibold">Haircut + Wash · Andi</p><p class="text-xs text-zinc-400">Sen, 27 Okt · <span id="selTime">11.30</span> · 60 mnt</p></div>
+            <p class="font-extrabold num">Rp75rb</p>
+          </div>
+          <button class="w-full mt-3 rounded-2xl bg-amber-500 text-zinc-900 font-bold py-3.5 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/30">Lanjut <i data-i="right"></i></button>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- C3: Status antrean live -->
+    <div>
+      <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">3 · Status antrean (real-time)</p>
+      <div class="phone"><div class="screen bg-zinc-950 text-white">
+        <div class="notch"></div>
+        <div class="grain absolute inset-0 opacity-70"></div>
+        <div class="relative flex-1 flex flex-col px-5 pt-12 pb-5">
+          <div class="flex items-center justify-between">
+            <button class="w-10 h-10 rounded-full bg-white/10 grid place-items-center text-lg"><i data-i="left"></i></button>
+            <p class="font-bold">Antrean Saya</p>
+            <span class="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold"><span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>Live</span>
+          </div>
+          <div class="text-center mt-8">
+            <p class="text-sm text-zinc-400">Nomor antrean Anda</p>
+            <p class="text-[76px] leading-none font-extrabold tracking-tight num mt-2 bg-gradient-to-b from-white to-amber-200 bg-clip-text text-transparent">A-012</p>
+            <span class="inline-flex mt-3 items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-white/10"><i data-i="clock"></i> Menunggu dipanggil</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-8">
+            <div class="rounded-2xl bg-white/5 border border-white/10 p-3 text-center"><p class="text-[12px] text-zinc-400">Dilayani</p><p class="text-lg font-bold num">A-010</p></div>
+            <div class="rounded-2xl bg-amber-500 text-zinc-900 p-3 text-center"><p class="text-[12px] font-medium opacity-80">Di depan</p><p class="text-lg font-extrabold num">2 org</p></div>
+            <div class="rounded-2xl bg-white/5 border border-white/10 p-3 text-center"><p class="text-[12px] text-zinc-400">Estimasi</p><p class="text-lg font-bold num">20 mnt</p></div>
+          </div>
+          <div class="mt-6 rounded-3xl bg-white/5 border border-white/10 p-4">
+            <ol class="space-y-3 text-sm">
+              <li class="flex items-center gap-3"><span class="w-6 h-6 rounded-full bg-emerald-500 grid place-items-center text-xs"><i data-i="check"></i></span><span class="flex-1">Check-in</span><span class="text-xs text-zinc-400 num">09.40</span></li>
+              <li class="flex items-center gap-3"><span class="w-6 h-6 rounded-full border-2 border-amber-400 grid place-items-center"><span class="w-2 h-2 rounded-full bg-amber-400 pulse-dot"></span></span><span class="flex-1 font-semibold text-amber-300">Menunggu</span><span class="text-xs text-zinc-400">sekarang</span></li>
+              <li class="flex items-center gap-3 text-zinc-500"><span class="w-6 h-6 rounded-full border-2 border-zinc-700"></span>Dipanggil</li>
+              <li class="flex items-center gap-3 text-zinc-500"><span class="w-6 h-6 rounded-full border-2 border-zinc-700"></span>Sedang dicukur</li>
+              <li class="flex items-center gap-3 text-zinc-500"><span class="w-6 h-6 rounded-full border-2 border-zinc-700"></span>Selesai</li>
+            </ol>
+          </div>
+          <p class="text-[12px] text-zinc-500 text-center mt-3">Estimasi dapat berubah sesuai durasi layanan.</p>
+          <div class="mt-auto flex gap-2">
+            <button class="flex-1 rounded-2xl bg-white/10 py-3 text-sm font-semibold">Batalkan</button>
+            <button class="flex-[2] rounded-2xl bg-white text-zinc-900 py-3 text-sm font-bold flex items-center justify-center gap-2"><i data-i="bell"></i> Ingatkan saya</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===================== BARBER ===================== -->
+<section data-panel="barber" class="hidden fade-in">
+  <div class="flex gap-8 overflow-x-auto py-6 scroll">
+
+    <!-- B1: Antrean -->
+    <div>
+      <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">1 · Antrean saya — coba klik tombol utama</p>
+      <div class="phone"><div class="screen bg-zinc-950 text-white">
+        <div class="notch"></div>
+        <div class="scroll flex-1 px-4 pt-12 pb-28">
+          <div class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 grid place-items-center font-bold ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-950">A</div>
+              <div class="leading-tight"><p class="font-bold">Halo, Andi! ✂</p><p class="text-xs text-zinc-400">Senin, 27 Okt · Sudirman</p></div>
+            </div>
+            <span class="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full bg-emerald-500/15 text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Aktif</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-5">
+            <div class="rounded-2xl bg-zinc-900 border border-zinc-800 p-3"><p class="text-[12px] text-zinc-400">Dilayani</p><p class="text-2xl font-extrabold num" id="served">12</p></div>
+            <div class="rounded-2xl bg-zinc-900 border border-zinc-800 p-3"><p class="text-[12px] text-zinc-400">Komisi</p><p class="text-2xl font-extrabold num text-amber-400" id="komisi">180rb</p></div>
+            <div class="rounded-2xl bg-zinc-900 border border-zinc-800 p-3"><p class="text-[12px] text-zinc-400">Antrean</p><p class="text-2xl font-extrabold num">3</p></div>
+          </div>
+
+          <div class="mt-5 rounded-3xl p-[1.5px] bg-gradient-to-br from-amber-400 via-amber-600 to-zinc-800">
+            <div class="rounded-[22px] bg-zinc-900 p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold tracking-wider text-zinc-400" id="cardLabel">CUSTOMER BERIKUTNYA</span>
+                <span id="stBadge" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300">Menunggu</span>
+              </div>
+              <div class="flex items-center gap-4 mt-3">
+                <p class="text-5xl font-extrabold num tracking-tight">A-013</p>
+                <div class="leading-tight"><p class="font-semibold">Rafael</p><span class="inline-flex items-center gap-1 text-xs text-violet-300 mt-0.5"><i data-i="calendar"></i> Booking 11.00</span></div>
+              </div>
+              <div class="flex flex-wrap gap-1.5 mt-3">
+                <span class="text-xs px-2.5 py-1 rounded-lg bg-zinc-800">Haircut</span>
+                <span class="text-xs px-2.5 py-1 rounded-lg bg-zinc-800">Hair Wash</span>
+                <span class="text-xs px-2.5 py-1 rounded-lg bg-zinc-800 text-zinc-400">60 mnt</span>
+              </div>
+              <div class="mt-3 text-xs text-zinc-400 bg-zinc-800/60 rounded-xl px-3 py-2">📝 Tipis samping, atas jangan terlalu pendek</div>
+              <div id="timerBox" class="hidden mt-3 text-center">
+                <p class="text-xs text-zinc-400">Durasi berjalan</p>
+                <p class="text-3xl font-extrabold num text-amber-400" id="timer">00:00</p>
+              </div>
+              <button id="mainBtn" class="w-full mt-4 rounded-2xl py-4 font-bold text-base flex items-center justify-center gap-2 bg-sky-500 text-white shadow-lg shadow-sky-500/30 transition">
+                <i data-i="megaphone"></i> <span>Panggil Customer</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between mt-6 px-1"><h3 class="font-bold">Antrean berikutnya</h3><span class="text-xs text-zinc-400">2 orang</span></div>
+          <div class="space-y-2 mt-3">
+            <div class="flex items-center gap-3 rounded-2xl bg-zinc-900 border border-zinc-800 p-3">
+              <div class="w-12 h-12 rounded-xl bg-zinc-800 grid place-items-center font-extrabold num text-sm">A-014</div>
+              <div class="flex-1"><p class="font-semibold text-sm">Budi</p><p class="text-xs text-zinc-400">Walk-in · Haircut</p></div>
+              <span class="text-xs text-zinc-400 num">~45 mnt</span>
+            </div>
+            <div class="flex items-center gap-3 rounded-2xl bg-zinc-900 border border-zinc-800 p-3">
+              <div class="w-12 h-12 rounded-xl bg-violet-500/15 text-violet-300 grid place-items-center font-extrabold num text-sm">B-016</div>
+              <div class="flex-1"><p class="font-semibold text-sm">Dimas</p><p class="text-xs text-zinc-400">Booking 11.30 · Shave</p></div>
+              <span class="text-xs text-zinc-400 num">~65 mnt</span>
+            </div>
+          </div>
+        </div>
+        <div class="absolute bottom-0 inset-x-0 px-3 pb-3">
+          <div class="flex justify-around items-center bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-2xl py-2.5">
+            <a class="flex flex-col items-center gap-0.5 text-amber-400"><i data-i="ticket" class="text-xl"></i><span class="text-[12px] font-semibold">Antrean</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="wallet" class="text-xl"></i><span class="text-[12px]">Penghasilan</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="calendar" class="text-xl"></i><span class="text-[12px]">Jadwal</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="user" class="text-xl"></i><span class="text-[12px]">Profil</span></a>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- B2: Penghasilan -->
+    <div>
+      <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">2 · Penghasilan</p>
+      <div class="phone"><div class="screen bg-zinc-100 text-zinc-900">
+        <div class="notch"></div>
+        <div class="scroll flex-1 pb-28">
+          <div class="bg-zinc-900 text-white grain px-5 pt-12 pb-6 rounded-b-[32px]">
+            <div class="flex items-center justify-between"><p class="font-bold text-lg">Penghasilan</p><span class="text-xs px-2.5 py-1 rounded-full bg-white/10">Okt 2026</span></div>
+            <div class="flex gap-1 mt-4 p-1 rounded-xl bg-white/10 text-xs font-semibold">
+              <button class="flex-1 py-2 rounded-lg text-zinc-400">Hari ini</button>
+              <button class="flex-1 py-2 rounded-lg text-zinc-400">Minggu</button>
+              <button class="flex-1 py-2 rounded-lg bg-amber-500 text-zinc-900">Bulan</button>
+            </div>
+            <p class="text-sm text-zinc-400 mt-5">Total periode berjalan</p>
+            <p class="text-4xl font-extrabold num tracking-tight">Rp3.800.000</p>
+            <div class="flex gap-2 mt-3 text-xs">
+              <span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300">Dibayar Rp0</span>
+              <span class="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300">Belum dibayar Rp3,8jt</span>
+            </div>
+          </div>
+          <div class="px-4 -mt-0 pt-4">
+            <div class="rounded-3xl bg-white p-4 border border-zinc-100">
+              <div class="flex items-center justify-between"><p class="font-bold text-sm">Layanan per hari</p><span class="text-xs text-emerald-600 font-semibold flex items-center gap-1"><i data-i="trend"></i>+8%</span></div>
+              <div class="flex items-end gap-1.5 h-24 mt-3">
+                <div class="flex-1 rounded-md bg-zinc-200 h-[40%]"></div><div class="flex-1 rounded-md bg-zinc-200 h-[55%]"></div><div class="flex-1 rounded-md bg-zinc-200 h-[48%]"></div><div class="flex-1 rounded-md bg-zinc-200 h-[70%]"></div><div class="flex-1 rounded-md bg-zinc-200 h-[62%]"></div><div class="flex-1 rounded-md bg-zinc-200 h-[85%]"></div><div class="flex-1 rounded-md bg-gradient-to-t from-amber-600 to-amber-400 h-[95%]"></div>
+              </div>
+              <div class="flex justify-between text-[12px] text-zinc-400 mt-1.5"><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span><span>Min</span><span class="text-zinc-900 font-semibold">Sen</span></div>
+            </div>
+            <div class="rounded-3xl bg-white p-4 border border-zinc-100 mt-3 space-y-3 text-sm">
+              <div class="flex justify-between"><span class="text-zinc-500">Layanan selesai</span><b class="num">300</b></div>
+              <div class="flex justify-between"><span class="text-zinc-500">Gaji pokok</span><b class="num">Rp2.000.000</b></div>
+              <div class="flex justify-between"><span class="text-zinc-500">Komisi <span class="text-xs">(Rp5.000 × 300)</span></span><b class="num">Rp1.500.000</b></div>
+              <div class="flex justify-between"><span class="text-zinc-500">Bonus target 🎯</span><b class="num text-emerald-600">+Rp300.000</b></div>
+              <div class="flex justify-between"><span class="text-zinc-500">Potongan</span><b class="num text-rose-500">Rp0</b></div>
+              <div class="border-t border-dashed border-zinc-200 pt-3 flex justify-between"><span class="font-semibold">Total bruto</span><b class="num text-lg">Rp3.800.000</b></div>
+            </div>
+            <div class="rounded-3xl bg-white p-4 border border-zinc-100 mt-3">
+              <p class="font-bold text-sm">Target bonus bulan ini</p>
+              <div class="flex justify-between text-xs text-zinc-500 mt-2"><span>300 / 350 layanan</span><span>+Rp500.000</span></div>
+              <div class="h-2.5 rounded-full bg-zinc-100 mt-1.5 overflow-hidden"><div class="h-full w-[86%] bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full"></div></div>
+            </div>
+            <div class="rounded-3xl bg-white p-2 border border-zinc-100 mt-3">
+              <div class="flex items-center gap-3 p-2"><div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 grid place-items-center"><i data-i="receipt"></i></div><div class="flex-1"><p class="text-sm font-semibold">Slip Sep 2026</p><p class="text-xs text-zinc-400">Dibayar 1 Okt</p></div><b class="text-sm num">Rp3,65jt</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="absolute bottom-0 inset-x-0 px-3 pb-3">
+          <div class="flex justify-around items-center bg-zinc-900 text-zinc-500 rounded-2xl py-2.5 shadow-xl">
+            <a class="flex flex-col items-center gap-0.5"><i data-i="ticket" class="text-xl"></i><span class="text-[12px]">Antrean</span></a>
+            <a class="flex flex-col items-center gap-0.5 text-amber-400"><i data-i="wallet" class="text-xl"></i><span class="text-[12px] font-semibold">Penghasilan</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="calendar" class="text-xl"></i><span class="text-[12px]">Jadwal</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="user" class="text-xl"></i><span class="text-[12px]">Profil</span></a>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===================== CASHIER ===================== -->
+<section data-panel="cashier" class="hidden fade-in py-6">
+  <!-- Mobile Cashier Row -->
+  <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">Tampilan Mobile (HP) — Admin / Kasir</p>
+  <div class="flex gap-8 overflow-x-auto pb-8 scroll">
+
+    <!-- KM1: Antrean Mobile (Tab pengganti Kanban) -->
+    <div>
+      <p class="text-xs font-semibold mb-2 text-[var(--muted-foreground)]">1 · Papan Antrean (Mode Tab)</p>
+      <div class="phone"><div class="screen bg-zinc-100 text-zinc-900">
+        <div class="notch"></div>
+        <!-- Topbar -->
+        <div class="bg-zinc-950 text-white px-5 pt-11 pb-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-amber-500 text-zinc-900 grid place-items-center"><i data-i="scissors"></i></div>
+              <div class="leading-tight"><p class="font-bold text-sm">Kasir · Sudirman</p><p class="text-[12px] text-zinc-400">Shift Siti · <span class="text-emerald-400 num">Rp1,24jt</span></p></div>
+            </div>
+            <button class="rounded-xl bg-amber-500 text-zinc-900 px-3 py-1.5 text-xs font-bold flex items-center gap-1 shadow"><i data-i="plus"></i>Walk-in</button>
+          </div>
+          <!-- Barber strip compact -->
+          <div class="flex gap-1.5 mt-3 overflow-x-auto scroll">
+            <span class="shrink-0 inline-flex items-center gap-1.5 text-[12px] bg-white/10 px-2.5 py-1 rounded-full"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Andi · A-010</span>
+            <span class="shrink-0 inline-flex items-center gap-1.5 text-[12px] bg-white/10 px-2.5 py-1 rounded-full"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Bima · A-011</span>
+            <span class="shrink-0 inline-flex items-center gap-1.5 text-[12px] bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Doni · Kosong</span>
+          </div>
+          <!-- Status Tabs (replaces 4 Kanban columns on mobile) -->
+          <div class="grid grid-cols-4 gap-1 mt-3 p-1 rounded-xl bg-zinc-900 text-[12px] font-semibold" id="cashierMobTabs">
+            <button data-qtab="wait" class="qtab py-1.5 rounded-lg bg-amber-500 text-zinc-900">Tunggu (3)</button>
+            <button data-qtab="call" class="qtab py-1.5 rounded-lg text-zinc-400">Panggil (1)</button>
+            <button data-qtab="cut" class="qtab py-1.5 rounded-lg text-zinc-400">Cukur (3)</button>
+            <button data-qtab="pay" class="qtab py-1.5 rounded-lg text-zinc-400">Bayar (2)</button>
+          </div>
+        </div>
+
+        <div class="scroll flex-1 px-4 pt-3 pb-28 space-y-2.5">
+          <!-- Tab: Menunggu -->
+          <div data-qlist="wait" class="space-y-2.5">
+            <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-zinc-200/80">
+              <div class="flex items-center justify-between">
+                <span class="text-2xl font-extrabold num">A-013</span>
+                <span class="text-[12px] px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 font-semibold">Booking 11.00</span>
+              </div>
+              <p class="font-semibold text-sm mt-1">Rafael · <span class="text-zinc-500 font-normal">Haircut, Wash</span></p>
+              <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-zinc-100">
+                <span class="text-xs text-zinc-500">Barber: <b class="text-zinc-900">Andi</b></span>
+                <div class="flex gap-1.5">
+                  <button class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-500 text-white">Panggil</button>
+                  <button class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-zinc-100">Ubah</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-zinc-200/80">
+              <div class="flex items-center justify-between">
+                <span class="text-2xl font-extrabold num">A-014</span>
+                <span class="text-[12px] px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 font-semibold">Walk-in</span>
+              </div>
+              <p class="font-semibold text-sm mt-1">Budi · <span class="text-zinc-500 font-normal">Haircut</span></p>
+              <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-zinc-100">
+                <span class="text-xs text-amber-600 font-semibold">Belum pilih barber</span>
+                <button class="text-xs font-bold px-3 py-1.5 rounded-lg bg-zinc-900 text-white">Assign → Doni</button>
+              </div>
+            </div>
+
+            <!-- Booking belum check-in -->
+            <div class="rounded-2xl bg-amber-50 border border-amber-200 p-3">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-amber-900">📅 Booking belum check-in</p>
+                <span class="text-[12px] text-rose-600 font-semibold">Telat 12 mnt</span>
+              </div>
+              <p class="text-sm font-semibold mt-1">10.30 · Hendra · Shave (Andi)</p>
+              <div class="flex gap-2 mt-2">
+                <button class="flex-1 text-xs font-bold py-1.5 rounded-lg bg-zinc-900 text-white">Check-in</button>
+                <button class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-rose-600 border border-rose-200">No-show</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Dipanggil -->
+          <div data-qlist="call" class="hidden space-y-2.5">
+            <div class="bg-white rounded-2xl p-4 border-2 border-sky-400">
+              <div class="flex justify-between"><b class="text-2xl num">A-012</b><span class="text-xs text-sky-600 font-semibold">Dipanggil 1 mnt lalu</span></div>
+              <p class="text-sm font-semibold mt-1">Fajar · Haircut (Doni)</p>
+              <div class="flex gap-2 mt-3"><button class="flex-1 py-2 rounded-xl bg-amber-500 text-zinc-900 font-bold text-xs">✂ Mulai Cukur</button><button class="px-3 py-2 rounded-xl bg-zinc-100 font-semibold text-xs">Skip</button></div>
+            </div>
+          </div>
+
+          <!-- Tab: Dicukur -->
+          <div data-qlist="cut" class="hidden space-y-2.5">
+            <div class="bg-white rounded-2xl p-3.5 border border-zinc-200">
+              <div class="flex justify-between"><b class="text-xl num">A-010 · Andi</b><span class="text-xs font-bold text-amber-600 num">⏱ 18:32</span></div>
+              <p class="text-xs text-zinc-500 mt-0.5">Haircut · est. 45 mnt</p>
+              <button class="w-full mt-2.5 py-2 rounded-xl bg-emerald-500 text-white font-bold text-xs">✓ Selesai &amp; ke Kasir</button>
+            </div>
+          </div>
+
+          <!-- Tab: Siap bayar -->
+          <div data-qlist="pay" class="hidden space-y-2.5">
+            <div class="bg-white rounded-2xl p-3.5 border border-emerald-300">
+              <div class="flex justify-between"><b class="text-xl num">A-008 · Rafael</b><b class="num text-emerald-700">Rp75.000</b></div>
+              <p class="text-xs text-zinc-500 mt-0.5">Haircut, Wash · Andi</p>
+              <button class="w-full mt-2.5 py-2 rounded-xl bg-emerald-500 text-white font-bold text-xs">Proses Pembayaran →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Nav Admin Mobile -->
+        <div class="absolute bottom-0 inset-x-0 px-3 pb-3">
+          <div class="flex justify-around items-center bg-zinc-900 text-zinc-500 rounded-2xl py-2.5 shadow-xl">
+            <a class="flex flex-col items-center gap-0.5 text-amber-400"><i data-i="ticket" class="text-xl"></i><span class="text-[12px] font-semibold">Antrean</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="banknote" class="text-xl"></i><span class="text-[12px]">Kasir</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="calendar" class="text-xl"></i><span class="text-[12px]">Booking</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="more" class="text-xl"></i><span class="text-[12px]">Lainnya</span></a>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- KM2: Kasir / Checkout Mobile -->
+    <div>
+      <p class="text-xs font-semibold mb-2 text-[var(--muted-foreground)]">2 · Layar Kasir / Checkout (HP)</p>
+      <div class="phone"><div class="screen bg-white text-zinc-900">
+        <div class="notch"></div>
+        <div class="px-5 pt-12 pb-3 border-b border-zinc-100 flex items-center justify-between">
+          <button class="w-9 h-9 rounded-full bg-zinc-100 grid place-items-center"><i data-i="left"></i></button>
+          <div class="text-center"><p class="font-bold text-sm">Checkout · A-008</p><p class="text-[12px] text-zinc-400">Rafael · Barber Andi</p></div>
+          <button class="text-xs font-semibold text-amber-600">+ Item</button>
+        </div>
+
+        <div class="scroll flex-1 px-4 pt-3 pb-44 space-y-3">
+          <!-- Items -->
+          <div class="rounded-2xl bg-zinc-50 p-3 space-y-2 text-sm border border-zinc-100">
+            <div class="flex items-center justify-between">
+              <div><p class="font-semibold">Haircut</p><p class="text-xs text-zinc-400">Andi · Komisi Rp5.000</p></div>
+              <b class="num">Rp50.000</b>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-zinc-200/70">
+              <div><p class="font-semibold">Hair Wash</p><p class="text-xs text-zinc-400">Andi · Komisi Rp3.000</p></div>
+              <b class="num">Rp25.000</b>
+            </div>
+          </div>
+
+          <!-- Quick add chips -->
+          <div>
+            <p class="text-xs font-semibold text-zinc-400 mb-1.5">Tambah cepat</p>
+            <div class="flex gap-1.5 overflow-x-auto scroll">
+              <button class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200">+ Pomade 65rb</button>
+              <button class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200">+ Shave 30rb</button>
+              <button class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200">+ Vitamin 15rb</button>
+            </div>
+          </div>
+
+          <!-- Diskon & Tip -->
+          <div class="grid grid-cols-2 gap-2">
+            <div class="rounded-xl border border-zinc-200 p-2.5"><p class="text-[12px] text-zinc-400">Diskon</p><p class="font-bold text-sm num text-rose-600">-Rp5.000</p></div>
+            <div class="rounded-xl border border-zinc-200 p-2.5"><p class="text-[12px] text-zinc-400">Tip untuk Andi</p><p class="font-bold text-sm num text-emerald-600">+Rp10.000</p></div>
+          </div>
+
+          <!-- Metode bayar -->
+          <div>
+            <p class="text-xs font-semibold text-zinc-400 mb-1.5">Metode Pembayaran</p>
+            <div class="grid grid-cols-3 gap-2 text-xs font-bold" id="payMethods">
+              <button class="pm rounded-xl py-2.5 border border-zinc-200 chip-sel">💵 Tunai</button>
+              <button class="pm rounded-xl py-2.5 border border-zinc-200">📱 QRIS</button>
+              <button class="pm rounded-xl py-2.5 border border-zinc-200">🏦 Transfer</button>
+            </div>
+          </div>
+
+          <!-- Uang diterima -->
+          <div class="rounded-2xl bg-zinc-900 text-white p-3.5">
+            <div class="flex justify-between text-xs text-zinc-400"><span>Uang diterima</span><span>Kembalian: <b class="text-emerald-400 num">Rp20.000</b></span></div>
+            <p class="text-2xl font-extrabold num mt-1">Rp100.000</p>
+            <div class="grid grid-cols-3 gap-1.5 mt-2.5 text-xs font-semibold">
+              <button class="py-1.5 rounded-lg bg-white/10">Uang pas</button>
+              <button class="py-1.5 rounded-lg bg-amber-500 text-zinc-900 font-bold">100.000</button>
+              <button class="py-1.5 rounded-lg bg-white/10">150.000</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sticky Bottom Checkout Bar -->
+        <div class="absolute bottom-0 inset-x-0 bg-white border-t border-zinc-200 px-5 pt-3 pb-5 rounded-t-3xl shadow-[0_-10px_30px_-10px_rgba(0,0,0,.12)]">
+          <div class="flex items-center justify-between mb-2.5">
+            <span class="text-xs text-zinc-500">Total Tagihan (termasuk tip)</span>
+            <span class="text-2xl font-extrabold num">Rp80.000</span>
+          </div>
+          <button class="w-full rounded-2xl bg-emerald-500 text-white font-bold py-3.5 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30">
+            <i data-i="check"></i> Bayar &amp; Kirim Struk WA
+          </button>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+
+  <!-- Desktop / Tablet Cashier -->
+  <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">Tampilan Tablet / Desktop — Papan Antrean Kanban</p>
+  <div class="rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl bg-zinc-100 text-zinc-900 flex min-h-[640px]">
+    <!-- sidebar -->
+    <aside class="w-60 bg-zinc-950 text-zinc-400 p-4 flex-col hidden md:flex">
+      <div class="flex items-center gap-2 px-2 py-1"><div class="w-9 h-9 rounded-xl bg-amber-500 text-zinc-900 grid place-items-center text-lg"><i data-i="scissors"></i></div><div class="leading-tight"><p class="text-white font-bold text-sm">Barber King</p><p class="text-xs">Kasir · Sudirman</p></div></div>
+      <nav class="mt-6 space-y-1 text-sm">
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="dash"></i>Dashboard</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-amber-500 text-zinc-900 font-semibold"><i data-i="ticket"></i>Antrean<span class="ml-auto text-xs bg-zinc-900 text-amber-400 px-1.5 rounded-md">8</span></a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="calendar"></i>Booking</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="banknote"></i>Kasir</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="receipt"></i>Transaksi</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="users"></i>Customer</a>
+      </nav>
+      <div class="mt-auto rounded-2xl bg-zinc-900 p-3 text-xs"><p class="text-zinc-500">Shift aktif</p><p class="text-white font-semibold mt-0.5">Siti · 09.00 – 17.00</p><p class="mt-2 text-zinc-500">Kas: <b class="text-emerald-400 num">Rp1.240.000</b></p></div>
+    </aside>
+    <!-- content -->
+    <div class="flex-1 p-5 min-w-0">
+      <div class="flex flex-wrap items-center gap-3">
+        <div><h2 class="text-xl font-extrabold">Antrean Hari Ini</h2><p class="text-xs text-zinc-500 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 pulse-dot"></span>Live · Senin, 27 Okt 2026</p></div>
+        <div class="ml-auto flex items-center gap-2">
+          <div class="hidden lg:flex items-center gap-2 bg-white rounded-xl px-3 py-2 text-sm text-zinc-400 border border-zinc-200 w-56"><i data-i="search"></i>Cari nomor / nama…</div>
+          <button class="rounded-xl bg-white border border-zinc-200 px-3 py-2 text-sm font-semibold flex items-center gap-2"><i data-i="tv"></i>Layar TV</button>
+          <button class="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm font-semibold flex items-center gap-2 shadow-lg"><i data-i="plus"></i>Walk-in</button>
+        </div>
+      </div>
+      <!-- barber status strip -->
+      <div class="flex gap-2 mt-4 overflow-x-auto scroll">
+        <div class="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 border border-zinc-200 text-xs"><span class="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white grid place-items-center font-bold">A</span><b>Andi</b><span class="text-amber-600">✂ A-010</span></div>
+        <div class="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 border border-zinc-200 text-xs"><span class="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white grid place-items-center font-bold">B</span><b>Bima</b><span class="text-amber-600">✂ A-011</span></div>
+        <div class="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 border border-zinc-200 text-xs"><span class="w-7 h-7 rounded-full bg-gradient-to-br from-rose-400 to-pink-600 text-white grid place-items-center font-bold">R</span><b>Rizky</b><span class="text-amber-600">✂ B-009</span></div>
+        <div class="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 border border-zinc-200 text-xs"><span class="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 text-white grid place-items-center font-bold">D</span><b>Doni</b><span class="text-emerald-600">● Kosong</span></div>
+        <div class="flex items-center gap-2 bg-white rounded-full pl-1 pr-3 py-1 border border-zinc-200 text-xs opacity-60"><span class="w-7 h-7 rounded-full bg-zinc-300 text-white grid place-items-center font-bold">E</span><b>Eko</b><span>☕ Istirahat</span></div>
+      </div>
+      <!-- kanban -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+        <div class="rounded-2xl bg-zinc-200/60 p-3">
+          <div class="flex items-center gap-2 px-1 mb-3"><span class="w-2 h-2 rounded-full bg-zinc-500"></span><p class="font-bold text-sm">Menunggu</p><span class="ml-auto text-xs font-bold bg-white px-2 py-0.5 rounded-md">3</span></div>
+          <div class="space-y-2">
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between"><b class="num text-lg">A-013</b><span class="text-[12px] px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 font-semibold h-fit">Booking 11.00</span></div><p class="text-sm">Rafael</p><p class="text-xs text-zinc-400">Haircut, Wash · Andi</p></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between"><b class="num text-lg">A-014</b><span class="text-[12px] px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 font-semibold h-fit">Walk-in</span></div><p class="text-sm">Budi</p><button class="mt-2 w-full text-xs font-semibold rounded-lg border border-dashed border-zinc-300 py-1.5 text-zinc-500">+ Pilih barber</button></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between"><b class="num text-lg">B-016</b><span class="text-[12px] px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 font-semibold h-fit">Booking 11.30</span></div><p class="text-sm">Dimas</p><p class="text-xs text-zinc-400">Shave · Andi</p></div>
+          </div>
+        </div>
+        <div class="rounded-2xl bg-sky-100/70 p-3">
+          <div class="flex items-center gap-2 px-1 mb-3"><span class="w-2 h-2 rounded-full bg-sky-500 pulse-dot"></span><p class="font-bold text-sm">Dipanggil</p><span class="ml-auto text-xs font-bold bg-white px-2 py-0.5 rounded-md">1</span></div>
+          <div class="bg-white rounded-xl p-3 shadow-sm border-2 border-sky-400 ring-4 ring-sky-200/60"><div class="flex justify-between"><b class="num text-lg">A-012</b><span class="text-xs text-sky-600 font-semibold">1 mnt lalu</span></div><p class="text-sm">Fajar</p><p class="text-xs text-zinc-400">Haircut · Doni</p><div class="flex gap-1.5 mt-2"><button class="flex-1 text-xs font-semibold rounded-lg bg-sky-500 text-white py-1.5">Mulai</button><button class="text-xs font-semibold rounded-lg bg-zinc-100 px-2.5">Skip</button></div></div>
+        </div>
+        <div class="rounded-2xl bg-amber-100/70 p-3">
+          <div class="flex items-center gap-2 px-1 mb-3"><span class="w-2 h-2 rounded-full bg-amber-500"></span><p class="font-bold text-sm">Sedang dicukur</p><span class="ml-auto text-xs font-bold bg-white px-2 py-0.5 rounded-md">3</span></div>
+          <div class="space-y-2">
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between"><b class="num text-lg">A-010</b><span class="text-xs font-bold text-amber-600 num flex items-center gap-1"><i data-i="timer"></i>18:32</span></div><p class="text-xs text-zinc-400">Haircut · Andi</p><div class="h-1.5 bg-zinc-100 rounded-full mt-2"><div class="h-full w-[60%] bg-amber-500 rounded-full"></div></div></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between"><b class="num text-lg">A-011</b><span class="text-xs font-bold text-amber-600 num flex items-center gap-1"><i data-i="timer"></i>07:10</span></div><p class="text-xs text-zinc-400">Shave · Bima</p><div class="h-1.5 bg-zinc-100 rounded-full mt-2"><div class="h-full w-[35%] bg-amber-500 rounded-full"></div></div></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between"><b class="num text-lg">B-009</b><span class="text-xs font-bold text-rose-600 num flex items-center gap-1"><i data-i="timer"></i>48:05</span></div><p class="text-xs text-zinc-400">Coloring · Rizky</p><div class="h-1.5 bg-zinc-100 rounded-full mt-2"><div class="h-full w-[95%] bg-rose-500 rounded-full"></div></div></div>
+          </div>
+        </div>
+        <div class="rounded-2xl bg-emerald-100/70 p-3">
+          <div class="flex items-center gap-2 px-1 mb-3"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><p class="font-bold text-sm">Siap bayar</p><span class="ml-auto text-xs font-bold bg-white px-2 py-0.5 rounded-md">2</span></div>
+          <div class="space-y-2">
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between items-center"><b class="num text-lg">A-008</b><b class="num text-sm">Rp75.000</b></div><p class="text-xs text-zinc-400">Haircut, Wash · Andi</p><button class="mt-2 w-full text-xs font-bold rounded-lg bg-emerald-500 text-white py-2 flex items-center justify-center gap-1.5"><i data-i="wallet"></i>Bayar</button></div>
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-zinc-100"><div class="flex justify-between items-center"><b class="num text-lg">A-009</b><b class="num text-sm">Rp50.000</b></div><p class="text-xs text-zinc-400">Haircut · Bima</p><button class="mt-2 w-full text-xs font-bold rounded-lg bg-emerald-500 text-white py-2 flex items-center justify-center gap-1.5"><i data-i="wallet"></i>Bayar</button></div>
+          </div>
+        </div>
+      </div>
+      <!-- bookings not checked in -->
+      <div class="mt-4 bg-white rounded-2xl border border-zinc-200 p-4">
+        <div class="flex items-center justify-between"><p class="font-bold text-sm">Booking belum check-in</p><span class="text-xs text-zinc-400">Toleransi telat 15 mnt</span></div>
+        <div class="mt-3 divide-y divide-zinc-100 text-sm">
+          <div class="flex flex-wrap items-center gap-3 py-2.5"><b class="num w-14">12.00</b><span class="flex-1">Gilang · Haircut · Bima</span><button class="text-xs font-semibold rounded-lg bg-zinc-900 text-white px-3 py-1.5">Check-in</button><button class="text-xs font-semibold rounded-lg bg-zinc-100 px-3 py-1.5">Ubah</button></div>
+          <div class="flex flex-wrap items-center gap-3 py-2.5"><b class="num w-14 text-rose-600">10.30</b><span class="flex-1">Hendra · Shave · Andi <span class="text-xs text-rose-600 font-semibold">· telat 12 mnt</span></span><button class="text-xs font-semibold rounded-lg bg-zinc-900 text-white px-3 py-1.5">Check-in</button><button class="text-xs font-semibold rounded-lg bg-rose-50 text-rose-600 px-3 py-1.5">No-show</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== OWNER ===================== -->
+<section data-panel="owner" class="hidden fade-in py-6">
+  <!-- Mobile Owner Row (First so it's immediately visible without horizontal scrolling) -->
+  <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">Tampilan Mobile (HP) — Owner</p>
+  <div class="flex gap-8 overflow-x-auto pb-8 scroll">
+
+    <!-- OM1: Dashboard Owner Mobile -->
+    <div>
+      <p class="text-xs font-semibold mb-2 text-[var(--muted-foreground)]">1 · Dashboard &amp; Performa (HP)</p>
+      <div class="phone"><div class="screen bg-zinc-100 text-zinc-900">
+        <div class="notch"></div>
+        <div class="scroll flex-1 pb-28">
+          <div class="bg-zinc-900 text-white grain px-5 pt-12 pb-16">
+            <div class="flex items-center justify-between"><div><p class="text-xs text-zinc-400">Selamat pagi,</p><p class="font-bold">Pak Rudi 👋</p></div><button class="text-xs px-3 py-1.5 rounded-full bg-white/10 font-semibold flex items-center gap-1"><i data-i="store"></i>Semua cabang ▾</button></div>
+            <p class="text-xs text-zinc-400 mt-5">Omzet hari ini</p>
+            <p class="text-4xl font-extrabold num tracking-tight">Rp2.450.000</p>
+            <p class="text-xs text-emerald-400 mt-1 flex items-center gap-1"><i data-i="trend"></i>12% dari kemarin</p>
+          </div>
+          <div class="px-4 -mt-10 grid grid-cols-2 gap-2.5">
+            <div class="rounded-2xl bg-white p-3.5 shadow-lg shadow-zinc-900/5"><span class="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 grid place-items-center"><i data-i="users"></i></span><p class="text-xl font-extrabold num mt-2">38</p><p class="text-xs text-zinc-400">Customer</p></div>
+            <div class="rounded-2xl bg-white p-3.5 shadow-lg shadow-zinc-900/5"><span class="w-8 h-8 rounded-lg bg-violet-50 text-violet-600 grid place-items-center"><i data-i="calendar"></i></span><p class="text-xl font-extrabold num mt-2">7</p><p class="text-xs text-zinc-400">Booking aktif</p></div>
+            <div class="rounded-2xl bg-white p-3.5"><span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center"><i data-i="scissors"></i></span><p class="text-xl font-extrabold num mt-2">5</p><p class="text-xs text-zinc-400">Barber aktif</p></div>
+            <div class="rounded-2xl bg-white p-3.5"><span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 grid place-items-center"><i data-i="ticket"></i></span><p class="text-xl font-extrabold num mt-2">4</p><p class="text-xs text-zinc-400">Menunggu</p></div>
+          </div>
+          <div class="mx-4 mt-3 rounded-2xl bg-amber-500 text-zinc-900 p-4 flex items-center gap-3">
+            <span class="w-10 h-10 rounded-xl bg-zinc-900/10 grid place-items-center text-xl"><i data-i="wallet"></i></span>
+            <div class="flex-1"><p class="font-bold text-sm">Payroll Oktober menunggu</p><p class="text-xs opacity-80">6 barber · Rp18,4jt</p></div>
+            <button class="text-xs font-bold bg-zinc-900 text-white px-3 py-2 rounded-xl">Review</button>
+          </div>
+          <div class="mx-4 mt-3 rounded-2xl bg-white p-4">
+            <p class="font-bold text-sm">Per cabang</p>
+            <div class="mt-3 space-y-3 text-sm">
+              <div class="flex items-center gap-3"><span class="w-2 h-8 rounded-full bg-amber-500"></span><div class="flex-1"><p class="font-semibold">Sudirman</p><p class="text-xs text-zinc-400">22 customer · 3 barber aktif</p></div><b class="num">Rp1,45jt</b></div>
+              <div class="flex items-center gap-3"><span class="w-2 h-8 rounded-full bg-zinc-900"></span><div class="flex-1"><p class="font-semibold">Kemang</p><p class="text-xs text-zinc-400">16 customer · 2 barber aktif</p></div><b class="num">Rp1,00jt</b></div>
+            </div>
+          </div>
+          <div class="mx-4 mt-3 rounded-2xl bg-white p-4">
+            <p class="font-bold text-sm">Performa Barber Hari Ini</p>
+            <div class="mt-3 space-y-2.5 text-sm">
+              <div class="flex items-center gap-2.5"><span>🥇</span><span class="flex-1 font-semibold">Andi</span><span class="text-xs text-zinc-400">Rp600rb</span><b class="num">12 org</b></div>
+              <div class="flex items-center gap-2.5"><span>🥈</span><span class="flex-1 font-semibold">Bima</span><span class="text-xs text-zinc-400">Rp450rb</span><b class="num">9 org</b></div>
+              <div class="flex items-center gap-2.5"><span>🥉</span><span class="flex-1 font-semibold">Rizky</span><span class="text-xs text-zinc-400">Rp350rb</span><b class="num">7 org</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="absolute bottom-0 inset-x-0 px-3 pb-3">
+          <div class="flex justify-around items-center bg-zinc-900 text-zinc-500 rounded-2xl py-2.5 shadow-xl">
+            <a class="flex flex-col items-center gap-0.5 text-amber-400"><i data-i="home" class="text-xl"></i><span class="text-[12px] font-semibold">Beranda</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="ticket" class="text-xl"></i><span class="text-[12px]">Antrean</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="chart" class="text-xl"></i><span class="text-[12px]">Laporan</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="more" class="text-xl"></i><span class="text-[12px]">Lainnya</span></a>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- OM2: Gaji & Komisi Approval (HP) -->
+    <div>
+      <p class="text-xs font-semibold mb-2 text-[var(--muted-foreground)]">2 · Approval Gaji &amp; Komisi (HP)</p>
+      <div class="phone"><div class="screen bg-zinc-100 text-zinc-900">
+        <div class="notch"></div>
+        <div class="bg-zinc-900 text-white px-5 pt-12 pb-4">
+          <div class="flex items-center justify-between">
+            <button class="w-9 h-9 rounded-full bg-white/10 grid place-items-center"><i data-i="left"></i></button>
+            <p class="font-bold">Gaji &amp; Komisi</p>
+            <span class="text-xs px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-semibold">Draft</span>
+          </div>
+          <p class="text-xs text-zinc-400 mt-4">Periode 1 – 31 Oktober 2026</p>
+          <div class="flex items-baseline justify-between mt-1">
+            <p class="text-3xl font-extrabold num">Rp18.450.000</p>
+            <span class="text-xs text-zinc-400">6 barber</span>
+          </div>
+        </div>
+
+        <div class="scroll flex-1 px-4 pt-3 pb-36 space-y-2.5">
+          <div class="bg-white rounded-2xl p-3.5 border border-zinc-200/80">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white grid place-items-center font-bold">A</div>
+              <div class="flex-1"><p class="font-bold text-sm">Andi</p><p class="text-xs text-zinc-400">300 layanan · Pokok + Komisi</p></div>
+              <div class="text-right"><p class="font-extrabold num text-sm">Rp3.800.000</p><span class="text-[12px] text-amber-600 font-semibold">Belum dibayar</span></div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-zinc-100 text-xs">
+              <div><p class="text-zinc-400">Pokok</p><b class="num">Rp2,0jt</b></div>
+              <div><p class="text-zinc-400">Komisi</p><b class="num">Rp1,5jt</b></div>
+              <div><p class="text-zinc-400">Bonus</p><b class="num text-emerald-600">+Rp300rb</b></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-3.5 border border-zinc-200/80">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white grid place-items-center font-bold">B</div>
+              <div class="flex-1"><p class="font-bold text-sm">Bima</p><p class="text-xs text-zinc-400">260 layanan · Pokok + Komisi</p></div>
+              <div class="text-right"><p class="font-extrabold num text-sm">Rp3.350.000</p><span class="text-[12px] text-amber-600 font-semibold">Belum dibayar</span></div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-zinc-100 text-xs">
+              <div><p class="text-zinc-400">Pokok</p><b class="num">Rp2,0jt</b></div>
+              <div><p class="text-zinc-400">Komisi</p><b class="num">Rp1,3jt</b></div>
+              <div><p class="text-zinc-400">Kasbon</p><b class="num text-rose-600">-Rp150rb</b></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-3.5 border border-zinc-200/80">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-pink-600 text-white grid place-items-center font-bold">R</div>
+              <div class="flex-1"><p class="font-bold text-sm">Rizky</p><p class="text-xs text-zinc-400">210 layanan · Bagi hasil 30%</p></div>
+              <div class="text-right"><p class="font-extrabold num text-sm">Rp3.150.000</p><span class="text-[12px] text-amber-600 font-semibold">Belum dibayar</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="absolute bottom-0 inset-x-0 bg-white border-t border-zinc-200 px-4 pt-3 pb-5 rounded-t-3xl">
+          <div class="flex gap-2">
+            <button class="flex-1 rounded-2xl bg-zinc-100 py-3 text-xs font-bold">+ Bonus/Potongan</button>
+            <button class="flex-[1.5] rounded-2xl bg-amber-500 text-zinc-900 py-3 text-xs font-bold shadow-lg shadow-amber-500/30">✓ Setujui Payroll</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- OM3: Menu Drawer "Lainnya" (HP) -->
+    <div>
+      <p class="text-xs font-semibold mb-2 text-[var(--muted-foreground)]">3 · Menu "Lainnya" (Pengganti Sidebar di HP)</p>
+      <div class="phone"><div class="screen bg-zinc-900 text-zinc-900">
+        <div class="notch"></div>
+        <div class="px-5 pt-12 text-white/40 text-xs">Dashboard di belakang…</div>
+        <!-- Bottom Sheet Drawer -->
+        <div class="mt-auto bg-white rounded-t-[32px] p-5 pb-24">
+          <div class="w-10 h-1.5 rounded-full bg-zinc-200 mx-auto mb-4"></div>
+          <div class="flex items-center justify-between mb-4">
+            <div><p class="font-extrabold text-base">Semua Menu</p><p class="text-xs text-zinc-400">Barber King · Paket Pro</p></div>
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Owner</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2.5 text-center text-xs font-semibold">
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-amber-100 text-amber-700 grid place-items-center text-lg mb-1.5"><i data-i="scissors"></i></div>Layanan &amp; Harga</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-sky-100 text-sky-700 grid place-items-center text-lg mb-1.5"><i data-i="store"></i></div>Cabang (2)</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-emerald-100 text-emerald-700 grid place-items-center text-lg mb-1.5"><i data-i="users"></i></div>Karyawan</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-violet-100 text-violet-700 grid place-items-center text-lg mb-1.5"><i data-i="wallet"></i></div>Gaji &amp; Komisi</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-rose-100 text-rose-700 grid place-items-center text-lg mb-1.5"><i data-i="calendar"></i></div>Absensi &amp; Jadwal</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-zinc-200 text-zinc-700 grid place-items-center text-lg mb-1.5"><i data-i="receipt"></i></div>Transaksi</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-zinc-200 text-zinc-700 grid place-items-center text-lg mb-1.5"><i data-i="user"></i></div>Customer</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-zinc-200 text-zinc-700 grid place-items-center text-lg mb-1.5"><i data-i="clock"></i></div>Audit Log</div>
+            <div class="rounded-2xl bg-zinc-50 border border-zinc-100 p-3"><div class="w-10 h-10 mx-auto rounded-xl bg-zinc-200 text-zinc-700 grid place-items-center text-lg mb-1.5"><i data-i="sliders"></i></div>Pengaturan</div>
+          </div>
+        </div>
+        <div class="absolute bottom-0 inset-x-0 px-3 pb-3">
+          <div class="flex justify-around items-center bg-zinc-900 text-zinc-500 rounded-2xl py-2.5 shadow-xl">
+            <a class="flex flex-col items-center gap-0.5"><i data-i="home" class="text-xl"></i><span class="text-[12px]">Beranda</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="ticket" class="text-xl"></i><span class="text-[12px]">Antrean</span></a>
+            <a class="flex flex-col items-center gap-0.5"><i data-i="chart" class="text-xl"></i><span class="text-[12px]">Laporan</span></a>
+            <a class="flex flex-col items-center gap-0.5 text-amber-400"><i data-i="more" class="text-xl"></i><span class="text-[12px] font-semibold">Lainnya</span></a>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+
+  <!-- Desktop Owner -->
+  <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">Tampilan Desktop — Dashboard Owner</p>
+  <div class="rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl bg-zinc-100 text-zinc-900 flex min-h-[680px]">
+    <aside class="w-60 bg-zinc-950 text-zinc-400 p-4 flex-col hidden md:flex">
+      <div class="flex items-center gap-2 px-2 py-1"><div class="w-9 h-9 rounded-xl bg-amber-500 text-zinc-900 grid place-items-center text-lg"><i data-i="scissors"></i></div><div class="leading-tight"><p class="text-white font-bold text-sm">Barber King</p><p class="text-xs">Owner · Paket Pro</p></div></div>
+      <nav class="mt-6 space-y-0.5 text-sm">
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/10 text-white font-semibold"><i data-i="dash" class="text-amber-400"></i>Dashboard</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="ticket"></i>Antrean &amp; Booking</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="receipt"></i>Transaksi</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="scissors"></i>Layanan &amp; Harga</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="store"></i>Cabang</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="users"></i>Karyawan</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="wallet"></i>Gaji &amp; Komisi<span class="ml-auto text-[12px] bg-amber-500 text-zinc-900 px-1.5 rounded-md font-bold">1</span></a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="calendar"></i>Absensi &amp; Jadwal</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="chart"></i>Laporan</a>
+        <a class="flex items-center gap-3 px-3 py-2.5 rounded-xl"><i data-i="sliders"></i>Pengaturan</a>
+      </nav>
+    </aside>
+    <div class="flex-1 p-5 min-w-0">
+      <div class="flex flex-wrap items-center gap-3">
+        <div><p class="text-sm text-zinc-500">Selamat pagi, Pak Rudi 👋</p><h2 class="text-2xl font-extrabold">Dashboard</h2></div>
+        <div class="ml-auto flex items-center gap-2 text-sm">
+          <button class="rounded-xl bg-white border border-zinc-200 px-3 py-2 font-semibold flex items-center gap-2"><i data-i="store"></i>Semua cabang ▾</button>
+          <button class="rounded-xl bg-white border border-zinc-200 px-3 py-2 font-semibold flex items-center gap-2"><i data-i="calendar"></i>Hari ini ▾</button>
+          <div class="relative w-10 h-10 rounded-xl bg-white border border-zinc-200 grid place-items-center"><i data-i="bell"></i><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500"></span></div>
+        </div>
+      </div>
+      <!-- KPI -->
+      <div class="grid grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
+        <div class="rounded-2xl bg-zinc-900 text-white p-4 grain relative overflow-hidden"><div class="flex items-center justify-between"><p class="text-xs text-zinc-400">Omzet hari ini</p><span class="w-8 h-8 rounded-lg bg-amber-500 text-zinc-900 grid place-items-center"><i data-i="banknote"></i></span></div><p class="text-2xl font-extrabold num mt-2">Rp2.450.000</p><p class="text-xs text-emerald-400 mt-1 flex items-center gap-1"><i data-i="trend"></i>12% dari kemarin</p></div>
+        <div class="rounded-2xl bg-white p-4 border border-zinc-200"><div class="flex items-center justify-between"><p class="text-xs text-zinc-500">Customer</p><span class="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 grid place-items-center"><i data-i="users"></i></span></div><p class="text-2xl font-extrabold num mt-2">38 <span class="text-sm font-semibold text-zinc-400">orang</span></p><p class="text-xs text-emerald-600 mt-1 flex items-center gap-1"><i data-i="trend"></i>5%</p></div>
+        <div class="rounded-2xl bg-white p-4 border border-zinc-200"><div class="flex items-center justify-between"><p class="text-xs text-zinc-500">Booking aktif</p><span class="w-8 h-8 rounded-lg bg-violet-50 text-violet-600 grid place-items-center"><i data-i="calendar"></i></span></div><p class="text-2xl font-extrabold num mt-2">7 <span class="text-sm font-semibold text-zinc-400">booking</span></p><p class="text-xs text-zinc-400 mt-1">3 dalam 1 jam ke depan</p></div>
+        <div class="rounded-2xl bg-white p-4 border border-zinc-200"><div class="flex items-center justify-between"><p class="text-xs text-zinc-500">Barber aktif</p><span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center"><i data-i="scissors"></i></span></div><p class="text-2xl font-extrabold num mt-2">5 <span class="text-sm font-semibold text-zinc-400">/ 6</span></p><p class="text-xs text-zinc-400 mt-1">1 sedang istirahat</p></div>
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-3 mt-3">
+        <!-- chart -->
+        <div class="xl:col-span-2 rounded-2xl bg-white p-4 border border-zinc-200">
+          <div class="flex items-center justify-between"><div><p class="font-bold">Omzet 7 hari terakhir</p><p class="text-xs text-zinc-400">Total Rp15,8jt · rata-rata Rp2,26jt/hari</p></div><div class="flex gap-1 text-xs p-1 bg-zinc-100 rounded-lg"><span class="px-2 py-1 rounded-md bg-white font-semibold shadow-sm">7H</span><span class="px-2 py-1 text-zinc-500">30H</span><span class="px-2 py-1 text-zinc-500">12B</span></div></div>
+          <svg viewBox="0 0 600 200" class="w-full h-52 mt-3">
+            <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f59e0b" stop-opacity=".35"/><stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/></linearGradient></defs>
+            <g stroke="#e4e4e7" stroke-dasharray="4 4"><line x1="0" y1="40" x2="600" y2="40"/><line x1="0" y1="90" x2="600" y2="90"/><line x1="0" y1="140" x2="600" y2="140"/></g>
+            <path d="M0,130 C50,120 70,95 100,100 C140,108 160,70 200,75 C240,80 260,110 300,105 C340,100 360,60 400,55 C440,50 460,85 500,70 C540,55 560,35 600,30 L600,180 L0,180 Z" fill="url(#g1)"/>
+            <path d="M0,130 C50,120 70,95 100,100 C140,108 160,70 200,75 C240,80 260,110 300,105 C340,100 360,60 400,55 C440,50 460,85 500,70 C540,55 560,35 600,30" fill="none" stroke="#d97706" stroke-width="3"/>
+            <circle cx="600" cy="30" r="5" fill="#d97706" stroke="#fff" stroke-width="2"/>
+            <g fill="#a1a1aa" font-size="12"><text x="0" y="198">Sel</text><text x="95" y="198">Rab</text><text x="195" y="198">Kam</text><text x="295" y="198">Jum</text><text x="395" y="198">Sab</text><text x="495" y="198">Min</text><text x="565" y="198" fill="#18181b" font-weight="700">Sen</text></g>
+          </svg>
+        </div>
+        <!-- barber perf -->
+        <div class="rounded-2xl bg-white p-4 border border-zinc-200">
+          <div class="flex items-center justify-between"><p class="font-bold">Performa barber</p><span class="text-xs text-zinc-400">hari ini</span></div>
+          <div class="space-y-4 mt-4">
+            <div><div class="flex items-center gap-3"><span class="text-lg">🥇</span><span class="w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-white grid place-items-center font-bold text-sm">A</span><span class="flex-1 text-sm font-semibold">Andi</span><b class="text-sm num">12</b></div><div class="h-2 bg-zinc-100 rounded-full mt-2"><div class="h-full w-full bg-amber-500 rounded-full"></div></div></div>
+            <div><div class="flex items-center gap-3"><span class="text-lg">🥈</span><span class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-white grid place-items-center font-bold text-sm">B</span><span class="flex-1 text-sm font-semibold">Bima</span><b class="text-sm num">9</b></div><div class="h-2 bg-zinc-100 rounded-full mt-2"><div class="h-full w-[75%] bg-amber-400 rounded-full"></div></div></div>
+            <div><div class="flex items-center gap-3"><span class="text-lg">🥉</span><span class="w-8 h-8 rounded-full bg-gradient-to-br from-rose-400 to-pink-600 text-white grid place-items-center font-bold text-sm">R</span><span class="flex-1 text-sm font-semibold">Rizky</span><b class="text-sm num">7</b></div><div class="h-2 bg-zinc-100 rounded-full mt-2"><div class="h-full w-[58%] bg-amber-300 rounded-full"></div></div></div>
+            <div><div class="flex items-center gap-3"><span class="text-lg w-6 text-center text-zinc-300 text-sm font-bold">4</span><span class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 text-white grid place-items-center font-bold text-sm">D</span><span class="flex-1 text-sm font-semibold">Doni</span><b class="text-sm num">6</b></div><div class="h-2 bg-zinc-100 rounded-full mt-2"><div class="h-full w-[50%] bg-amber-200 rounded-full"></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-3 mt-3">
+        <div class="rounded-2xl bg-white p-4 border border-zinc-200">
+          <p class="font-bold">Layanan terlaris</p>
+          <div class="flex items-center gap-4 mt-3">
+            <svg viewBox="0 0 42 42" class="w-28 h-28 -rotate-90"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#f4f4f5" stroke-width="6"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="#d97706" stroke-width="6" stroke-dasharray="55 45"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="#18181b" stroke-width="6" stroke-dasharray="25 75" stroke-dashoffset="-55"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="#0ea5e9" stroke-width="6" stroke-dasharray="20 80" stroke-dashoffset="-80"/></svg>
+            <div class="space-y-2 text-sm"><p class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-amber-600"></span>Haircut <b class="ml-2">55%</b></p><p class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-zinc-900"></span>Shave <b class="ml-2">25%</b></p><p class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-sky-500"></span>Wash <b class="ml-2">20%</b></p></div>
+          </div>
+        </div>
+        <div class="xl:col-span-2 rounded-2xl bg-white p-4 border border-zinc-200">
+          <div class="flex items-center justify-between"><p class="font-bold">Transaksi terbaru</p><span class="text-xs font-semibold text-amber-600">Lihat semua</span></div>
+          <table class="w-full text-sm mt-2">
+            <thead class="text-xs text-zinc-400 text-left"><tr><th class="py-2 font-medium">Invoice</th><th class="font-medium">Customer</th><th class="font-medium hidden sm:table-cell">Barber</th><th class="font-medium">Metode</th><th class="font-medium text-right">Total</th></tr></thead>
+            <tbody class="divide-y divide-zinc-100">
+              <tr><td class="py-2.5 num font-semibold">INV-0038</td><td>Rafael</td><td class="hidden sm:table-cell">Andi</td><td><span class="text-xs px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 font-semibold">QRIS</span></td><td class="text-right num font-bold">Rp75.000</td></tr>
+              <tr><td class="py-2.5 num font-semibold">INV-0037</td><td>Budi</td><td class="hidden sm:table-cell">Bima</td><td><span class="text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">Tunai</span></td><td class="text-right num font-bold">Rp50.000</td></tr>
+              <tr><td class="py-2.5 num font-semibold">INV-0036</td><td>Gilang</td><td class="hidden sm:table-cell">Rizky</td><td><span class="text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-semibold">Refund</span></td><td class="text-right num font-bold text-rose-600">-Rp30.000</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TV ===================== -->
+<section data-panel="tv" class="hidden fade-in py-6">
+  <p class="text-sm font-semibold mb-3 text-[var(--muted-foreground)]">Layar TV di ruang tunggu</p>
+  <div class="rounded-[28px] p-3 bg-zinc-800 shadow-2xl max-w-[1100px]">
+    <div class="rounded-2xl overflow-hidden bg-zinc-950 text-white aspect-video flex flex-col relative">
+      <div class="grain absolute inset-0 opacity-60"></div>
+      <div class="relative flex items-center justify-between px-8 py-5 border-b border-white/10">
+        <div class="flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-amber-500 text-zinc-900 grid place-items-center text-2xl"><i data-i="scissors"></i></div><div><p class="font-extrabold text-xl tracking-wide">BARBER KING</p><p class="text-sm text-zinc-400">Cabang Sudirman</p></div></div>
+        <p class="text-4xl font-extrabold num" id="clock">10.42</p>
+      </div>
+      <div class="relative flex-1 grid grid-cols-5">
+        <div class="col-span-3 flex flex-col items-center justify-center border-r border-white/10">
+          <p class="text-lg tracking-[0.3em] text-amber-400 font-bold">SEDANG DIPANGGIL</p>
+          <p class="text-[140px] leading-none font-extrabold num tracking-tight mt-2">A-013</p>
+          <p class="text-2xl mt-3 flex items-center gap-3">Silakan menuju <span class="px-4 py-1 rounded-xl bg-amber-500 text-zinc-900 font-bold">Kursi Andi</span></p>
+        </div>
+        <div class="col-span-2 p-8 flex flex-col">
+          <p class="text-sm tracking-[0.25em] text-zinc-400 font-bold">ANTREAN BERIKUTNYA</p>
+          <div class="space-y-3 mt-4">
+            <div class="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-5 py-3"><b class="text-3xl num">A-014</b><span class="text-zinc-400">Walk-in</span></div>
+            <div class="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-5 py-3"><b class="text-3xl num">A-015</b><span class="text-zinc-400">Walk-in</span></div>
+            <div class="flex items-center justify-between rounded-2xl bg-violet-500/10 border border-violet-400/20 px-5 py-3"><b class="text-3xl num">B-016</b><span class="text-violet-300">Booking 11.30</span></div>
+          </div>
+          <div class="mt-auto flex items-center gap-4 rounded-2xl bg-white text-zinc-900 p-4">
+            <div class="w-16 h-16 rounded-lg bg-zinc-900 text-white grid place-items-center text-4xl"><i data-i="qr"></i></div>
+            <div><p class="font-bold">Scan untuk ambil antrean</p><p class="text-sm text-zinc-500">Tanpa download aplikasi</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="relative grid grid-cols-4 border-t border-white/10 text-sm">
+        <div class="px-6 py-3 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Andi <b class="ml-auto num">A-010 ✂</b></div>
+        <div class="px-6 py-3 flex items-center gap-2 border-l border-white/10"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Bima <b class="ml-auto num">A-011 ✂</b></div>
+        <div class="px-6 py-3 flex items-center gap-2 border-l border-white/10"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Rizky <b class="ml-auto num">B-009 ✂</b></div>
+        <div class="px-6 py-3 flex items-center gap-2 border-l border-white/10"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Doni <b class="ml-auto text-emerald-400">Siap</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+// ---------- Icons (Lucide-style) ----------
+const I = {
+  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  ticket:'<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 11v2M13 17v2"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  calendar:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  scissors:'<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+  pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  star:'<path fill="currentColor" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
+  left:'<path d="m15 18-6-6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  megaphone:'<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  wallet:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  trend:'<path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+  dash:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  receipt:'<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  store:'<path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11h16V9"/><path d="M3 9h18"/><path d="M9 20v-6h6v6"/>',
+  plus:'<path d="M5 12h14M12 5v14"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  sliders:'<path d="M4 6h8M16 6h4M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="14" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  chart:'<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  timer:'<path d="M10 2h4M12 14l3-3"/><circle cx="12" cy="14" r="8"/>',
+  banknote:'<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+  qr:'<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/>',
+  tv:'<rect width="20" height="15" x="2" y="7" rx="2"/><path d="m17 2-5 5-5-5"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  sparkle:'<path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 17v4M17 19h4"/>',
+  droplet:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>',
+  play:'<path d="M6 3l14 9-14 9z"/>'
+};
+function renderIcons(root=document){
+  root.querySelectorAll('i[data-i]').forEach(el=>{
+    const cls = el.getAttribute('class')||'';
+    el.outerHTML = `<svg class="i ${cls}" viewBox="0 0 24 24">${I[el.dataset.i]||''}</svg>`;
+  });
+}
+renderIcons();
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab-btn').forEach(x=>x.setAttribute('aria-selected', x===b));
+  document.querySelectorAll('[data-panel]').forEach(p=>p.classList.toggle('hidden', p.dataset.panel!==b.dataset.tab));
+}));
+
+// ---------- Booking chips ----------
+document.querySelectorAll('.slot').forEach(s=>s.addEventListener('click',()=>{
+  document.querySelectorAll('.slot').forEach(x=>x.classList.remove('chip-sel'));
+  s.classList.add('chip-sel'); document.getElementById('selTime').textContent = s.textContent;
+}));
+document.querySelectorAll('.date').forEach(s=>s.addEventListener('click',()=>{
+  document.querySelectorAll('.date').forEach(x=>x.classList.remove('chip-sel'));
+  s.classList.add('chip-sel');
+}));
+
+// ---------- Barber flow ----------
+const btn = document.getElementById('mainBtn'), badge = document.getElementById('stBadge');
+let step = 0, t = 0, iv = null;
+const steps = [
+  {label:'Panggil Customer', icon:'megaphone', cls:'bg-sky-500 text-white shadow-sky-500/30', badge:['Menunggu','bg-zinc-800 text-zinc-300']},
+  {label:'Mulai Cukur', icon:'scissors', cls:'bg-amber-500 text-zinc-900 shadow-amber-500/30', badge:['Dipanggil','bg-sky-500/20 text-sky-300']},
+  {label:'Selesai', icon:'check', cls:'bg-emerald-500 text-white shadow-emerald-500/30', badge:['Sedang dicukur','bg-amber-500/20 text-amber-300']},
+];
+function paint(){
+  const s = steps[step];
+  btn.className = 'w-full mt-4 rounded-2xl py-4 font-bold text-base flex items-center justify-center gap-2 shadow-lg transition ' + s.cls;
+  btn.innerHTML = `<i data-i="${s.icon}"></i> <span>${s.label}</span>`; renderIcons(btn);
+  badge.textContent = s.badge[0]; badge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full ' + s.badge[1];
+  document.getElementById('timerBox').classList.toggle('hidden', step !== 2);
+}
+btn.addEventListener('click',()=>{
+  if (step === 1) { t = 0; iv = setInterval(()=>{ t++; document.getElementById('timer').textContent = String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); }, 1000); }
+  if (step === 2) {
+    clearInterval(iv);
+    const sv = document.getElementById('served'); sv.textContent = +sv.textContent + 1;
+    document.getElementById('komisi').textContent = '195rb';
+    badge.textContent = 'Selesai ✓'; badge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300';
+    btn.className = 'w-full mt-4 rounded-2xl py-4 font-bold text-base flex items-center justify-center gap-2 bg-zinc-800 text-zinc-300';
+    btn.innerHTML = 'Lanjut ke berikutnya →'; document.getElementById('timerBox').classList.add('hidden');
+    step = 3; return;
+  }
+  step = step === 3 ? 0 : step + 1; paint();
+});
+
+// ---------- TV clock ----------
+const ck = document.getElementById('clock');
+const tick = ()=>{ const d = new Date(); ck.textContent = String(d.getHours()).padStart(2,'0')+'.'+String(d.getMinutes()).padStart(2,'0'); };
+tick(); setInterval(tick, 10000);
+
+// ---------- Cashier Mobile Queue Tabs & Payment Methods ----------
+document.querySelectorAll('.qtab').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.qtab').forEach(x => {
+    x.className = 'qtab py-1.5 rounded-lg ' + (x === btn ? 'bg-amber-500 text-zinc-900' : 'text-zinc-400');
+  });
+  document.querySelectorAll('[data-qlist]').forEach(l => l.classList.toggle('hidden', l.dataset.qlist !== btn.dataset.qtab));
+}));
+document.querySelectorAll('.pm').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.pm').forEach(x => x.classList.remove('chip-sel'));
+  btn.classList.add('chip-sel');
+}));
+</script>
+</body>
+</html>

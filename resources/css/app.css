@@ -1,0 +1,296 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Plus Jakarta Sans', Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    --color-brand: var(--tenant-brand, #D97706);
+    --color-brand-soft: #FEF3C7;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+.num {
+    font-variant-numeric: tabular-nums;
+}
+
+.grain {
+    background-image:
+        radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--tenant-brand, #F59E0B) 35%, transparent), transparent 45%),
+        radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--tenant-brand, #F59E0B) 18%, transparent), transparent 40%);
+}
+
+.no-scrollbar,
+html,
+body,
+* {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.custom-scrollbar {
+    -ms-overflow-style: auto !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(161, 161, 170, 0.4) transparent !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    display: block !important;
+    width: 6px !important;
+    height: 6px !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(161, 161, 170, 0.4) !important;
+    border-radius: 9999px !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(113, 113, 122, 0.6) !important;
+}
+
+/* Tablet Sidebar Collapsible (Khusus Tablet: 768px <= width < 1024px) */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+    #app-sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        left: -16rem !important;
+        width: 16rem !important;
+        height: auto !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+        transform: none !important;
+        z-index: 40 !important;
+        transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow-y: hidden;
+    }
+
+    #main-content-wrapper {
+        padding-left: 0 !important;
+        transition: padding-left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Kotak button tepat di antara garis batas sidebar hitam dan header putih */
+    #tablet-sidebar-toggle {
+        position: fixed !important;
+        top: 1.125rem;
+        left: 0.5rem !important;
+        width: 2rem;
+        height: 2rem;
+        transform: none !important;
+        transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, background-color 0.3s ease;
+        z-index: 50;
+    }
+
+    header .md\:max-lg\:pl-9 {
+        transition: padding-left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* State saat sidebar terbuka: Murni Fixed Position (Bebas dari bug translate3d yang membuat sidebar scrolling & gap bawah) */
+    html.tablet-sidebar-open #app-sidebar {
+        left: 0 !important;
+        transform: none !important;
+    }
+
+    html.tablet-sidebar-open #main-content-wrapper {
+        padding-left: 16rem !important;
+    }
+
+    html.tablet-sidebar-open #tablet-sidebar-toggle {
+        /* 240px (15rem) + 16px half-width = 256px (16rem), tepat di tengah garis batas sidebar */
+        left: 15rem !important;
+        transform: none !important;
+    }
+
+    html.tablet-sidebar-open header .md\:max-lg\:pl-9 {
+        padding-left: 0.5rem !important;
+    }
+
+    /* Transisi halus elemen layout konten saat sidebar dibuka/ditutup */
+    .branch-hours-group,
+    .branch-hours-group > div,
+    .time-offs-filter-container,
+    .time-offs-filter-form,
+    .time-offs-filter-btn,
+    .schedules-stat-grid,
+    .stat-cards-grid {
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Tablet: Jika sidebar aktif/terbuka, kartu statistik ditampilkan 2 baris (2 kolom) */
+    html.tablet-sidebar-open .schedules-stat-grid,
+    html.tablet-sidebar-open .stat-cards-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    /* Tablet: Jika sidebar aktif/terbuka, jam operasional / shift ditampilkan atas-bawah */
+    html.tablet-sidebar-open .branch-hours-group {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+    }
+
+    html.tablet-sidebar-open .branch-hours-group > div {
+        width: 100% !important;
+        justify-content: space-between !important;
+    }
+
+    /* Tablet: Jika sidebar aktif/terbuka, filter izin & libur disusun rapi 2 kolom dropdown + tombol full width */
+    html.tablet-sidebar-open .time-offs-filter-container {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.75rem !important;
+    }
+
+    html.tablet-sidebar-open .time-offs-filter-form {
+        width: 100% !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.625rem !important;
+    }
+
+    html.tablet-sidebar-open .time-offs-filter-form > div {
+        width: 100% !important;
+    }
+
+    html.tablet-sidebar-open .time-offs-filter-btn {
+        width: 100% !important;
+    }
+
+    /* Tablet: Jika sidebar aktif/terbuka, header kasir POS disusun vertikal rapi agar judul & tombol walk-in tidak bertabrakan */
+    .cashier-pos-header {
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html.tablet-sidebar-open .cashier-pos-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 1rem !important;
+    }
+
+    html.tablet-sidebar-open .cashier-pos-header .cashier-pos-title-block {
+        width: 100% !important;
+    }
+
+    html.tablet-sidebar-open .cashier-pos-header .cashier-pos-cta-btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+
+    /* Tablet: Jika sidebar aktif di form pendaftaran tenant baru, preview URL & opsi paket dibuat lega */
+    html.tablet-sidebar-open .tenant-booking-url-preview {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.75rem !important;
+    }
+
+    html.tablet-sidebar-open .tenant-booking-url-preview .url-hint-text {
+        text-align: left !important;
+    }
+
+    html.tablet-sidebar-open .tenant-plan-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 1rem !important;
+    }
+
+    html:not(.tablet-sidebar-open) .tenant-plan-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 0.875rem !important;
+    }
+
+    html:not(.tablet-sidebar-open) .tenant-booking-url-preview {
+        flex-direction: row !important;
+        align-items: center !important;
+    }
+
+    /* Tablet: Laporan, Evaluasi Ulasan, & Riwayat Transaksi Owner */
+    html.tablet-sidebar-open .report-review-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.875rem !important;
+    }
+
+    html.tablet-sidebar-open .report-review-badge {
+        align-self: flex-start !important;
+        width: 100% !important;
+        justify-content: space-between !important;
+    }
+
+    html.tablet-sidebar-open .report-review-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.625rem !important;
+    }
+
+    html.tablet-sidebar-open .report-review-item-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.625rem !important;
+    }
+
+    html.tablet-sidebar-open .report-review-rating-row {
+        width: 100% !important;
+        border-top: 1px solid #f4f4f5 !important;
+        padding-top: 0.5rem !important;
+        justify-content: space-between !important;
+    }
+
+    html.tablet-sidebar-open .report-orders-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    html:not(.tablet-sidebar-open) .report-orders-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+/* Desktop Sidebar: Pastikan selalu fixed dan transform: none */
+@media (min-width: 1024px) {
+    #app-sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 16rem !important;
+        height: auto !important;
+        min-height: 100% !important;
+        max-height: 100% !important;
+        transform: none !important;
+    }
+
+    #main-content-wrapper {
+        padding-left: 16rem !important;
+    }
+}
+
+/* Icon panah: Animasi rotasi 180 derajat ultra smooth */
+.sidebar-toggle-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: rotate(0deg);
+}
+
+html.tablet-sidebar-open .sidebar-toggle-icon {
+    transform: rotate(180deg);
+}
