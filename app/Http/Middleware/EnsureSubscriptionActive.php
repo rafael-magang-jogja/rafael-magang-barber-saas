@@ -42,7 +42,7 @@ final class EnsureSubscriptionActive
 
                 return redirect()->route('owner.subscription')
                     ->with('subscription_locked', true)
-                    ->with('warning', 'Masa aktif langganan barbershop Anda telah berakhir. Seluruh fitur operasional dikunci sementara hingga pembayaran perpanjangan dikonfirmasi oleh Superadmin.');
+                    ->with('warning', 'Masa aktif langganan barbershop Anda telah berakhir. Seluruh fitur operasional dikunci sementara hingga pembayaran perpanjangan paket diselesaikan.');
             }
 
             // Jika Staf (Admin/Kasir/Barber): tampilkan halaman informasi sistem terkunci

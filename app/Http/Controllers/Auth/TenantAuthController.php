@@ -80,7 +80,10 @@ final class TenantAuthController extends Controller
         }
 
         // Customer: Arahkan ke intended URL atau fallback ke portal tenant ini
-        return redirect()->intended(route('customer.portal', $tenant->slug))
+        $request->session()->put('scanned_customer_tenant_id', $tenant->id);
+        $request->session()->put('scanned_customer_tenant_slug', $tenant->slug);
+
+        return redirect()->intended($tenant->customerPortalUrl())
             ->with('status', "Selamat datang kembali di {$tenant->name}!");
     }
 
@@ -127,8 +130,10 @@ final class TenantAuthController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $request->session()->put('scanned_customer_tenant_id', $tenant->id);
+        $request->session()->put('scanned_customer_tenant_slug', $tenant->slug);
 
-        return redirect()->intended(route('customer.portal', $tenant->slug))
+        return redirect()->intended($tenant->customerPortalUrl())
             ->with('status', "Selamat datang di {$tenant->name}! Akun Anda berhasil didaftarkan.");
     }
 
@@ -160,6 +165,6 @@ final class TenantAuthController extends Controller
             };
         }
 
-        return redirect()->route('customer.portal', $tenant->slug);
+        return redirect()->to($tenant->customerPortalUrl());
     }
 }

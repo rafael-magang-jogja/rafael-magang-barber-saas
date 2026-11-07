@@ -23,6 +23,7 @@ final class CustomerProfile extends Model
         'total_spent',
         'last_visit_at',
         'points',
+        'wallet_balance',
     ];
 
     protected function casts(): array
@@ -32,6 +33,7 @@ final class CustomerProfile extends Model
             'total_spent' => 'integer',
             'last_visit_at' => 'datetime',
             'points' => 'integer',
+            'wallet_balance' => 'integer',
         ];
     }
 
@@ -48,6 +50,16 @@ final class CustomerProfile extends Model
     public function queueTickets(): HasMany
     {
         return $this->hasMany(QueueTicket::class);
+    }
+
+    public function walletTransactions(): HasMany
+    {
+        return $this->hasMany(CustomerWalletTransaction::class);
+    }
+
+    public function withdrawals(): HasMany
+    {
+        return $this->hasMany(CustomerWithdrawal::class);
     }
 
     public function orders(): HasMany

@@ -11,7 +11,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
 use App\Services\AuditLogger;
-use Carbon\Carbon;
+use App\Services\SubscriptionActivationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +21,7 @@ final class PlatformSubscriptionController extends Controller
 {
     public function __construct(
         private readonly AuditLogger $auditLogger,
+        private readonly SubscriptionActivationService $subscriptionActivationService,
     ) {}
 
     public function index(Request $request): View
@@ -98,81 +99,17 @@ final class PlatformSubscriptionController extends Controller
             return back()->with('error', "Tagihan {$invoice->number} sudah berstatus LUNAS sebelumnya.");
         }
 
-        DB::transaction(function () use ($invoice, $request): void {
-            // 1. Update Invoice menjadi Paid
-            $invoice->update([
-                'status' => 'paid',
+        $this->subscriptionActivationService->activateFromInvoice(
+            invoice: $invoice,
+            payload: [
+                'gateway' => $request->input('gateway', $invoice->gateway ?? $invoice->payment_method ?? 'manual_transfer'),
+                'gateway_ref' => $request->input('gateway_ref', $invoice->gateway_ref ?? 'CONFIRMED-BY-SUPERADMIN'),
                 'paid_at' => now(),
-                'gateway' => $request->input('gateway', $invoice->payment_method ?? 'manual_transfer'),
-                'gateway_ref' => $request->input('gateway_ref', 'CONFIRMED-BY-SUPERADMIN'),
-            ]);
-
-            // 2. Tentukan target plan & perpanjang masa aktif subscription
-            $sub = $invoice->subscription;
-            $tenant = $invoice->tenant;
-            $targetPlanId = $invoice->target_plan_id ?? $sub?->plan_id;
-
-            // Aturan Pengaktifan Langganan:
-            // - Upgrade / Downgrade: Sisa masa aktif tidak ditumpuk, diganti murni 30 hari ke depan (now()->addDays(30))
-            // - Renewal (Perpanjangan paket sama): Menambah sisa masa aktif (+30 hari)
-            $isRenewal = ($invoice->type === 'renewal') || ($sub && $targetPlanId && $sub->plan_id == $targetPlanId && ! in_array($invoice->type, ['upgrade', 'downgrade'], true));
-
-            if ($isRenewal) {
-                $baseDate = ($sub && $sub->ends_at && $sub->ends_at->isFuture())
-                    ? $sub->ends_at
-                    : now();
-                $newEndsAt = $baseDate->copy()->addDays(30);
-            } else {
-                $newEndsAt = now()->addDays(30);
-            }
-
-            if ($sub !== null) {
-                $sub->update([
-                    'plan_id' => $targetPlanId,
-                    'status' => SubscriptionStatus::Active,
-                    'price' => $invoice->amount,
-                    'starts_at' => now(),
-                    'ends_at' => $newEndsAt,
-                ]);
-            } elseif ($tenant !== null && $targetPlanId !== null) {
-                $sub = Subscription::query()->withoutGlobalScope('tenant')->create([
-                    'tenant_id' => $tenant->id,
-                    'plan_id' => $targetPlanId,
-                    'status' => SubscriptionStatus::Active,
-                    'starts_at' => now(),
-                    'ends_at' => $newEndsAt,
-                    'price' => $invoice->amount,
-                    'auto_renew' => true,
-                ]);
-                $invoice->update(['subscription_id' => $sub->id]);
-            }
-
-            // 3. Reset kustomisasi logo, tema, white-label, dan subdomain jika turun/beralih paket
-            $targetPlan = $invoice->targetPlan ?? Plan::find($targetPlanId);
-            if ($tenant !== null && $targetPlan !== null) {
-                $tenant->resetPlanRestrictedFeatures($targetPlan->code);
-            }
-
-            // 4. Jika status tenant sempat suspended, aktifkan kembali
-            if ($tenant !== null && $tenant->status === TenantStatus::Suspended) {
-                $tenant->update(['status' => TenantStatus::Active]);
-            }
-
-            // 5. Catat ke Audit Log
-            $this->auditLogger->log(
-                action: 'subscription.payment_confirmed',
-                auditable: $invoice,
-                oldValues: ['status' => $invoice->getOriginal('status') ?? 'pending'],
-                newValues: [
-                    'status' => 'paid',
-                    'type' => $invoice->type,
-                    'target_plan_id' => $targetPlanId,
-                    'new_ends_at' => $newEndsAt->toDateString(),
-                    'tenant' => $tenant?->name,
-                ],
-                userId: $request->user()?->id,
-            );
-        });
+            ],
+            actor: $request->user(),
+            defaultGateway: 'manual_transfer',
+            defaultGatewayRef: 'CONFIRMED-BY-SUPERADMIN'
+        );
 
         $tenantName = $invoice->tenant?->name ?? 'Barbershop';
 

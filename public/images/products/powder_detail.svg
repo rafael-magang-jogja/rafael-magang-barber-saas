@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="powderPuff" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shadow -->
+  <ellipse cx="100" cy="174" rx="40" ry="10" fill="#000000" opacity="0.45"/>
+
+  <!-- Bottle tilted -->
+  <g transform="rotate(-15 100 110)">
+    <rect x="68" y="74" width="64" height="96" rx="10" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+    <rect x="68" y="80" width="64" height="6" fill="#e11d48"/>
+    <rect x="72" y="96" width="56" height="66" rx="6" fill="#09090b" stroke="#38bdf8" stroke-width="0.8" stroke-opacity="0.5"/>
+    <text x="100" y="116" text-anchor="middle" fill="#38bdf8" font-family="system-ui, sans-serif" font-size="7" font-weight="900">BARBEROS</text>
+    <text x="100" y="130" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="7.5" font-weight="800">POWDER</text>
+    <text x="100" y="145" text-anchor="middle" fill="#38bdf8" font-family="system-ui, sans-serif" font-size="5.5" font-weight="700">MATTE PUFF</text>
+
+    <!-- Cap -->
+    <rect x="80" y="44" width="40" height="26" rx="4" fill="#09090b" stroke="#27272a" stroke-width="1"/>
+  </g>
+
+  <!-- Powder mist particles bursting out -->
+  <circle cx="65" cy="40" r="3.5" fill="#e0f2fe" opacity="0.7"/>
+  <circle cx="50" cy="32" r="2.5" fill="#bae6fd" opacity="0.6"/>
+  <circle cx="75" cy="28" r="4" fill="#ffffff" opacity="0.8"/>
+  <circle cx="60" cy="22" r="2" fill="#7dd3fc" opacity="0.5"/>
+  <circle cx="85" cy="35" r="3" fill="#e0f2fe" opacity="0.7"/>
+  <circle cx="42" cy="45" r="1.5" fill="#ffffff" opacity="0.5"/>
+</svg>

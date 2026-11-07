@@ -41,7 +41,10 @@ final class BarberTimeOff extends Model
             return null;
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('public')->url($this->attachment_path);
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+
+        return $disk->url($this->attachment_path);
     }
 
     protected function casts(): array

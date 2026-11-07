@@ -36,7 +36,7 @@ final class UpdateBranchRequest extends FormRequest
             ],
             'phone' => ['required', 'string', 'max:30'],
             'address' => ['required', 'string', 'max:255'],
-            'maps_url' => ['nullable', 'string', 'max:500'],
+            'maps_url' => ['required', 'string', 'max:500'],
             'late_tolerance_minutes' => ['required', 'integer', 'min:0', 'max:120'],
             'is_active' => ['nullable', 'boolean'],
         ];
@@ -53,6 +53,7 @@ final class UpdateBranchRequest extends FormRequest
             'code.unique' => 'Kode cabang ini sudah digunakan di cabang lain.',
             'phone.required' => 'Nomor telepon cabang wajib diisi.',
             'address.required' => 'Alamat lengkap cabang wajib diisi.',
+            'maps_url.required' => 'Link Google Maps cabang wajib diisi.',
             'late_tolerance_minutes.required' => 'Toleransi telat booking wajib diisi.',
         ];
     }

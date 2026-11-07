@@ -236,7 +236,7 @@
                                 <!-- Batang Grafik -->
                                 <div
                                     class="w-full rounded-t-sm transition-all duration-300 {{ $item['is_peak'] ? 'bg-amber-500 ring-2 ring-amber-400/50' : ($item['count'] > 0 ? 'bg-amber-400/70 hover:bg-amber-500' : 'bg-zinc-100 hover:bg-zinc-200') }}"
-                                    style="height: {{ $heightPct }}%;"
+                                    @style(['height: ' . $heightPct . '%'])
                                 ></div>
 
                                 <!-- Label Jam Singkat -->
@@ -290,9 +290,9 @@
                                     </div>
                                 </div>
                                 <div class="w-full h-1.5 rounded-full bg-zinc-100 overflow-hidden flex">
-                                    <div class="h-full bg-amber-500 transition-all duration-300" style="width: {{ $m['rate'] }}%;"></div>
+                                    <div class="h-full bg-amber-500 transition-all duration-300" @style(['width: ' . $m['rate'] . '%'])></div>
                                     @if(100 - $m['rate'] > 0)
-                                        <div class="h-full bg-rose-400" style="width: {{ 100 - $m['rate'] }}%;"></div>
+                                        <div class="h-full bg-rose-400" @style(['width: ' . (100 - $m['rate']) . '%'])></div>
                                     @endif
                                 </div>
                             </div>
@@ -332,8 +332,8 @@
                 <div class="space-y-3 pt-1">
                     <!-- Bar Terbagi -->
                     <div class="w-full h-2.5 rounded-full bg-zinc-100 overflow-hidden flex shadow-inner">
-                        <div class="h-full bg-amber-500 transition-all duration-300" style="width: {{ $analytics['arrival']['walk_in_pct'] }}%;"></div>
-                        <div class="h-full bg-indigo-500 transition-all duration-300" style="width: {{ $analytics['arrival']['booking_pct'] }}%;"></div>
+                        <div class="h-full bg-amber-500 transition-all duration-300" @style(['width: ' . $analytics['arrival']['walk_in_pct'] . '%'])></div>
+                        <div class="h-full bg-indigo-500 transition-all duration-300" @style(['width: ' . $analytics['arrival']['booking_pct'] . '%'])></div>
                     </div>
 
                     <!-- 2 Kolom Keterangan Kanan Kiri -->
@@ -386,7 +386,7 @@
                                 <span class="font-black text-zinc-900 num shrink-0">{{ $svc['percentage'] }}%</span>
                             </div>
                             <div class="w-full h-1.5 rounded-full bg-zinc-100 overflow-hidden">
-                                <div class="h-full bg-zinc-900 rounded-full" style="width: {{ $svc['percentage'] }}%;"></div>
+                                <div class="h-full bg-zinc-900 rounded-full" @style(['width: ' . $svc['percentage'] . '%'])></div>
                             </div>
                         </div>
                     @endforeach
@@ -455,7 +455,7 @@
                         <!-- Bar Kontribusi -->
                         <div class="space-y-1">
                             <div class="w-full h-1.5 rounded-full bg-zinc-200 overflow-hidden">
-                                <div class="h-full bg-amber-500 rounded-full transition-all duration-300" style="width: {{ $barber['bar_width'] }}%;"></div>
+                                <div class="h-full bg-amber-500 rounded-full transition-all duration-300" @style(['width: ' . $barber['bar_width'] . '%'])></div>
                             </div>
                             <div class="flex justify-between items-center text-[10px] text-zinc-400">
                                 <span>Porsi {{ $barber['share_rate'] }}% outlet</span>
@@ -507,7 +507,7 @@
     <!-- Membantu Owner memantau mutu layanan, keramahan barber & kritik cabang   -->
     <!-- ========================================================================= -->
     <div id="customer-reviews" class="scroll-mt-20 mb-6">
-        <x-ui.card>
+        <x-ui.card data-pagination-container="customer-reviews">
             <x-slot:header>
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full report-review-header">
                     <!-- Judul & Badge Ulasan (Mobile Friendly) -->
@@ -856,7 +856,10 @@
                                 @if($order->payment_status === \App\Enums\PaymentStatus::Paid)
                                     <button
                                         type="button"
-                                        onclick="openRefundModal('{{ route('owner.orders.refund', $order) }}', '{{ $order->number }}', 'Rp{{ number_format($order->grand_total, 0, ',', '.') }}')"
+                                        data-refund-url="{{ route('owner.orders.refund', $order) }}"
+                                        data-order-number="{{ $order->number }}"
+                                        data-order-total="Rp{{ number_format($order->grand_total, 0, ',', '.') }}"
+                                        onclick="openRefundModal(this.dataset.refundUrl, this.dataset.orderNumber, this.dataset.orderTotal)"
                                         class="inline-flex items-center justify-center px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold border border-rose-200 transition cursor-pointer"
                                     >
                                         Refund
@@ -914,7 +917,10 @@
                         <div class="pt-2 border-t border-zinc-200/70 flex justify-end">
                             <button
                                 type="button"
-                                onclick="openRefundModal('{{ route('owner.orders.refund', $order) }}', '{{ $order->number }}', 'Rp{{ number_format($order->grand_total, 0, ',', '.') }}')"
+                                data-refund-url="{{ route('owner.orders.refund', $order) }}"
+                                data-order-number="{{ $order->number }}"
+                                data-order-total="Rp{{ number_format($order->grand_total, 0, ',', '.') }}"
+                                onclick="openRefundModal(this.dataset.refundUrl, this.dataset.orderNumber, this.dataset.orderTotal)"
                                 class="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold border border-rose-200 transition cursor-pointer"
                             >
                                 <span>Refund Transaksi</span>
@@ -924,31 +930,6 @@
                 </div>
             @empty
                 <p class="col-span-full py-6 text-center text-xs text-zinc-400 italic">Belum ada riwayat transaksi.</p>
-            @endforelse
-        </div>
-    </x-ui.card>
-
-    <!-- Audit Log Keamanan: Batas 50 Aktivitas Terakhir -->
-    <x-ui.card class="mt-5">
-        <x-slot:header>
-            <div class="flex items-center justify-between gap-2 w-full">
-                <h2 class="font-bold text-sm sm:text-base">Audit Log Keamanan (50 Aktivitas Terakhir)</h2>
-                <span class="text-xs text-zinc-400 font-semibold">{{ $auditLogs->count() }} / 50 aktivitas</span>
-            </div>
-        </x-slot:header>
-
-        <div class="max-h-80 overflow-y-auto divide-y divide-zinc-100 text-xs">
-            @forelse($auditLogs as $log)
-                <div class="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
-                    <div class="flex items-center gap-2 min-w-0">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                        <span class="font-bold text-zinc-900 font-mono text-[11px] bg-zinc-100 px-1.5 py-0.5 rounded shrink-0">{{ $log->action }}</span>
-                        <span class="text-zinc-400 truncate">oleh <strong class="text-zinc-700 font-semibold">{{ $log->user?->name ?? 'System' }}</strong></span>
-                    </div>
-                    <span class="text-zinc-400 num text-[11px] pl-3.5 sm:pl-0 shrink-0">{{ $log->created_at?->format('d M Y H:i:s') }}</span>
-                </div>
-            @empty
-                <p class="text-zinc-400 py-3">Belum ada catatan aktivitas.</p>
             @endforelse
         </div>
     </x-ui.card>

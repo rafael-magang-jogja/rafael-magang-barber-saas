@@ -7,7 +7,6 @@ namespace App\Support\Platform;
 use App\Models\Tenant;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
 
 final class FaviconService
 {
@@ -33,13 +32,27 @@ final class FaviconService
     {
         self::ensureFaviconDirectory();
 
+        $cleanColor = strtoupper(ltrim($hexColor, '#'));
+        $svgName = "favicon_{$iconName}_{$cleanColor}.svg";
+        $icoName = "favicon_{$iconName}_{$cleanColor}.ico";
+
         // 1. Simpan favicon.svg beresolusi tinggi (vector)
         $svgContent = self::createSvgForIcon($iconName, $hexColor);
+        File::put(public_path(self::FAVICON_DIR . '/' . $svgName), $svgContent);
         File::put(public_path(self::FAVICON_DIR . '/favicon.svg'), $svgContent);
 
         // 2. Buat favicon.ico (32x32) menggunakan GD & bungkus dalam format ICO
         $icoData = self::createIcoFromIconBadge($iconName, $hexColor);
+        File::put(public_path(self::FAVICON_DIR . '/' . $icoName), $icoData);
         File::put(public_path(self::FAVICON_DIR . '/favicon.ico'), $icoData);
+
+        // Hapus varian favicon lama yang sudah tidak terpakai
+        foreach (File::glob(public_path(self::FAVICON_DIR . '/favicon_*.*')) as $oldFile) {
+            $base = basename($oldFile);
+            if ($base !== $svgName && $base !== $icoName) {
+                @unlink($oldFile);
+            }
+        }
 
         // Salin juga ke public/favicon.ico sebagai fallback standar browser
         File::put(public_path('favicon.ico'), $icoData);
@@ -329,101 +342,50 @@ SVG;
     }
 
     /**
-     * Generate favicon untuk tenant (Pro / Business) secara otomatis
-     * menggunakan logo tenant dan latar belakang warna brand tenant.
+     * Generate favicon untuk tenant (Starter, Pro, dsb.) secara otomatis:
+     * Mengikuti icon resmi platform (PlatformConfig::logoIcon()) dengan
+     * latar belakang warna brand milik tenant ($tenant->brand_color).
      */
     public static function generateForTenant(Tenant $tenant): void
     {
         $dir = self::ensureTenantFaviconDirectory($tenant->id);
-        $brandColor = $tenant->brand_color ?? '#f59e0b';
-        $rgb = self::hexToRgb($brandColor);
+        $brandColor = $tenant->brand_color ?? PlatformConfig::themeColor();
+        $iconName = PlatformConfig::logoIcon();
+        $cleanColor = strtoupper(ltrim($brandColor, '#'));
 
-        // 1. Cek apakah ada logo gambar kustom milik tenant
-        $hasLogoImage = false;
-        $logoFullPath = null;
-        if (! empty($tenant->logo_path) && ! str_starts_with($tenant->logo_path, 'http')) {
-            $full = Storage::disk('public')->path($tenant->logo_path);
-            if (file_exists($full)) {
-                $hasLogoImage = true;
-                $logoFullPath = $full;
+        $svgName = "favicon_{$iconName}_{$cleanColor}.svg";
+        $icoName = "favicon_{$iconName}_{$cleanColor}.ico";
+
+        // 1. Simpan favicon.svg (vector) beresolusi tinggi
+        $svgContent = self::createSvgForIcon($iconName, $brandColor);
+        self::safeWriteFile($dir . '/' . $svgName, $svgContent);
+        self::safeWriteFile($dir . '/favicon.svg', $svgContent);
+
+        // 2. Buat favicon.ico (32x32) menggunakan GD & bungkus dalam format ICO
+        $icoData = self::createIcoFromIconBadge($iconName, $brandColor);
+        self::safeWriteFile($dir . '/' . $icoName, $icoData);
+        self::safeWriteFile($dir . '/favicon.ico', $icoData);
+
+        // Hapus varian favicon lama milik tenant yang sudah tidak terpakai
+        foreach (File::glob($dir . '/favicon_*.*') as $oldFile) {
+            $base = basename($oldFile);
+            if ($base !== $svgName && $base !== $icoName) {
+                @unlink($oldFile);
             }
         }
+    }
 
-        // 2. Generate 32x32 ICO
-        if (extension_loaded('gd')) {
-            $im = imagecreatetruecolor(32, 32);
-            imagealphablending($im, false);
-            imagesavealpha($im, true);
-            $trans = imagecolorallocatealpha($im, 0, 0, 0, 127);
-            imagefill($im, 0, 0, $trans);
-
-            imagealphablending($im, true);
-            $bg = imagecolorallocate($im, $rgb['r'], $rgb['g'], $rgb['b']);
-            imagefilledellipse($im, 16, 16, 28, 28, $bg);
-
-            if ($hasLogoImage && $logoFullPath) {
-                $sourceContent = @file_get_contents($logoFullPath);
-                if ($sourceContent) {
-                    $src = @imagecreatefromstring($sourceContent);
-                    if ($src) {
-                        $sw = imagesx($src);
-                        $sh = imagesy($src);
-                        $targetSize = 20;
-                        $dw = $targetSize;
-                        $dh = $targetSize;
-                        $dx = 6;
-                        $dy = 6;
-                        if ($sw > $sh) {
-                            $dh = (int) round($targetSize * ($sh / $sw));
-                            $dy = (int) floor((32 - $dh) / 2);
-                        } elseif ($sh > $sw) {
-                            $dw = (int) round($targetSize * ($sw / $sh));
-                            $dx = (int) floor((32 - $dw) / 2);
-                        }
-                        imagecopyresampled($im, $src, $dx, $dy, 0, 0, $dw, $dh, $sw, $sh);
-                    }
-                }
-            } else {
-                $iconName = PlatformConfig::logoIcon();
-                $icoData = self::createIcoFromIconBadge($iconName, $brandColor);
-                File::put($dir . '/favicon.ico', $icoData);
+    private static function safeWriteFile(string $filePath, string $contents): void
+    {
+        try {
+            if (file_exists($filePath)) {
+                @chmod($filePath, 0666);
+                @unlink($filePath);
             }
-
-            if ($hasLogoImage) {
-                ob_start();
-                imagepng($im);
-                $pngData = (string) ob_get_clean();
-
-                $icoData = self::wrapPngInIco($pngData);
-                File::put($dir . '/favicon.ico', $icoData);
-            }
+            File::put($filePath, $contents);
+        } catch (\Throwable) {
+            @file_put_contents($filePath, $contents);
         }
-
-        // 3. Generate 48x48 SVG
-        $luminance = (0.299 * $rgb['r'] + 0.587 * $rgb['g'] + 0.114 * $rgb['b']) / 255;
-        $textColor = $luminance > 0.65 ? '#09090b' : '#ffffff';
-
-        if ($hasLogoImage && $logoFullPath) {
-            $ext = strtolower(pathinfo($logoFullPath, PATHINFO_EXTENSION));
-            $mime = match ($ext) {
-                'svg' => 'image/svg+xml',
-                'jpg', 'jpeg' => 'image/jpeg',
-                'webp' => 'image/webp',
-                default => 'image/png',
-            };
-            $base64 = base64_encode((string) file_get_contents($logoFullPath));
-            $svgContent = <<<SVG
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-    <rect width="48" height="48" rx="14" fill="{$brandColor}"/>
-    <image href="data:{$mime};base64,{$base64}" x="8" y="8" width="32" height="32" preserveAspectRatio="xMidYMid meet"/>
-</svg>
-SVG;
-        } else {
-            $iconName = PlatformConfig::logoIcon();
-            $svgContent = self::createSvgForIcon($iconName, $brandColor);
-        }
-
-        File::put($dir . '/favicon.svg', $svgContent);
     }
 
     /**

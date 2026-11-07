@@ -91,10 +91,11 @@
                 <!-- Input Link Google Maps -->
                 <div class="space-y-1">
                     <x-ui.input
-                        label="Link Google Maps (Lokasi Tempat)"
+                        label="Link Google Maps (Lokasi Tempat) *"
                         name="maps_url"
                         :value="old('maps_url', $editingBranch?->maps_url)"
                         placeholder="https://maps.app.goo.gl/... atau https://maps.google.com/?q=..."
+                        required
                     />
                     <p class="text-[11px] text-zinc-500">
                         Pelanggan dapat mengklik link ini untuk langsung melihat lokasi &amp; rute cabang di Google Maps.
@@ -135,7 +136,7 @@
                             <button
                                 type="button"
                                 onclick="if(confirm('Apakah Anda yakin ingin menghapus cabang {{ $editingBranch->name }} ({{ $editingBranch->code }})? Seluruh riwayat cabang ini akan diarsipkan.')) { document.getElementById('delete-branch-form').submit(); }"
-                                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 transition cursor-pointer"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 shadow-sm transition cursor-pointer"
                             >
                                 <x-ui.icon name="trash" class="w-4 h-4" />
                                 <span>Hapus Cabang</span>

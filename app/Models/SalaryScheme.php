@@ -41,6 +41,22 @@ final class SalaryScheme extends Model
     }
 
     /**
+     * Cek apakah skema menggunakan persentase bagi hasil omzet.
+     */
+    public function getHasPercentageCommissionAttribute(): bool
+    {
+        if (isset($this->attributes['commission_percentage']) && $this->attributes['commission_percentage'] !== null && (int) $this->attributes['commission_percentage'] > 0) {
+            return true;
+        }
+
+        if (preg_match('/(\d+)\s*%/', $this->name)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Dapatkan persentase bagi hasil untuk skema commission_only (fleksibel).
      */
     public function getEffectiveCommissionPercentageAttribute(): int
@@ -58,7 +74,7 @@ final class SalaryScheme extends Model
             return (int) $matches[1];
         }
 
-        return 30; // fallback standar default
+        return 0;
     }
 
     /**

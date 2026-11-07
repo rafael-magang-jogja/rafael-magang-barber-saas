@@ -17,7 +17,7 @@ enum BookingStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Pending => 'Menunggu Konfirmasi',
+            self::Pending => 'Pending',
             self::Confirmed => 'Terkonfirmasi',
             self::CheckedIn => 'Sudah Check-in',
             self::Completed => 'Selesai',

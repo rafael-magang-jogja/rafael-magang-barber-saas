@@ -1,4 +1,39 @@
 <x-layouts.app title="Platform Superadmin" subtitle="Monitoring seluruh barbershop, paket langganan & performa SaaS" role="superadmin">
+    @php
+        $pendingSubCount = app(\App\Support\Tenancy\CurrentTenant::class)->superadminPendingInvoicesCount();
+    @endphp
+    @if($pendingSubCount > 0)
+        <div class="mb-5 p-4 sm:p-5 rounded-2xl bg-amber-50 border-2 border-amber-400 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+            <div class="flex items-center gap-3.5">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 text-zinc-950 grid place-items-center shrink-0 shadow-xs relative">
+                    <x-ui.icon name="bell" class="w-5 h-5 animate-bounce" />
+                    <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+                    </span>
+                </div>
+                <div>
+                    <h3 class="text-sm sm:text-base font-black text-amber-950 flex items-center gap-2">
+                        <span>{{ $pendingSubCount }} Pengajuan Konfirmasi Pembayaran Langganan</span>
+                        <span class="px-2 py-0.5 rounded-full bg-rose-500 text-white font-black text-[10px] animate-pulse">
+                            Perlu Verifikasi
+                        </span>
+                    </h3>
+                    <p class="text-xs text-amber-900/90 mt-0.5">
+                        Ada barbershop yang telah mengunggah bukti bayar sewa software dan menunggu konfirmasi Superadmin.
+                    </p>
+                </div>
+            </div>
+            <a
+                href="{{ route('platform.subscriptions', ['status' => 'pending']) }}"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-zinc-950 font-black text-xs shadow-xs transition shrink-0"
+            >
+                <span>Verifikasi Pembayaran ({{ $pendingSubCount }})</span>
+                <x-ui.icon name="arrow-right" class="w-4 h-4" />
+            </a>
+        </div>
+    @endif
+
     <!-- Stat Cards Ringkasan Platform SaaS -->
     <div class="stat-cards-grid grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 transition-all duration-500 ease-in-out">
         <x-ui.stat
@@ -164,7 +199,10 @@
 
                                         <button
                                             type="button"
-                                            onclick="openSuspendModal('{{ route('platform.tenants.toggle', $tenant) }}', '{{ addslashes($tenant->name) }}', {{ $tenant->status === \App\Enums\TenantStatus::Suspended ? 'true' : 'false' }})"
+                                            data-toggle-url="{{ route('platform.tenants.toggle', $tenant) }}"
+                                            data-tenant-name="{{ $tenant->name }}"
+                                            data-is-suspended="{{ $tenant->status === \App\Enums\TenantStatus::Suspended ? '1' : '0' }}"
+                                            onclick="openSuspendModal(this.dataset.toggleUrl, this.dataset.tenantName, this.dataset.isSuspended === '1')"
                                             class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer text-white shadow-2xs {{ $tenant->status === \App\Enums\TenantStatus::Suspended ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500' }}"
                                             title="Ubah Status Barbershop"
                                         >
@@ -227,7 +265,10 @@
 
                             <button
                                 type="button"
-                                onclick="openSuspendModal('{{ route('platform.tenants.toggle', $tenant) }}', '{{ addslashes($tenant->name) }}', {{ $tenant->status === \App\Enums\TenantStatus::Suspended ? 'true' : 'false' }})"
+                                data-toggle-url="{{ route('platform.tenants.toggle', $tenant) }}"
+                                data-tenant-name="{{ $tenant->name }}"
+                                data-is-suspended="{{ $tenant->status === \App\Enums\TenantStatus::Suspended ? '1' : '0' }}"
+                                onclick="openSuspendModal(this.dataset.toggleUrl, this.dataset.tenantName, this.dataset.isSuspended === '1')"
                                 class="px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer text-white shadow-2xs {{ $tenant->status === \App\Enums\TenantStatus::Suspended ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500' }}"
                             >
                                 {{ $tenant->status === \App\Enums\TenantStatus::Suspended ? 'Aktifkan' : 'Suspend' }}

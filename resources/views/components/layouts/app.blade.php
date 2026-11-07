@@ -7,14 +7,22 @@
 
 @php
     $currentTenantCtx = app(\App\Support\Tenancy\CurrentTenant::class);
-    $tenant = $currentTenantCtx->get();
-    $brandColor = $tenant?->brand_color ?? \App\Support\Platform\PlatformConfig::themeColor();
 
     // Gunakan role asli dari middleware SetCurrentTenant agar Owner tidak berubah menjadi Kasir saat membuka halaman Kasir
     $effectiveRole = $currentTenantCtx->role()
         ?? request()->attributes->get('current_role')
         ?? $role
         ?? (request()->routeIs('cashier.*') ? 'cashier' : 'owner');
+
+    $isSuperadminArea = $effectiveRole === 'superadmin' || request()->routeIs('platform.*') || request()->is('platform*');
+
+    if ($isSuperadminArea) {
+        $tenant = null;
+        $brandColor = \App\Support\Platform\PlatformConfig::themeColor();
+    } else {
+        $tenant = $currentTenantCtx->get();
+        $brandColor = $tenant?->brand_color ?? \App\Support\Platform\PlatformConfig::themeColor();
+    }
 
     $isCashierOrAdmin = in_array($effectiveRole, ['admin', 'cashier'], true) && $effectiveRole !== 'owner';
 
@@ -42,41 +50,144 @@
     $sidebarSub = $currentTenantCtx->subscription();
     $tenantPlanCode = $sidebarSub?->plan?->code ?? ($tenant?->subscription?->plan?->code ?? 'starter');
 
+    $superadminPendingConfirmationsCount = 0;
+    $pendingCustomerWithdrawalsCount = 0;
+    if ($effectiveRole === 'superadmin') {
+        $superadminPendingConfirmationsCount = $currentTenantCtx->superadminPendingInvoicesCount();
+        $pendingCustomerWithdrawalsCount = \App\Models\CustomerWithdrawal::query()->where('status', 'pending')->count();
+    }
+
+    $staffMembership = null;
+    $staffAttendanceStatus = null;
+    if ($tenant && auth()->check() && in_array($effectiveRole, ['admin', 'cashier'], true)) {
+        $staffMembership = $currentTenantCtx->staffMembership(auth()->id());
+        $staffAttendanceStatus = $currentTenantCtx->staffAttendanceStatus(auth()->id());
+    }
+
     $menus = match ($effectiveRole) {
         'superadmin' => [
-            ['label' => 'Platform Overview', 'short_label' => 'Overview', 'href' => route('platform.dashboard'), 'icon' => 'zap'],
-            ['label' => 'Paket Langganan', 'short_label' => 'Paket', 'href' => route('platform.plans'), 'icon' => 'coins'],
-            ['label' => 'Tagihan & Konfirmasi', 'short_label' => 'Tagihan', 'href' => route('platform.subscriptions'), 'icon' => 'banknote'],
-            ['label' => 'Monitoring Pendapatan', 'short_label' => 'Pendapatan', 'href' => route('platform.transactions'), 'icon' => 'receipt'],
-            ['label' => 'Laporan Platform', 'short_label' => 'Laporan', 'href' => route('platform.reports'), 'icon' => 'trending-up'],
-            ['label' => 'Konfigurasi SaaS', 'short_label' => 'Sistem', 'href' => route('platform.settings'), 'icon' => 'settings'],
-        ],
-        'admin', 'cashier' => [
+            // Monitoring & Analitik
+            ['is_section' => true, 'label' => 'Monitoring & Analitik'],
             [
-                'label' => 'Antrean & Kasir',
-                'short_label' => 'Kasir',
-                'href' => route('cashier.dashboard'),
-                'icon' => 'ticket',
-                'is_parent_queue' => true,
-                'children' => [
-                    [
-                        'label' => 'Papan Antrean & POS',
-                        'href' => route('cashier.dashboard'),
-                        'badge_type' => 'queue',
-                    ],
-                    [
-                        'label' => 'Walk-in & Booking',
-                        'href' => route('cashier.bookings'),
-                        'active_urls' => [route('cashier.bookings'), route('cashier.walk-in')],
-                        'badge_type' => 'booking',
-                    ],
-                ],
+                'label' => 'Platform Overview',
+                'short_label' => 'Overview',
+                'href' => route('platform.dashboard'),
+                'icon' => 'zap',
+                'active_routes' => ['platform.dashboard', 'platform.tenants.*'],
             ],
             [
+                'label' => 'Laporan Platform',
+                'short_label' => 'Laporan',
+                'href' => route('platform.reports'),
+                'icon' => 'trending-up',
+                'active_routes' => ['platform.reports*'],
+            ],
+
+            // Langganan & Keuangan
+            ['is_section' => true, 'label' => 'Langganan & Keuangan'],
+            [
+                'label' => 'Tagihan & Konfirmasi',
+                'short_label' => 'Tagihan',
+                'href' => route('platform.subscriptions'),
+                'icon' => 'banknote',
+                'badge_count' => $superadminPendingConfirmationsCount > 0 ? $superadminPendingConfirmationsCount : null,
+                'active_routes' => ['platform.subscriptions*'],
+            ],
+            [
+                'label' => 'Pencairan Dana (Payouts)',
+                'short_label' => 'Pencairan',
+                'href' => route('platform.payouts'),
+                'icon' => 'wallet',
+                'active_routes' => ['platform.payouts*'],
+            ],
+            [
+                'label' => 'Penarikan Customer',
+                'short_label' => 'Tarik Saldo',
+                'href' => route('platform.withdrawals'),
+                'icon' => 'arrow-up-right',
+                'badge_count' => $pendingCustomerWithdrawalsCount > 0 ? $pendingCustomerWithdrawalsCount : null,
+                'active_routes' => ['platform.withdrawals*'],
+            ],
+            [
+                'label' => 'Monitoring Pendapatan',
+                'short_label' => 'Pendapatan',
+                'href' => route('platform.transactions'),
+                'icon' => 'receipt',
+                'active_routes' => ['platform.transactions*'],
+            ],
+            [
+                'label' => 'Paket Langganan',
+                'short_label' => 'Paket',
+                'href' => route('platform.plans'),
+                'icon' => 'coins',
+                'active_routes' => ['platform.plans*'],
+            ],
+
+            // Komunikasi & Promosi
+            ['is_section' => true, 'label' => 'Komunikasi & Promosi'],
+            [
+                'label' => 'Siaran Pengumuman',
+                'short_label' => 'Pengumuman',
+                'href' => route('platform.announcements'),
+                'icon' => 'megaphone',
+                'active_routes' => ['platform.announcements*'],
+            ],
+            [
+                'label' => 'Iklan Produk',
+                'short_label' => 'Iklan',
+                'href' => route('platform.promotions'),
+                'icon' => 'tag',
+                'active_routes' => ['platform.promotions*'],
+            ],
+
+            // Sistem & Konfigurasi
+            ['is_section' => true, 'label' => 'Sistem & Konfigurasi'],
+            [
+                'label' => 'Konfigurasi SaaS',
+                'short_label' => 'Sistem',
+                'href' => route('platform.settings'),
+                'icon' => 'settings',
+                'active_routes' => ['platform.settings*'],
+            ],
+        ],
+        'admin', 'cashier' => [
+            // Operasional Kasir
+            ['is_section' => true, 'label' => 'Operasional Kasir'],
+            [
+                'label' => 'Papan Antrean & POS',
+                'short_label' => 'Antrean POS',
+                'href' => route('cashier.dashboard'),
+                'icon' => 'ticket',
+                'badge_type' => 'queue',
+                'active_routes' => ['cashier.dashboard', 'cashier.walk-in', 'cashier.bookings*'],
+            ],
+
+            // Kinerja & Absensi
+            ['is_section' => true, 'label' => 'Kinerja & Absensi'],
+            [
                 'label' => 'Absensi & Jadwal',
-                'short_label' => 'Jadwal',
+                'short_label' => 'Absen',
                 'href' => route('cashier.attendance'),
                 'icon' => 'clock',
+                'attendance_status' => $staffAttendanceStatus,
+                'active_routes' => ['cashier.attendance*'],
+            ],
+            [
+                'label' => 'Pendapatan Kasir',
+                'short_label' => 'Pendapatan',
+                'href' => route('cashier.earnings'),
+                'icon' => 'wallet',
+                'active_routes' => ['cashier.earnings*'],
+            ],
+
+            // Akun Saya
+            ['is_section' => true, 'label' => 'Akun Saya'],
+            [
+                'label' => 'Profil Kasir',
+                'short_label' => 'Profil',
+                'href' => route('cashier.profile'),
+                'icon' => 'user',
+                'active_routes' => ['cashier.profile*'],
             ],
         ],
         'barber' => [
@@ -91,33 +202,21 @@
         default => [
             // Operasional
             ['is_section' => true, 'label' => 'Operasional'],
-            ['label' => 'Dashboard', 'short_label' => 'Beranda', 'href' => route('owner.dashboard'), 'icon' => 'chart'],
+            ['label' => 'Dashboard', 'short_label' => 'Beranda', 'href' => route('owner.dashboard'), 'icon' => 'chart', 'active_routes' => ['owner.dashboard']],
             [
-                'label' => 'Antrean & Booking',
+                'label' => 'Kasir & Antrean',
                 'short_label' => 'Kasir',
                 'href' => route('cashier.dashboard'),
                 'icon' => 'ticket',
-                'is_parent_queue' => true,
-                'children' => [
-                    [
-                        'label' => 'Papan Antrean & POS',
-                        'href' => route('cashier.dashboard'),
-                        'badge_type' => 'queue',
-                    ],
-                    [
-                        'label' => 'Walk-in & Booking',
-                        'href' => route('cashier.bookings'),
-                        'active_urls' => [route('cashier.bookings'), route('cashier.walk-in')],
-                        'badge_type' => 'booking',
-                    ],
-                ],
+                'badge_type' => 'queue',
+                'active_routes' => ['cashier.dashboard', 'cashier.walk-in', 'cashier.bookings*'],
             ],
-            ['label' => 'Transaksi', 'short_label' => 'Transaksi', 'href' => route('owner.transactions'), 'icon' => 'receipt'],
-            ['label' => 'Customer', 'short_label' => 'Customer', 'href' => route('owner.customers'), 'icon' => 'user-check'],
+            ['label' => 'Transaksi', 'short_label' => 'Transaksi', 'href' => route('owner.transactions'), 'icon' => 'receipt', 'active_routes' => ['owner.transactions*']],
+            ['label' => 'Customer', 'short_label' => 'Customer', 'href' => route('owner.customers'), 'icon' => 'user-check', 'active_routes' => ['owner.customers*']],
 
             // Manajemen Tim
             ['is_section' => true, 'label' => 'Manajemen Tim'],
-            ['label' => 'Karyawan', 'short_label' => 'Tim', 'href' => route('owner.staff'), 'icon' => 'users'],
+            ['label' => 'Karyawan', 'short_label' => 'Tim', 'href' => route('owner.staff'), 'icon' => 'users', 'active_routes' => ['owner.staff*']],
             [
                 'label' => 'Jadwal & Absensi',
                 'short_label' => 'Jadwal',
@@ -126,12 +225,13 @@
                 'badge_dot' => $hasPendingTimeOffDot,
                 'children' => [
                     ['label' => 'Jadwal Shift Kerja', 'href' => route('owner.schedules')],
+                    ['label' => 'Scan Absen Karyawan', 'href' => route('owner.attendances.scanner')],
+                    ['label' => 'Rekap & Log Absensi', 'href' => route('owner.attendances')],
                     [
                         'label' => 'Pengajuan & Izin Libur',
                         'href' => route('owner.time-offs'),
                         'badge_dot' => $hasPendingTimeOffDot,
                     ],
-                    ['label' => 'Rekap & Log Absensi', 'href' => route('owner.attendances')],
                     ['label' => 'Pengaturan & Toleransi', 'href' => route('owner.schedule-settings')],
                 ],
             ],
@@ -149,27 +249,34 @@
 
             // Outlet & Layanan
             ['is_section' => true, 'label' => 'Outlet & Layanan'],
-            ['label' => 'Cabang', 'short_label' => 'Cabang', 'href' => route('owner.branches'), 'icon' => 'store'],
+            ['label' => 'Cabang', 'short_label' => 'Cabang', 'href' => route('owner.branches'), 'icon' => 'store', 'active_routes' => ['owner.branches*']],
             [
-                'label' => 'Layanan & Harga',
+                'label' => 'Layanan & Produk',
                 'short_label' => 'Layanan',
                 'href' => route('owner.services'),
                 'icon' => 'scissors',
                 'children' => [
                     ['label' => 'Daftar Layanan & Harga', 'href' => route('owner.services')],
                     [
-                        'label' => 'Setting Warna & Stok',
+                        'label' => 'Warna Rambut & Stok',
                         'href' => route('owner.colors'),
                         'badge_dot' => $hasLowColorStockDot,
                     ],
                 ],
             ],
 
-            // Laporan & Sistem
-            ['is_section' => true, 'label' => 'Laporan & Sistem'],
-            ['label' => 'Laporan', 'short_label' => 'Laporan', 'href' => route('owner.reports'), 'icon' => 'file-text'],
-            ['label' => 'Langganan & Paket', 'short_label' => 'Paket', 'href' => route('owner.subscription'), 'icon' => 'sparkles'],
-            ['label' => 'Pengaturan Barbershop', 'short_label' => 'Setting', 'href' => route('owner.settings'), 'icon' => 'settings'],
+            // Keuangan & Pengaturan
+            ['is_section' => true, 'label' => 'Keuangan & Pengaturan'],
+            ['label' => 'Laporan', 'short_label' => 'Laporan', 'href' => route('owner.reports'), 'icon' => 'file-text', 'active_routes' => ['owner.reports*']],
+            [
+                'label' => 'Pencairan Saldo Booking',
+                'short_label' => 'Pencairan',
+                'href' => route('owner.payouts'),
+                'icon' => 'wallet',
+                'active_routes' => ['owner.payouts*'],
+            ],
+            ['label' => 'Langganan & Paket', 'short_label' => 'Paket', 'href' => route('owner.subscription'), 'icon' => 'sparkles', 'active_routes' => ['owner.subscription*']],
+            ['label' => 'Pengaturan Barbershop', 'short_label' => 'Setting', 'href' => route('owner.settings'), 'icon' => 'settings', 'active_routes' => ['owner.settings*']],
         ],
     };
 
@@ -216,23 +323,48 @@
                 'badge_dot' => $hasLowColorStockDot,
             ],
         ];
+    } elseif ($effectiveRole === 'superadmin') {
+        $mobileNavMenus = [
+            [
+                'label' => 'Platform Overview',
+                'short_label' => 'Overview',
+                'href' => route('platform.dashboard'),
+                'active_routes' => ['platform.dashboard'],
+                'icon' => 'zap',
+            ],
+            [
+                'label' => 'Tagihan & Konfirmasi',
+                'short_label' => 'Tagihan',
+                'href' => route('platform.subscriptions'),
+                'active_routes' => ['platform.subscriptions*'],
+                'icon' => 'banknote',
+                'badge_count' => $superadminPendingConfirmationsCount > 0 ? $superadminPendingConfirmationsCount : null,
+            ],
+            [
+                'label' => 'Siaran Pengumuman',
+                'short_label' => 'Pengumuman',
+                'href' => route('platform.announcements'),
+                'active_routes' => ['platform.announcements*'],
+                'icon' => 'megaphone',
+            ],
+            [
+                'label' => 'Menu Lengkap',
+                'short_label' => 'Menu',
+                'href' => '#mobile-menu-drawer',
+                'is_drawer' => true,
+                'active_routes' => ['platform.plans*', 'platform.reports*', 'platform.promotions*', 'platform.settings*', 'platform.transactions*', 'platform.payouts*'],
+                'icon' => 'grid',
+            ],
+        ];
     } elseif ($isCashierOrAdmin) {
         $mobileNavMenus = [
             [
                 'label' => 'Papan Antrean & POS',
                 'short_label' => 'Antrean POS',
                 'href' => route('cashier.dashboard'),
-                'active_routes' => ['cashier.dashboard'],
+                'active_routes' => ['cashier.dashboard', 'cashier.walk-in', 'cashier.bookings*'],
                 'icon' => 'ticket',
                 'badge_type' => 'queue',
-            ],
-            [
-                'label' => 'Walk-in & Booking',
-                'short_label' => 'Booking',
-                'href' => route('cashier.bookings'),
-                'active_routes' => ['cashier.bookings', 'cashier.walk-in'],
-                'icon' => 'calendar',
-                'badge_type' => 'booking',
             ],
             [
                 'label' => 'Absensi & Jadwal',
@@ -240,20 +372,39 @@
                 'href' => route('cashier.attendance'),
                 'active_routes' => ['cashier.attendance'],
                 'icon' => 'clock',
+                'attendance_status' => $staffAttendanceStatus,
+            ],
+            [
+                'label' => 'Pendapatan Kasir',
+                'short_label' => 'Pendapatan',
+                'href' => route('cashier.earnings'),
+                'active_routes' => ['cashier.earnings'],
+                'icon' => 'wallet',
+            ],
+            [
+                'label' => 'Profil Kasir',
+                'short_label' => 'Profil',
+                'href' => route('cashier.profile'),
+                'active_routes' => ['cashier.profile', 'cashier.profile.edit'],
+                'icon' => 'user',
             ],
         ];
     }
 @endphp
 
 <!DOCTYPE html>
-<html lang="id" style="--tenant-brand: {{ $brandColor }}">
+<html lang="id" @style(['--tenant-brand: ' . $brandColor])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title }} — {{ $tenant?->name ?? \App\Support\Platform\PlatformConfig::name() }}</title>
+    <title>{{ $title }} — {{ $isSuperadminArea ? \App\Support\Platform\PlatformConfig::name() : ($tenant?->name ?? \App\Support\Platform\PlatformConfig::name()) }}</title>
     @php
-        $activeFaviconUrl = $tenant ? $tenant->faviconUrl() : \App\Support\Platform\PlatformConfig::faviconUrl();
-        $activeSvgFaviconUrl = $tenant ? $tenant->svgFaviconUrl() : (\App\Support\Platform\PlatformConfig::hasSvgFavicon() ? \App\Support\Platform\PlatformConfig::svgFaviconUrl() : null);
+        $activeFaviconUrl = ($isSuperadminArea || ! $tenant)
+            ? \App\Support\Platform\PlatformConfig::faviconUrl()
+            : $tenant->faviconUrl();
+        $activeSvgFaviconUrl = ($isSuperadminArea || ! $tenant)
+            ? (\App\Support\Platform\PlatformConfig::hasSvgFavicon() ? \App\Support\Platform\PlatformConfig::svgFaviconUrl() : null)
+            : $tenant->svgFaviconUrl();
     @endphp
     <link rel="icon" type="image/x-icon" href="{{ $activeFaviconUrl }}">
     @if($activeSvgFaviconUrl)
@@ -370,7 +521,7 @@
                 height: 2rem !important;
                 transform: none !important;
                 transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, background-color 0.3s ease !important;
-                z-index: 50 !important;
+                z-index: 60 !important;
                 will-change: left;
                 backface-visibility: hidden;
             }
@@ -389,12 +540,12 @@
             }
 
             html.tablet-sidebar-open #tablet-sidebar-toggle {
-                left: 15rem !important;
+                left: 15rem !important; /* Tepat di garis batas antara sidebar (16rem) dan header */
                 transform: none !important;
             }
 
             html.tablet-sidebar-open header .md\:max-lg\:pl-9 {
-                padding-left: 0.5rem !important;
+                padding-left: 1.5rem !important;
             }
 
             /* Transisi halus elemen layout konten saat sidebar dibuka/ditutup (0.5 detik ease-in-out di semua halaman) */
@@ -708,6 +859,32 @@
             html:not(.tablet-sidebar-open) .report-orders-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
+
+            /* Tablet: Pengumuman Global saat sidebar aktif/terbuka */
+            html.tablet-sidebar-open .announcements-stat-grid {
+                grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+            }
+
+            html.tablet-sidebar-open .announcements-urgency-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            html.tablet-sidebar-open .announcements-form-inputs-grid {
+                grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+            }
+
+            html.tablet-sidebar-open .announcements-header-container {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.75rem !important;
+            }
+
+            html.tablet-sidebar-open .announcements-filter-form {
+                width: 100% !important;
+                display: grid !important;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 0.5rem !important;
+            }
         }
 
         @media (min-width: 1024px) {
@@ -790,7 +967,7 @@
             @endif
             <div class="leading-tight min-w-0">
                 <div class="flex items-center gap-1.5 min-w-0">
-                    <p class="text-white font-bold text-sm truncate">{{ $tenant?->name ?? config('app.name') }}</p>
+                    <p class="text-white font-bold text-sm truncate">{{ $tenant?->name ?? \App\Support\Platform\PlatformConfig::name() }}</p>
                     @if($tenant && $effectiveRole !== 'superadmin')
                         <x-ui.plan-badge :code="$tenantPlanCode" />
                     @endif
@@ -811,10 +988,10 @@
                 @elseif($isItemLocked)
                     <div class="flex items-center justify-between px-3 py-2.5 rounded-xl font-semibold text-zinc-600 opacity-40 select-none cursor-not-allowed transition" title="Fitur dikunci: masa langganan berakhir">
                         <span class="flex items-center gap-3 min-w-0">
-                            <x-ui.icon :name="$menu['icon']" class="w-4 h-4 shrink-0 text-zinc-600" />
+                            <x-ui.icon :name="$menu['icon']" class="w-5 h-5 shrink-0 text-zinc-600" />
                             <span class="truncate">{{ $menu['label'] }}</span>
                         </span>
-                        <x-ui.icon name="lock" class="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                        <x-ui.icon name="lock" class="w-4 h-4 text-zinc-600 shrink-0" />
                     </div>
                 @elseif(!empty($menu['children']))
                     @php
@@ -831,10 +1008,10 @@
                         }
                         $isGroupActive = in_array(request()->url(), $childUrls, true);
                     @endphp
-                    <details class="group rounded-xl {{ $isGroupActive ? 'bg-white/5' : '' }}" @if($isGroupActive || in_array($effectiveRole, ['admin', 'cashier'], true)) open @endif>
-                        <summary class="list-none flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl font-semibold cursor-pointer select-none transition {{ $isGroupActive ? 'bg-amber-500 text-zinc-950' : 'hover:bg-white/10 hover:text-white' }}">
+                    <details name="sidebar-accordion" class="group rounded-xl {{ $isGroupActive ? 'bg-white/[0.04]' : '' }}" @if($isGroupActive) open @endif>
+                        <summary class="list-none flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl font-semibold cursor-pointer select-none transition {{ $isGroupActive ? 'bg-white/10 text-white font-bold' : 'text-zinc-300 hover:bg-white/10 hover:text-white' }}">
                             <span class="flex items-center gap-3 min-w-0">
-                                <x-ui.icon :name="$menu['icon']" class="w-4 h-4 shrink-0" />
+                                <x-ui.icon :name="$menu['icon']" class="w-5 h-5 shrink-0 {{ $isGroupActive ? 'text-amber-400' : 'text-zinc-400 group-hover:text-white' }}" />
                                 <span class="truncate">{{ $menu['label'] }}</span>
                             </span>
                             <span class="flex items-center gap-1.5 shrink-0">
@@ -846,10 +1023,10 @@
                                         <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                                     </span>
                                 @endif
-                                <x-ui.icon name="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180" />
+                                <x-ui.icon name="chevron-down" class="w-4 h-4 shrink-0 transition-transform duration-200 group-open:rotate-180 {{ $isGroupActive ? 'text-amber-400' : 'text-zinc-500' }}" />
                             </span>
                         </summary>
-                        <div class="mt-1 ml-4 pl-3 border-l border-zinc-800 space-y-1 py-1">
+                        <div class="mt-1 ml-3.5 pl-3 border-l-2 border-zinc-800 space-y-1 py-1">
                             @foreach($menu['children'] as $child)
                                 @php
                                     $matchUrls = array_merge([$child['href']], $child['active_urls'] ?? []);
@@ -857,7 +1034,7 @@
                                 @endphp
                                 <a
                                     href="{{ $child['href'] }}"
-                                    class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition {{ $childActive ? 'text-amber-400 bg-white/5' : 'text-zinc-400 hover:text-white hover:bg-white/5' }}"
+                                    class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs transition {{ $childActive ? 'bg-amber-500 text-zinc-950 font-black shadow-xs' : 'text-zinc-400 hover:text-white hover:bg-white/5 font-semibold' }}"
                                 >
                                     <span class="truncate">{{ $child['label'] }}</span>
                                     @if(!empty($child['badge_type']))
@@ -873,28 +1050,110 @@
                         </div>
                     </details>
                 @else
-                    @php $active = request()->url() === $menu['href']; @endphp
+                    @php
+                        $active = false;
+                        if (!empty($menu['active_routes'])) {
+                            foreach ($menu['active_routes'] as $pattern) {
+                                if (request()->routeIs($pattern)) {
+                                    $active = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!$active && isset($menu['href'])) {
+                            $active = request()->url() === $menu['href'];
+                        }
+                    @endphp
                     <a
                         href="{{ $menu['href'] }}"
                         class="flex items-center gap-3 px-3 py-2.5 rounded-xl font-semibold transition {{ $active ? 'bg-amber-500 text-zinc-950' : 'hover:bg-white/10 hover:text-white' }}"
                     >
-                        <x-ui.icon :name="$menu['icon']" class="w-4 h-4" />
-                        <span>{{ $menu['label'] }}</span>
+                        <x-ui.icon :name="$menu['icon']" class="w-5 h-5 shrink-0" />
+                        <span class="truncate flex-1">{{ $menu['label'] }}</span>
+                        @if(!empty($menu['attendance_status']))
+                            <span class="flex items-center gap-1.5 shrink-0" title="{{ $menu['attendance_status'] === 'checked_in' ? 'Sudah Absen Masuk' : 'Belum Absen Masuk' }}">
+                                @if($menu['attendance_status'] === 'checked_in')
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20"></span>
+                                @else
+                                    <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 ring-2 ring-yellow-400/20 animate-pulse"></span>
+                                @endif
+                            </span>
+                        @elseif(!empty($menu['badge_type']))
+                            <livewire:cashier-nav-badge :type="$menu['badge_type']" context="sidebar" :key="'badge-' . $menu['badge_type'] . '-top-sidebar'" />
+                        @elseif(!empty($menu['badge_count']))
+                            <span class="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-black {{ $active ? 'bg-zinc-950 text-white' : 'bg-rose-500 text-white shadow-xs animate-pulse' }}" title="{{ $menu['badge_count'] }} Menunggu Konfirmasi">
+                                {{ $menu['badge_count'] }}
+                            </span>
+                        @endif
                     </a>
                 @endif
             @endforeach
 
             @if($tenant)
-                @php $firstBranchCode = $currentTenantCtx->firstBranchCode(); @endphp
-                @if($firstBranchCode)
-                    <a
-                        href="{{ route('display.queue', [$tenant->slug, $firstBranchCode]) }}"
-                        target="_blank"
-                        class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 hover:text-white"
-                    >
-                        <x-ui.icon name="tv" class="w-4 h-4" />
-                        <span>Layar TV Antrean</span>
-                    </a>
+                @if($effectiveRole === 'owner')
+                    @php
+                        $ownerTvBranches = $currentTenantCtx->activeAllowedBranches();
+                    @endphp
+                    @if($ownerTvBranches->count() > 0)
+                        <div class="pt-4 pb-1 px-3 text-[10px] font-black uppercase tracking-wider text-zinc-500 select-none">
+                            Layar Display
+                        </div>
+                    @endif
+                    @if($ownerTvBranches->count() === 1)
+                        @php $singleBranch = $ownerTvBranches->first(); @endphp
+                        <a
+                            href="{{ $tenant->tvDisplayUrl($singleBranch->code) }}"
+                            target="_blank"
+                            class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 hover:text-white text-zinc-300 transition"
+                            title="Buka Layar TV Antrean Cabang {{ $singleBranch->name }}"
+                        >
+                            <x-ui.icon name="tv" class="w-5 h-5 shrink-0 text-amber-400" />
+                            <span>Layar TV Antrean</span>
+                        </a>
+                    @elseif($ownerTvBranches->count() > 1)
+                        <button
+                            type="button"
+                            onclick="document.getElementById('modal-owner-tv-branches').showModal()"
+                            class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/10 hover:text-white text-zinc-300 transition text-left cursor-pointer group"
+                            title="Pilih Cabang untuk Layar TV Antrean"
+                        >
+                            <div class="flex items-center gap-3">
+                                <x-ui.icon name="tv" class="w-5 h-5 shrink-0 text-amber-400 group-hover:scale-105 transition" />
+                                <span>Layar TV Antrean</span>
+                            </div>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-400 group-hover:bg-amber-500/20 group-hover:text-amber-300 transition">
+                                {{ $ownerTvBranches->count() }} Cabang
+                            </span>
+                        </button>
+                    @endif
+                @else
+                    @php
+                        $cashierBranch = $staffMembership?->branch;
+                        $cashierBranchCode = $cashierBranch?->code ?: $currentTenantCtx->firstBranchCode();
+                    @endphp
+                    @if($cashierBranchCode)
+                        <div class="pt-3 pb-1 px-3 text-[10px] font-black uppercase tracking-wider text-zinc-500 select-none">
+                            Layar Display
+                        </div>
+                        <a
+                            href="{{ $tenant->tvDisplayUrl($cashierBranchCode) }}"
+                            target="_blank"
+                            class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 hover:text-white text-zinc-300 transition group"
+                            title="Buka Layar TV Antrean {{ $cashierBranch ? 'Cabang ' . $cashierBranch->name : '' }}"
+                        >
+                            <span class="flex items-center gap-3 min-w-0">
+                                <x-ui.icon name="tv" class="w-5 h-5 shrink-0 text-amber-400" />
+                                <span class="truncate">Layar TV Antrean</span>
+                            </span>
+                            @if($cashierBranch)
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-400 shrink-0">
+                                    {{ $cashierBranch->name }}
+                                </span>
+                            @else
+                                <x-ui.icon name="external-link" class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400 shrink-0" />
+                            @endif
+                        </a>
+                    @endif
                 @endif
             @endif
         </nav>
@@ -1007,11 +1266,34 @@
                 @endif
             @endif
 
-            <div class="flex items-center justify-between gap-2">
-                <div class="min-w-0">
-                    <p class="text-xs font-semibold text-white truncate">{{ auth()->user()?->name }}</p>
-                    <p class="text-xs text-zinc-500 truncate">{{ auth()->user()?->email }}</p>
+            @if($effectiveRole === 'superadmin')
+                <!-- Status Mode Superadmin di Bagian Bawah Sidebar -->
+                <div class="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800/80 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Core Engine Aktif"></span>
+                        <span class="text-xs font-bold text-white truncate">{{ \App\Support\Platform\PlatformConfig::name() }} Core</span>
+                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20 shrink-0">
+                        SaaS Mode
+                    </span>
                 </div>
+            @endif
+
+            <div class="flex items-center justify-between gap-2">
+                @if($isCashierOrAdmin)
+                    <a href="{{ route('cashier.profile') }}" class="min-w-0 flex-1 group hover:opacity-95 transition" title="Lihat Profil Kasir">
+                        <p class="text-xs font-semibold text-white truncate group-hover:text-amber-400 flex items-center gap-1">
+                            <span>{{ auth()->user()?->name }}</span>
+                            <x-ui.icon name="chevron-right" class="w-3 h-3 text-zinc-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition" />
+                        </p>
+                        <p class="text-xs text-zinc-500 truncate">{{ auth()->user()?->email }}</p>
+                    </a>
+                @else
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold text-white truncate">{{ auth()->user()?->name }}</p>
+                        <p class="text-xs text-zinc-500 truncate">{{ auth()->user()?->email }}</p>
+                    </div>
+                @endif
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-rose-600 hover:text-white transition cursor-pointer">
@@ -1026,13 +1308,13 @@
     <!-- Main Content -->
     <div id="main-content-wrapper" class="flex-1 flex flex-col min-w-0 pb-20 md:pb-0 lg:pl-64">
         <!-- Topbar -->
-        <header class="bg-zinc-950 text-white px-4 py-3 flex items-center justify-between md:bg-white md:text-zinc-900 md:border-b md:border-zinc-200 md:px-6 md:py-3.5 relative">
+        <header class="bg-zinc-950 text-white px-4 py-3 flex items-center justify-between md:bg-white md:text-zinc-900 md:border-b md:border-zinc-200 md:px-6 md:py-3.5 relative z-[60] md:z-[45]">
             <!-- Kotak Button Buka / Tutup Sidebar (Khusus Tablet, Tepat di Antara Sidebar dan Header) -->
             <button
                 type="button"
                 id="tablet-sidebar-toggle"
                 onclick="toggleSidebar()"
-                class="hidden md:flex lg:hidden items-center justify-center w-8 h-8 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 shadow-md cursor-pointer z-50 shrink-0"
+                class="hidden md:flex lg:hidden items-center justify-center w-8 h-8 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 shadow-md cursor-pointer z-[60] shrink-0"
                 title="Buka / Tutup Sidebar"
                 aria-label="Buka / Tutup Sidebar"
             >
@@ -1086,19 +1368,9 @@
                         </a>
                     @endif
                 </div>
-            @elseif(\App\Support\Platform\PlatformConfig::announcementBanner())
-                <div class="mb-5 p-3.5 sm:p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 flex items-center gap-3 shadow-xs">
-                    <span class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm font-black">
-                        <x-ui.icon name="megaphone" class="w-5 h-5" />
-                    </span>
-                    <div class="text-xs leading-relaxed">
-                        <p class="font-black text-zinc-900">Pengumuman Resmi Platform</p>
-                        <p class="text-zinc-600 mt-0.5">{{ \App\Support\Platform\PlatformConfig::announcementBanner() }}</p>
-                    </div>
-                </div>
             @endif
 
-            @if($isSubscriptionLocked)
+            @if($isSubscriptionLocked && !request()->routeIs('owner.subscription*'))
                 <div class="mb-5 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-rose-500">
                     <div class="flex items-center gap-3">
                         <span class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
@@ -1111,15 +1383,13 @@
                             </p>
                         </div>
                     </div>
-                    @if(!request()->routeIs('owner.subscription*'))
-                        <a
-                            href="{{ route('owner.subscription') }}"
-                            class="px-4 py-2.5 rounded-xl bg-white text-zinc-950 hover:bg-zinc-100 font-black text-xs shrink-0 self-start sm:self-auto shadow-sm transition inline-flex items-center gap-1.5"
-                        >
-                            <span>Perpanjang Langganan</span>
-                            <x-ui.icon name="arrow-right" class="w-3.5 h-3.5" />
-                        </a>
-                    @endif
+                    <a
+                        href="{{ route('owner.subscription') }}"
+                        class="px-4 py-2.5 rounded-xl bg-white text-zinc-950 hover:bg-zinc-100 font-black text-xs shrink-0 self-start sm:self-auto shadow-sm transition inline-flex items-center gap-1.5"
+                    >
+                        <span>Perpanjang Langganan</span>
+                        <x-ui.icon name="arrow-right" class="w-3.5 h-3.5" />
+                    </a>
                 </div>
             @endif
 
@@ -1171,8 +1441,12 @@
                         class="relative flex flex-col items-center justify-center gap-1 py-1 px-2.5 rounded-xl text-[11px] font-semibold leading-none transition cursor-pointer select-none {{ count($mobileNavMenus) > 5 ? 'shrink-0 min-w-[64px]' : '' }} {{ $active ? 'text-amber-400 bg-white/5 font-bold' : 'hover:text-zinc-200' }}"
                     >
                         <span class="relative inline-flex">
-                            <x-ui.icon :name="$menu['icon']" class="w-4 h-4" />
-                            @if(!empty($menu['badge_type']))
+                            <x-ui.icon :name="$menu['icon']" class="w-5 h-5 shrink-0" />
+                            @if(!empty($menu['badge_count']))
+                                <span class="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-none bg-rose-500 text-white font-black flex items-center justify-center num shadow-xs">
+                                    {{ $menu['badge_count'] }}
+                                </span>
+                            @elseif(!empty($menu['badge_type']))
                                 <livewire:cashier-nav-badge :type="$menu['badge_type']" context="mobile" :key="'badge-' . $menu['badge_type'] . '-btn-bottomnav'" />
                             @elseif(!empty($menu['is_parent_queue']))
                                 <livewire:cashier-nav-badge type="parent_dot" context="mobile" :key="'badge-dot-btn-bottomnav'" />
@@ -1191,8 +1465,21 @@
                         class="relative flex flex-col items-center justify-center gap-1 py-1 px-2.5 rounded-xl text-[11px] font-semibold leading-none transition {{ count($mobileNavMenus) > 5 ? 'shrink-0 min-w-[64px]' : '' }} {{ $active ? 'text-amber-400 bg-white/5 font-bold' : 'hover:text-zinc-200' }}"
                     >
                         <span class="relative inline-flex">
-                            <x-ui.icon :name="$menu['icon']" class="w-4 h-4" />
-                            @if(!empty($menu['badge_type']))
+                            <x-ui.icon :name="$menu['icon']" class="w-5 h-5 shrink-0" />
+                            @if(!empty($menu['attendance_status']))
+                                <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5 shrink-0" title="{{ $menu['attendance_status'] === 'checked_in' ? 'Sudah Absen Masuk' : 'Belum Absen Masuk' }}">
+                                    @if($menu['attendance_status'] === 'checked_in')
+                                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 ring-2 ring-zinc-950"></span>
+                                    @else
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-400 ring-2 ring-zinc-950"></span>
+                                    @endif
+                                </span>
+                            @elseif(!empty($menu['badge_count']))
+                                <span class="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-none bg-rose-500 text-white font-black flex items-center justify-center num shadow-xs">
+                                    {{ $menu['badge_count'] }}
+                                </span>
+                            @elseif(!empty($menu['badge_type']))
                                 <livewire:cashier-nav-badge :type="$menu['badge_type']" context="mobile" :key="'badge-' . $menu['badge_type'] . '-link-bottomnav'" />
                             @elseif(!empty($menu['is_parent_queue']))
                                 <livewire:cashier-nav-badge type="parent_dot" context="mobile" :key="'badge-dot-link-bottomnav'" />
@@ -1210,9 +1497,9 @@
         </div>
     </nav>
 
-    @if($effectiveRole === 'owner')
-        <!-- Mobile Menu Drawer (Akses Lengkap Semua Fitur Barbershop di Smartphone) -->
-        <div id="mobile-nav-drawer" class="fixed inset-0 z-50 pointer-events-none md:hidden transition-all duration-300">
+    @if(in_array($effectiveRole, ['owner', 'superadmin'], true))
+        <!-- Mobile Menu Drawer (Akses Lengkap Semua Fitur di Smartphone) -->
+        <div id="mobile-nav-drawer" class="fixed inset-0 z-[70] pointer-events-none md:hidden transition-all duration-300">
             <!-- Backdrop Overlay -->
             <div
                 id="mobile-drawer-backdrop"
@@ -1233,24 +1520,37 @@
                 <!-- Drawer Header -->
                 <div class="px-5 pb-3 border-b border-zinc-800/80 flex items-center justify-between">
                     <div class="flex items-center gap-2.5 min-w-0">
-                        @if($tenant?->logo_url)
-                            <img src="{{ $tenant->logo_url }}" alt="{{ $tenant->name }}" class="w-8 h-8 rounded-xl object-cover shrink-0 border border-white/10 shadow-sm" />
-                        @elseif(\App\Support\Platform\PlatformConfig::logoType() === 'image' && \App\Support\Platform\PlatformConfig::logoImageUrl())
-                            <img src="{{ \App\Support\Platform\PlatformConfig::logoImageUrl() }}" alt="{{ \App\Support\Platform\PlatformConfig::name() }}" class="w-8 h-8 rounded-xl object-cover shrink-0 border border-white/10 shadow-sm" />
-                        @else
-                            <div class="w-8 h-8 rounded-xl bg-amber-500 text-zinc-950 grid place-items-center shrink-0 font-black text-xs">
+                        @if($effectiveRole === 'superadmin')
+                            <div class="w-8 h-8 rounded-xl bg-amber-500 text-zinc-950 grid place-items-center shrink-0 font-black text-xs shadow-sm">
                                 <x-ui.icon name="{{ \App\Support\Platform\PlatformConfig::logoIcon() }}" class="w-4 h-4" />
                             </div>
-                        @endif
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                                <p class="text-white font-extrabold text-sm truncate">{{ $tenant?->name ?? config('app.name') }}</p>
-                                @if($tenant && $effectiveRole !== 'superadmin')
-                                    <x-ui.plan-badge :code="$tenantPlanCode" />
-                                @endif
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <p class="text-white font-extrabold text-sm truncate">{{ \App\Support\Platform\PlatformConfig::name() }}</p>
+                                    <span class="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-400 text-zinc-950 tracking-wider">Superadmin</span>
+                                </div>
+                                <p class="text-[11px] text-zinc-400 font-semibold">Semua Modul Platform SaaS</p>
                             </div>
-                            <p class="text-[11px] text-amber-400 font-semibold">Semua Fitur Barbershop</p>
-                        </div>
+                        @else
+                            @if($tenant?->logo_url)
+                                <img src="{{ $tenant->logo_url }}" alt="{{ $tenant->name }}" class="w-8 h-8 rounded-xl object-cover shrink-0 border border-white/10 shadow-sm" />
+                            @elseif(\App\Support\Platform\PlatformConfig::logoType() === 'image' && \App\Support\Platform\PlatformConfig::logoImageUrl())
+                                <img src="{{ \App\Support\Platform\PlatformConfig::logoImageUrl() }}" alt="{{ \App\Support\Platform\PlatformConfig::name() }}" class="w-8 h-8 rounded-xl object-cover shrink-0 border border-white/10 shadow-sm" />
+                            @else
+                                <div class="w-8 h-8 rounded-xl bg-amber-500 text-zinc-950 grid place-items-center shrink-0 font-black text-xs">
+                                    <x-ui.icon name="{{ \App\Support\Platform\PlatformConfig::logoIcon() }}" class="w-4 h-4" />
+                                </div>
+                            @endif
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <p class="text-white font-extrabold text-sm truncate">{{ $tenant?->name ?? \App\Support\Platform\PlatformConfig::name() }}</p>
+                                    @if($tenant && $effectiveRole !== 'superadmin')
+                                        <x-ui.plan-badge :code="$tenantPlanCode" />
+                                    @endif
+                                </div>
+                                <p class="text-[11px] text-amber-400 font-semibold">Semua Fitur Barbershop</p>
+                            </div>
+                        @endif
                     </div>
                     <button
                         type="button"
@@ -1264,6 +1564,155 @@
 
                 <!-- Drawer Body: Grid Semua Fitur Lengkap -->
                 <div class="p-5 overflow-y-auto space-y-4 flex-1 overscroll-contain">
+                    @if($effectiveRole === 'superadmin')
+                        <!-- 1. Kategori: Monitoring & Analitik -->
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-2 px-1">Monitoring &amp; Analitik</p>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <a
+                                    href="{{ route('platform.dashboard') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.dashboard', 'platform.tenants.*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="zap" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Platform Overview</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Pusat kendali tenant</span>
+                                    </div>
+                                </a>
+
+                                <a
+                                    href="{{ route('platform.reports') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.reports*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="trending-up" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Laporan Platform</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Statistik &amp; ekspor</span>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- 2. Kategori: Langganan & Keuangan -->
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-2 px-1">Langganan &amp; Keuangan</p>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <a
+                                    href="{{ route('platform.subscriptions') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.subscriptions*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="banknote" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="block truncate">Tagihan</span>
+                                            @if($superadminPendingConfirmationsCount > 0)
+                                                <span class="px-1.5 py-0.2 rounded-full text-[9px] bg-rose-500 text-white font-black num">
+                                                    {{ $superadminPendingConfirmationsCount }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Konfirmasi bayar</span>
+                                    </div>
+                                </a>
+
+                                <a
+                                    href="{{ route('platform.plans') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.plans*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="coins" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Paket Langganan</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Kelola paket harga</span>
+                                    </div>
+                                </a>
+
+                                <a
+                                    href="{{ route('platform.transactions') }}"
+                                    class="col-span-2 p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.transactions*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="receipt" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Monitoring Pendapatan</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Rekap &amp; riwayat pembayaran invoice masuk</span>
+                                    </div>
+                                </a>
+
+                                <a
+                                    href="{{ route('platform.payouts') }}"
+                                    class="col-span-2 p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.payouts*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="wallet" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Pencairan Dana (Payouts)</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Pencairan saldo booking ke rekening owner</span>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- 3. Kategori: Komunikasi & Promosi -->
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-2 px-1">Komunikasi &amp; Promosi</p>
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <a
+                                    href="{{ route('platform.announcements') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.announcements*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="megaphone" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Pengumuman</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Siaran popup</span>
+                                    </div>
+                                </a>
+
+                                <a
+                                    href="{{ route('platform.promotions') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.promotions*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="tag" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Iklan Produk</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Slide &amp; galeri banner</span>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- 4. Kategori: Sistem & Konfigurasi -->
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-2 px-1">Sistem &amp; Konfigurasi</p>
+                            <div>
+                                <a
+                                    href="{{ route('platform.settings') }}"
+                                    class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('platform.settings*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
+                                >
+                                    <span class="w-8 h-8 rounded-xl bg-zinc-500/10 text-zinc-300 flex items-center justify-center shrink-0">
+                                        <x-ui.icon name="settings" class="w-5 h-5 shrink-0" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <span class="block truncate">Konfigurasi SaaS</span>
+                                        <span class="text-[10px] text-zinc-500 font-medium block">Branding, rekening, &amp; sistem</span>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    @else
                     <!-- Kategori: Tim, Karyawan & Payroll -->
                     <div>
                         <p class="text-[10px] font-black uppercase tracking-wider text-zinc-500 mb-2 px-1">Manajemen Tim &amp; Payroll</p>
@@ -1273,7 +1722,7 @@
                                 class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('owner.staff*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="users" class="w-4 h-4" />
+                                    <x-ui.icon name="users" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <div class="min-w-0">
                                     <span class="block truncate">Karyawan</span>
@@ -1286,7 +1735,7 @@
                                 class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('owner.payroll*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="banknote" class="w-4 h-4" />
+                                    <x-ui.icon name="banknote" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <div class="min-w-0">
                                     <span class="block truncate">Gaji &amp; Komisi</span>
@@ -1305,7 +1754,7 @@
                                 class="p-2.5 rounded-2xl border transition flex flex-col items-center justify-center gap-1.5 text-center text-xs font-bold {{ request()->routeIs('owner.branches*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="store" class="w-4 h-4" />
+                                    <x-ui.icon name="store" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <span class="truncate w-full text-[11px]">Cabang</span>
                             </a>
@@ -1315,7 +1764,7 @@
                                 class="p-2.5 rounded-2xl border transition flex flex-col items-center justify-center gap-1.5 text-center text-xs font-bold {{ request()->routeIs('owner.services*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="scissors" class="w-4 h-4" />
+                                    <x-ui.icon name="scissors" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <span class="truncate w-full text-[11px]">Layanan</span>
                             </a>
@@ -1325,7 +1774,7 @@
                                 class="relative p-2.5 rounded-2xl border transition flex flex-col items-center justify-center gap-1.5 text-center text-xs font-bold {{ request()->routeIs('owner.colors*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="sparkles" class="w-4 h-4" />
+                                    <x-ui.icon name="sparkles" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <span class="truncate w-full text-[11px]">Stok Warna</span>
                                 @if($hasLowColorStockDot)
@@ -1345,7 +1794,7 @@
                                 class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('owner.customers*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="user-check" class="w-4 h-4" />
+                                    <x-ui.icon name="user-check" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <div class="min-w-0">
                                     <span class="block truncate">Database Customer</span>
@@ -1358,7 +1807,7 @@
                                 class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('owner.reports*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="file-text" class="w-4 h-4" />
+                                    <x-ui.icon name="file-text" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <div class="min-w-0">
                                     <span class="block truncate">Laporan Keuangan</span>
@@ -1377,7 +1826,7 @@
                                 class="p-3 rounded-2xl border transition flex items-center gap-2.5 text-xs font-bold {{ request()->routeIs('owner.settings*') ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' : 'bg-zinc-900/80 hover:bg-zinc-800/80 border-zinc-800 text-zinc-200' }}"
                             >
                                 <span class="w-8 h-8 rounded-xl bg-zinc-500/10 text-zinc-300 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="settings" class="w-4 h-4" />
+                                    <x-ui.icon name="settings" class="w-5 h-5 shrink-0" />
                                 </span>
                                 <div class="min-w-0">
                                     <span class="block truncate">Setting Barbershop</span>
@@ -1385,23 +1834,45 @@
                                 </div>
                             </a>
 
-                            @if($tenant && $firstBranchCode = $currentTenantCtx->firstBranchCode())
-                                <a
-                                    href="{{ route('display.queue', [$tenant->slug, $firstBranchCode]) }}"
-                                    target="_blank"
-                                    class="p-3 rounded-2xl bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 text-zinc-200 transition flex items-center gap-2.5 text-xs font-bold"
-                                >
-                                    <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
-                                        <x-ui.icon name="tv" class="w-4 h-4" />
-                                    </span>
-                                    <div class="min-w-0">
-                                        <span class="block truncate">Layar TV Antrean</span>
-                                        <span class="text-[10px] text-zinc-500 font-medium block">Buka display</span>
-                                    </div>
-                                </a>
+                            @if($tenant)
+                                @php
+                                    $ownerTvBranchesMobile = $currentTenantCtx->activeAllowedBranches();
+                                @endphp
+                                @if($ownerTvBranchesMobile->count() === 1)
+                                    @php $singleBranchMobile = $ownerTvBranchesMobile->first(); @endphp
+                                    <a
+                                        href="{{ $tenant->tvDisplayUrl($singleBranchMobile->code) }}"
+                                        target="_blank"
+                                        class="p-3 rounded-2xl bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 text-zinc-200 transition flex items-center gap-2.5 text-xs font-bold"
+                                        title="Buka Layar TV Cabang {{ $singleBranchMobile->name }}"
+                                    >
+                                        <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                                            <x-ui.icon name="tv" class="w-5 h-5 shrink-0" />
+                                        </span>
+                                        <div class="min-w-0">
+                                            <span class="block truncate">Layar TV Antrean</span>
+                                            <span class="text-[10px] text-zinc-500 font-medium block">{{ $singleBranchMobile->name }}</span>
+                                        </div>
+                                    </a>
+                                @elseif($ownerTvBranchesMobile->count() > 1)
+                                    <button
+                                        type="button"
+                                        onclick="if (typeof window.toggleMobileNavDrawer === 'function') { window.toggleMobileNavDrawer(false); } document.getElementById('modal-owner-tv-branches').showModal()"
+                                        class="p-3 rounded-2xl bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 text-zinc-200 transition flex items-center gap-2.5 text-xs font-bold text-left cursor-pointer"
+                                    >
+                                        <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+                                            <x-ui.icon name="tv" class="w-5 h-5 shrink-0" />
+                                        </span>
+                                        <div class="min-w-0">
+                                            <span class="block truncate">Layar TV Antrean</span>
+                                            <span class="text-[10px] text-amber-400 font-medium block">Pilih cabang ({{ $ownerTvBranchesMobile->count() }})</span>
+                                        </div>
+                                    </button>
+                                @endif
                             @endif
                         </div>
                     </div>
+                    @endif
                 </div>
 
                 <!-- Drawer Footer: Profile, Subscription & Logout -->
@@ -1514,10 +1985,20 @@
                     @endif
 
                     <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-xs font-bold text-white truncate">{{ auth()->user()?->name }}</p>
-                            <p class="text-[11px] text-zinc-400 truncate">{{ auth()->user()?->email }}</p>
-                        </div>
+                        @if($isCashierOrAdmin)
+                            <a href="{{ route('cashier.profile') }}" class="min-w-0 flex-1 group hover:opacity-95 transition" title="Lihat Profil Kasir">
+                                <p class="text-xs font-bold text-white truncate group-hover:text-amber-400 flex items-center gap-1">
+                                    <span>{{ auth()->user()?->name }}</span>
+                                    <x-ui.icon name="chevron-right" class="w-3 h-3 text-zinc-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition" />
+                                </p>
+                                <p class="text-[11px] text-zinc-400 truncate">{{ auth()->user()?->email }}</p>
+                            </a>
+                        @else
+                            <div class="min-w-0">
+                                <p class="text-xs font-bold text-white truncate">{{ auth()->user()?->name }}</p>
+                                <p class="text-[11px] text-zinc-400 truncate">{{ auth()->user()?->email }}</p>
+                            </div>
+                        @endif
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-rose-500/15 text-rose-400 hover:bg-rose-600 hover:text-white transition cursor-pointer">
@@ -1569,7 +2050,239 @@
                 }
             }
         });
+
+        // =========================================================================
+        // GLOBAL SMOOTH PAGINATION (Mencegah Halaman Merefresh Kembali ke Atas)
+        // =========================================================================
+        (function() {
+            function getPaginationContainer(el) {
+                if (!el) return null;
+                return el.closest('[data-pagination-container]')
+                    || el.closest('x-ui\\:card')
+                    || el.closest('.card')
+                    || el.closest('div.bg-white.rounded-3xl')
+                    || el.closest('div.bg-white.rounded-2xl')
+                    || (el.closest('nav[role="navigation"]') ? el.closest('nav[role="navigation"]').parentElement : null);
+            }
+
+            // 1. Intercept pagination click: AJAX swap agar tidak refresh ke atas
+            document.addEventListener('click', function(e) {
+                var link = e.target.closest('a');
+                if (!link) return;
+
+                var href = link.getAttribute('href');
+                if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+                var nav = link.closest('nav[role="navigation"]') || link.closest('.pagination');
+                var isPageLink = nav !== null || /[?&](?:page|reviews_page)=\d+/.test(href);
+                if (!isPageLink) return;
+
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) {
+                    return;
+                }
+
+                var container = getPaginationContainer(link);
+                var currentScrollY = window.scrollY;
+
+                if (!container) {
+                    sessionStorage.setItem('pagination_scroll_y', currentScrollY.toString());
+                    sessionStorage.setItem('pagination_scroll_url', window.location.pathname);
+                    return;
+                }
+
+                e.preventDefault();
+
+                var containerKey = container.getAttribute('data-pagination-container') || container.id || null;
+
+                container.style.transition = 'opacity 0.15s ease';
+                container.style.opacity = '0.35';
+                container.style.pointerEvents = 'none';
+
+                fetch(href, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(function(res) {
+                    if (!res.ok) throw new Error('Status ' + res.status);
+                    return res.text();
+                })
+                .then(function(html) {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+
+                    var newContainer = null;
+                    if (containerKey) {
+                        newContainer = doc.querySelector('[data-pagination-container="' + containerKey + '"]')
+                            || doc.getElementById(containerKey);
+                    }
+
+                    if (!newContainer) {
+                        var newNav = doc.querySelector('nav[role="navigation"]');
+                        if (newNav) {
+                            newContainer = getPaginationContainer(newNav);
+                        }
+                    }
+
+                    if (newContainer && container.parentNode) {
+                        container.parentNode.replaceChild(newContainer, container);
+                        window.history.pushState({ paginationHref: href }, '', href);
+                        // Kunci scroll tetap pada posisi saat ini tanpa melompat ke atas
+                        window.scrollTo({ top: currentScrollY, behavior: 'instant' });
+                    } else {
+                        sessionStorage.setItem('pagination_scroll_y', currentScrollY.toString());
+                        sessionStorage.setItem('pagination_scroll_url', window.location.pathname);
+                        window.location.href = href;
+                    }
+                })
+                .catch(function(err) {
+                    container.style.opacity = '1';
+                    container.style.pointerEvents = 'auto';
+                    sessionStorage.setItem('pagination_scroll_y', currentScrollY.toString());
+                    sessionStorage.setItem('pagination_scroll_url', window.location.pathname);
+                    window.location.href = href;
+                });
+            }, true);
+
+            // 2. Failsafe: Restorasi posisi scroll jika reload halaman biasa
+            function restorePaginationScroll() {
+                var savedY = sessionStorage.getItem('pagination_scroll_y');
+                var savedUrl = sessionStorage.getItem('pagination_scroll_url');
+
+                if (savedY !== null && savedUrl === window.location.pathname) {
+                    sessionStorage.removeItem('pagination_scroll_y');
+                    sessionStorage.removeItem('pagination_scroll_url');
+
+                    var targetY = parseInt(savedY, 10);
+                    if (!isNaN(targetY)) {
+                        window.scrollTo({ top: targetY, behavior: 'instant' });
+                        requestAnimationFrame(function() {
+                            window.scrollTo({ top: targetY, behavior: 'instant' });
+                        });
+                        setTimeout(function() {
+                            window.scrollTo({ top: targetY, behavior: 'instant' });
+                        }, 50);
+                    }
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', restorePaginationScroll);
+            } else {
+                restorePaginationScroll();
+            }
+
+            window.addEventListener('popstate', function(e) {
+                if (e.state && e.state.paginationHref) {
+                    window.location.reload();
+                }
+            });
+        })();
     </script>
+
+    @if($effectiveRole === 'owner' && $tenant)
+        @php
+            $ownerTvBranchesList = $currentTenantCtx->activeAllowedBranches();
+            $isBusinessPlan = $tenant->hasFeature('white_label');
+        @endphp
+        @if($ownerTvBranchesList->count() > 1)
+            <!-- Dialog Modal: Pilih Layar TV Antrean Cabang (Owner Multi-Cabang) -->
+            <dialog id="modal-owner-tv-branches" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/70 backdrop:backdrop-blur-xs m-auto fixed inset-0 w-[calc(100%-2rem)] max-w-md overflow-hidden border border-zinc-200 bg-white">
+                <div class="p-5 sm:p-6 space-y-4">
+                    <div class="flex items-start justify-between gap-3 border-b border-zinc-100 pb-3.5">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                                <x-ui.icon name="tv" class="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <h3 class="font-extrabold text-sm sm:text-base text-zinc-900">Pilih Layar TV Cabang</h3>
+                                <p class="text-xs text-zinc-500 mt-0.5">Pilih outlet yang ingin Anda buka di Layar TV Antrean:</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onclick="document.getElementById('modal-owner-tv-branches').close()"
+                            class="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-800 grid place-items-center transition shrink-0 cursor-pointer"
+                            aria-label="Tutup"
+                        >
+                            <x-ui.icon name="x" class="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        @forelse($ownerTvBranchesList as $b)
+                            @php
+                                $tvUrl = $tenant->tvDisplayUrl($b->code);
+                            @endphp
+                            <a
+                                href="{{ $tvUrl }}"
+                                target="_blank"
+                                onclick="document.getElementById('modal-owner-tv-branches').close()"
+                                class="group flex items-center justify-between p-3.5 rounded-2xl border border-zinc-200/80 bg-zinc-50/70 hover:bg-amber-50/40 hover:border-amber-300 transition shadow-2xs"
+                            >
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-9 h-9 rounded-xl bg-white border border-zinc-200 flex items-center justify-center shrink-0 text-zinc-700 group-hover:text-amber-600 group-hover:border-amber-300 shadow-2xs transition">
+                                        <x-ui.icon name="store" class="w-4 h-4" />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <h4 class="font-bold text-xs sm:text-sm text-zinc-900 truncate group-hover:text-amber-700 transition">
+                                                {{ $b->name }}
+                                            </h4>
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-200 text-zinc-700">
+                                                {{ $b->code }}
+                                            </span>
+                                        </div>
+                                        <p class="text-[11px] text-zinc-500 truncate mt-0.5">
+                                            {{ $b->address ?: 'Outlet aktif barbershop' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1.5 shrink-0 pl-2">
+                                    @if($isBusinessPlan)
+                                        <span class="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                            Bisnis
+                                        </span>
+                                    @endif
+                                    <span class="w-7 h-7 rounded-lg bg-zinc-900 group-hover:bg-amber-500 text-white group-hover:text-zinc-950 flex items-center justify-center transition shadow-2xs">
+                                        <x-ui.icon name="external-link" class="w-3.5 h-3.5" />
+                                    </span>
+                                </div>
+                            </a>
+                        @empty
+                            <div class="text-center py-6 text-zinc-400">
+                                <x-ui.icon name="store" class="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                <p class="text-xs font-semibold">Belum ada cabang aktif yang terdaftar.</p>
+                            </div>
+                        @endforelse
+                    </div>
+
+                    <div class="pt-2 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-400">
+                        <span class="text-[11px]">Buka di tab baru (mendukung Smart TV)</span>
+                        <button
+                            type="button"
+                            onclick="document.getElementById('modal-owner-tv-branches').close()"
+                            class="px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs transition cursor-pointer"
+                        >
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+            </dialog>
+            <script>
+                (function() {
+                    var modalTv = document.getElementById('modal-owner-tv-branches');
+                    if (modalTv) {
+                        modalTv.addEventListener('click', function(e) {
+                            if (e.target === modalTv) modalTv.close();
+                        });
+                    }
+                })();
+            </script>
+        @endif
+    @endif
+
+    <x-platform-announcement-popup :role="$effectiveRole" />
 
     @livewireScripts
 </body>

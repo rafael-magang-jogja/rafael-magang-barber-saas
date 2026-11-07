@@ -1,4 +1,4 @@
-<x-layouts.customer :title="'Menunggu Konfirmasi & Invoice — ' . $tenant->name">
+<x-layouts.customer title="Menunggu Konfirmasi & Pembayaran" :subtitle="$ticket->tenant?->name ?? 'Selesaikan transaksi Anda'" :tenant="$tenant">
     <div class="px-4 py-6 space-y-4">
         <!-- Banner Menunggu Konfirmasi & Invoice -->
         <div class="rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 p-5 text-center space-y-3 shadow-sm">
@@ -13,7 +13,11 @@
             <div>
                 <h1 class="text-lg font-black text-zinc-950">Menunggu Konfirmasi Kasir</h1>
                 <p class="text-xs text-zinc-600 mt-1 leading-relaxed">
-                    Penilaian staff telah tersimpan! Kasir sedang memeriksa apakah pembayaran Anda sudah masuk untuk menerbitkan invoice.
+                    @if($ticket->status === \App\Enums\QueueStatus::Completed)
+                        Penilaian staff dan pilihan pembayaran Anda telah tersimpan! Kasir sedang memproses penerimaan pembayaran untuk menerbitkan invoice.
+                    @else
+                        Pilihan metode pembayaran Anda telah tersimpan! Kasir sedang memeriksa pembayaran Anda untuk mengonfirmasi antrean.
+                    @endif
                 </p>
             </div>
 
@@ -103,18 +107,24 @@
         <!-- Tombol Beranda -->
         <div class="pt-2 text-center">
             <a
-                href="{{ route('customer.dashboard') }}"
+                href="{{ auth()->check() ? route('customer.dashboard') : ($ticket->tenant ? $ticket->tenant->customerPortalUrl() : url('/')) }}"
                 class="text-xs font-bold text-zinc-500 hover:text-zinc-800 transition"
             >
-                Kembali ke Beranda
+                Kembali ke Beranda {{ !auth()->check() && $ticket->tenant ? $ticket->tenant->name : '' }}
             </a>
         </div>
     </div>
 
     <!-- Poller Otomatis Setiap 3 Detik: Redirect ke Invoice Saat Kasir Konfirmasi Lunas -->
-    <script>
+    @php
+        $waitingPollUrl = route('customer.tickets.show', $ticket->id) . '?poll=1';
+    @endphp
+    <script
+        id="waiting-payment-poller"
+        data-check-url="{{ $waitingPollUrl }}"
+    >
         (function () {
-            const checkUrl = "{{ route('customer.tickets.show', $ticket->id) }}?poll=1";
+            const checkUrl = document.getElementById('waiting-payment-poller')?.dataset.checkUrl || '';
 
             const poller = setInterval(async () => {
                 try {

@@ -11,6 +11,12 @@ final class Setting extends Model
 {
     use BelongsToTenant;
 
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Support\Platform\PlatformConfig::clearCache());
+        static::deleted(fn () => \App\Support\Platform\PlatformConfig::clearCache());
+    }
+
     protected $fillable = [
         'tenant_id',
         'key',

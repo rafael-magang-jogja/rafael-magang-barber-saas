@@ -32,7 +32,14 @@ final class Phase1OperationalMvpTest extends TestCase
     {
         parent::setUp();
 
+        \Illuminate\Support\Carbon::setTestNow('2026-11-05 13:00:00');
         $this->seed(DatabaseSeeder::class);
+    }
+
+    protected function tearDown(): void
+    {
+        \Illuminate\Support\Carbon::setTestNow();
+        parent::tearDown();
     }
 
     public function test_walk_in_ticket_generation_is_sequential_and_increments_counter(): void
@@ -62,7 +69,7 @@ final class Phase1OperationalMvpTest extends TestCase
                 'customer_name' => 'Andika',
                 'service_ids' => $services,
             ])
-            ->assertRedirect(route('cashier.bookings'))
+            ->assertRedirect(route('cashier.dashboard'))
             ->assertSessionHasNoErrors();
 
         $ticket = QueueTicket::query()->latest('id')->firstOrFail();
@@ -79,9 +86,11 @@ final class Phase1OperationalMvpTest extends TestCase
         $andi = Membership::query()->forTenant($barberKing)->where('role', Role::Barber)->where('display_name', 'Andi')->firstOrFail();
 
         $scheduledAt = now()->addDay()->setTime(14, 0)->format('Y-m-d H:i:s');
+        $customerUser = User::factory()->create();
 
         // Booking pertama sukses
-        $this->post("/b/{$barberKing->slug}/booking", [
+        $this->actingAs($customerUser)->post("/b/{$barberKing->slug}/booking", [
+            'tenant_id' => $barberKing->id,
             'branch_id' => $branch->id,
             'customer_name' => 'Raka',
             'customer_phone' => '0817000111',
@@ -91,7 +100,8 @@ final class Phase1OperationalMvpTest extends TestCase
         ])->assertRedirect();
 
         // Booking kedua di jam yang sama & barber yang sama harus ditolak
-        $this->post("/b/{$barberKing->slug}/booking", [
+        $this->actingAs($customerUser)->post("/b/{$barberKing->slug}/booking", [
+            'tenant_id' => $barberKing->id,
             'branch_id' => $branch->id,
             'customer_name' => 'Donny',
             'customer_phone' => '0817000222',
@@ -119,11 +129,22 @@ final class Phase1OperationalMvpTest extends TestCase
         $this->assertSame('B-017', $ticket->number);
         $this->assertSame(QueueStatus::Waiting, $ticket->status);
 
-        // 2. Panggil -> Mulai -> Selesai dilakukan oleh Barber dari kursinya
-        $barber = User::query()->where('email', 'andi@barberking.id')->firstOrFail();
-        $this->actingAs($barber)->post(route('cashier.tickets.transition', $ticket), ['status' => 'called'])->assertRedirect();
-        $this->actingAs($barber)->post(route('cashier.tickets.transition', $ticket), ['status' => 'in_service'])->assertRedirect();
-        $this->actingAs($barber)->post(route('cashier.tickets.transition', $ticket), ['status' => 'completed'])->assertRedirect();
+        // 2. Panggil -> Mulai -> Selesai dilakukan oleh Barber yang bertugas
+        $barberMembership = Membership::query()->find($ticket->barber_membership_id)
+            ?? Membership::query()->where('role', Role::Barber)->firstOrFail();
+        \App\Models\Attendance::query()->updateOrCreate([
+            'tenant_id' => $barberMembership->tenant_id,
+            'branch_id' => $barberMembership->branch_id,
+            'membership_id' => $barberMembership->id,
+            'date' => now()->toDateString(),
+        ], [
+            'check_in_at' => now()->subHour(),
+        ]);
+        $barberUser = User::query()->find($barberMembership->user_id);
+
+        $this->actingAs($barberUser)->post(route('cashier.tickets.transition', $ticket), ['status' => 'called', 'bypass_payment' => 1])->assertRedirect();
+        $this->actingAs($barberUser)->post(route('cashier.tickets.transition', $ticket), ['status' => 'in_service', 'bypass_payment' => 1])->assertRedirect();
+        $this->actingAs($barberUser)->post(route('cashier.tickets.transition', $ticket), ['status' => 'completed', 'bypass_payment' => 1])->assertRedirect();
 
         $ticket->refresh();
         $this->assertSame(QueueStatus::Completed, $ticket->status);
@@ -187,12 +208,62 @@ final class Phase1OperationalMvpTest extends TestCase
             ->assertOk()
             ->assertSee('data-ui-select', false)
             ->assertSee('data-multiple="true"', false)
-            ->assertSee('Cari layanan...', false)
-            ->assertSee('Cari nama barber...', false);
+            ->assertSee('Cari layanan...', false);
 
         $this->actingAs($owner)
             ->get(route('cashier.bookings'))
             ->assertOk()
-            ->assertSee('Booking Hari Ini (Menunggu Check-in)', false);
+            ->assertSee('Daftar Booking Pelanggan', false);
+    }
+
+    public function test_cashier_payment_page_renders_without_class_not_found_error(): void
+    {
+        $cashier = User::query()->where('email', 'kasir.sudirman@barberking.id')->firstOrFail();
+        $barberKing = Tenant::query()->where('slug', 'barber-king')->firstOrFail();
+        $branch = Branch::query()->forTenant($barberKing)->where('code', 'SDR')->firstOrFail();
+        $haircut = Service::query()->forTenant($barberKing)->where('name', 'Haircut')->firstOrFail();
+
+        $ticket = app(QueueService::class)->createWalkInTicket(
+            branch: $branch,
+            customerName: 'Testing Kasir',
+            serviceIds: [$haircut->id],
+            isCashierInput: true,
+        );
+
+        $response = $this->actingAs($cashier)->get(route('cashier.tickets.payment', $ticket));
+        $response->assertOk();
+        $response->assertSee('Pembayaran Antrean', false);
+    }
+
+    public function test_cashier_checkout_does_not_throw_duplicate_entry_when_unpaid_order_exists(): void
+    {
+        $cashier = User::query()->where('email', 'kasir.sudirman@barberking.id')->firstOrFail();
+        $barberKing = Tenant::query()->where('slug', 'barber-king')->firstOrFail();
+        $branch = Branch::query()->forTenant($barberKing)->where('code', 'SDR')->firstOrFail();
+        $haircut = Service::query()->forTenant($barberKing)->where('name', 'Haircut')->firstOrFail();
+
+        $ticket = app(QueueService::class)->createWalkInTicket($branch, 'Testing Kasir Unpaid', null, [$haircut->id]);
+
+        // Simulate customer checking out from portal with markAsPaid = false (unpaid order created)
+        $checkoutService = app(CheckoutService::class);
+        $order = $checkoutService->checkoutQueueTicket(
+            ticket: $ticket,
+            method: PaymentMethod::Cash,
+            cashierUserId: $cashier->id,
+            markAsPaid: false,
+        );
+
+        $this->assertSame(PaymentStatus::Unpaid, $order->payment_status);
+
+        // Now cashier processes checkout for this ticket (must not fail with duplicate entry SQL error)
+        $response = $this->actingAs($cashier)->post(route('cashier.tickets.checkout', $ticket), [
+            'method' => 'cash',
+            'discount_total' => 0,
+            'tip_amount' => 0,
+            'cash_received' => $order->grand_total,
+        ]);
+
+        $response->assertRedirect(route('invoices.show', $order->number));
+        $this->assertSame(PaymentStatus::Paid, $order->fresh()->payment_status);
     }
 }

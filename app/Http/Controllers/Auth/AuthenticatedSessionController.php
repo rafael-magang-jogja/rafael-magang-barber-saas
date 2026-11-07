@@ -16,8 +16,12 @@ use Illuminate\View\View;
 
 final class AuthenticatedSessionController extends Controller
 {
-    public function create(): View
+    public function create(Request $request): View|RedirectResponse
     {
+        if (self::isSubdomainRequest($request)) {
+            return redirect()->to(self::officialLoginUrl($request));
+        }
+
         return view('auth.login');
     }
 
@@ -34,6 +38,12 @@ final class AuthenticatedSessionController extends Controller
         }
 
         $request->session()->regenerate();
+        $request->session()->forget([
+            'scanned_customer_tenant_id',
+            'scanned_customer_tenant_slug',
+            'active_customer_tenant_id',
+            'active_customer_tenant_slug',
+        ]);
 
         /** @var User $user */
         $user = $request->user();
@@ -61,19 +71,81 @@ final class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('login');
+        return redirect()->to(self::officialLoginUrl($request));
     }
 
-    public function redirectAuthenticated(Request $request): RedirectResponse
+    public function redirectAuthenticated(Request $request): View|RedirectResponse
     {
         /** @var User|null $user */
         $user = $request->user();
 
         if ($user === null) {
-            return redirect()->route('login');
+            return redirect()->to(self::officialLoginUrl($request));
         }
 
         return $this->redirectByRole($request, $user);
+    }
+
+    /**
+     * Dapatkan URL di root domain platform normal (menghilangkan subdomain tenant jika ada).
+     */
+    public static function resolveRootUrl(Request $request, string $path = '/'): string
+    {
+        $appUrl = (string) (config('app.url') ?? 'http://localhost');
+        $defaultHost = (string) (parse_url($appUrl, PHP_URL_HOST) ?? 'localhost');
+        $scheme = $request->getScheme();
+        $host = $request->getHost();
+        $port = $request->getPort();
+
+        // Cari tahu apakah request saat ini memakai port non-standar (misal :8000)
+        $portSuffix = '';
+        if ($port && ! in_array((int) $port, [80, 443], true)) {
+            $portSuffix = ":{$port}";
+        }
+
+        $rootHost = $host;
+
+        // Jika host menggunakan .localhost (misal barber-kings-royal.localhost)
+        if (str_ends_with(strtolower($host), '.localhost')) {
+            $rootHost = 'localhost';
+        } elseif (str_ends_with(strtolower($host), '.test')) {
+            $rootHost = 'test';
+        } elseif ($defaultHost !== '' && str_ends_with(strtolower($host), '.' . strtolower($defaultHost))) {
+            $rootHost = $defaultHost;
+        } else {
+            // Jika host memiliki 3 bagian atau lebih (misal subdomain.domain.com) dan bukan IP
+            if (! filter_var($host, FILTER_VALIDATE_IP)) {
+                $parts = explode('.', $host);
+                if (count($parts) >= 3) {
+                    array_shift($parts);
+                    $rootHost = implode('.', $parts);
+                }
+            }
+        }
+
+        $cleanPath = '/' . ltrim($path, '/');
+
+        return "{$scheme}://{$rootHost}{$portSuffix}{$cleanPath}";
+    }
+
+    /**
+     * Dapatkan URL login resmi platform normal.
+     */
+    public static function officialLoginUrl(Request $request): string
+    {
+        return self::resolveRootUrl($request, '/login');
+    }
+
+    /**
+     * Cek apakah request saat ini menggunakan subdomain atau bukan root host platform.
+     */
+    public static function isSubdomainRequest(Request $request): bool
+    {
+        $currentHost = strtolower($request->getHost());
+        $rootUrl = self::resolveRootUrl($request, '/');
+        $rootHost = strtolower((string) parse_url($rootUrl, PHP_URL_HOST));
+
+        return $currentHost !== $rootHost;
     }
 
     private function redirectByRole(Request $request, User $user): RedirectResponse

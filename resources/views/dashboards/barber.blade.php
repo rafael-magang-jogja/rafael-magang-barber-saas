@@ -2,8 +2,50 @@
     :title="'Staff — ' . ($barberMembership?->display_name ?? 'Barber')"
     :barber-membership="$barberMembership"
 >
+    @php
+        $hasCheckedInToday = $todayAttendance !== null && $todayAttendance->check_in_at !== null && $todayAttendance->check_out_at === null;
+        $hasCheckedOutToday = $todayAttendance !== null && $todayAttendance->check_out_at !== null;
+    @endphp
+
     <!-- Notifikasi / Flash Messages Auto-Dismiss (3 Detik & Gradasi) -->
     <x-ui.flash-alert />
+
+    @if(! $hasCheckedInToday)
+        @if($hasCheckedOutToday)
+            <div class="p-3.5 rounded-2xl bg-zinc-100 border border-zinc-200/90 flex items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="w-7 h-7 rounded-lg bg-zinc-200 text-zinc-700 grid place-items-center shrink-0 font-bold">
+                        <x-ui.icon name="clock" class="w-4 h-4 text-zinc-600" />
+                    </span>
+                    <div class="min-w-0">
+                        <p class="font-extrabold text-zinc-900 truncate">Shift Selesai (Sudah Absen Pulang)</p>
+                        <p class="text-[11px] text-zinc-500">Anda sudah absen pulang pukul {{ $todayAttendance->check_out_at->format('H:i') }} WIB.</p>
+                    </div>
+                </div>
+                <span class="px-2.5 py-1 rounded-xl bg-zinc-200 text-zinc-700 font-bold text-[11px] shrink-0">
+                    Shift Selesai
+                </span>
+            </div>
+        @else
+            <div class="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-700 grid place-items-center shrink-0 font-bold">
+                        <x-ui.icon name="alert-triangle" class="w-4 h-4 text-rose-600" />
+                    </span>
+                    <div class="min-w-0">
+                        <p class="font-extrabold text-rose-950 truncate">Belum Absen Masuk Hari Ini</p>
+                        <p class="text-[11px] text-rose-800">Scan QR cabang untuk mulai mengambil antrean.</p>
+                    </div>
+                </div>
+                <a
+                    href="{{ route('barber.attendance') }}"
+                    class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shrink-0 transition shadow-xs"
+                >
+                    Absen Sekarang
+                </a>
+            </div>
+        @endif
+    @endif
 
     <!-- Ringkasan Kinerja Hari Ini (Mobile Stat Grid) -->
     <div class="grid grid-cols-3 gap-2">
@@ -18,11 +60,7 @@
             <p class="text-xs font-black text-emerald-700 num mt-1 truncate">
                 Rp{{ number_format($commissionToday, 0, ',', '.') }}
             </p>
-            @if(($tipToday ?? 0) > 0)
-                <span class="text-[9px] font-bold text-amber-600 block mt-0.5 truncate" title="Tip diterima hari ini">+Rp{{ number_format($tipToday, 0, ',', '.') }} tip</span>
-            @else
-                <span class="text-[10px] text-zinc-400">hari ini</span>
-            @endif
+            <span class="text-[10px] text-zinc-400">hari ini</span>
         </div>
 
         <div class="p-3 rounded-2xl bg-white border border-zinc-200/80 shadow-2xs text-center">
@@ -93,16 +131,11 @@
                         <div class="flex items-center justify-between text-zinc-700">
                             <span class="text-zinc-500">Warna Rambut:</span>
                             <span class="inline-flex items-center gap-1.5 font-bold text-zinc-900">
-                                <span class="w-3 h-3 rounded-full border border-black/20 shrink-0" style="background-color: {{ $servingTicket->hairColor->hex_code }}"></span>
+                                <span class="w-3 h-3 rounded-full border border-black/20 shrink-0" @style(['background-color: ' . $servingTicket->hairColor->hex_code])></span>
                                 <span>{{ $servingTicket->hairColor->name }}</span>
                             </span>
                         </div>
                     @endif
-
-                    <div class="flex items-center justify-between text-zinc-700">
-                        <span class="text-zinc-500">Estimasi Durasi:</span>
-                        <span class="font-bold text-zinc-900 num">~{{ $servingTicket->estimated_duration_minutes }} menit</span>
-                    </div>
 
                     @if(!empty($servingTicket->notes))
                         <div class="pt-1.5 border-t border-zinc-200/60">
@@ -115,14 +148,14 @@
                 <!-- AKSI KONTROL TIKET AKTIF -->
                 @if($servingTicket->status === \App\Enums\QueueStatus::Called)
                     <div class="space-y-2.5 pt-1">
-                        <!-- Info Toleransi Waktu Panggilan (1 - 2 Menit) & Status Lewat -->
+                        <!-- Info Toleransi Waktu Panggilan (1 Menit) & Status Lewat -->
                         <div class="flex items-center justify-between text-[11px] text-zinc-500 px-1">
                             <span class="flex items-center gap-1">
                                 <x-ui.icon name="clock" class="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Dipanggil: {{ $servingTicket->called_at ? $servingTicket->called_at->format('H:i') . ' WIB' : 'Baru saja' }}</span>
                             </span>
-                            <span class="font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
-                                Toleransi: ~1-2 menit
+                            <span class="font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60" id="skip-tolerance-badge">
+                                Toleransi: 1 menit
                             </span>
                         </div>
 
@@ -136,18 +169,54 @@
                             </div>
                         @endif
 
-                        <!-- Tombol Utama: Mulai Cukur (Customer Hadir) -->
-                        <form method="POST" action="{{ route('cashier.tickets.transition', $servingTicket) }}">
-                            @csrf
-                            <input type="hidden" name="status" value="in_service" />
+                        @php
+                            $isTicketPaid = $servingTicket->order !== null && $servingTicket->order->payment_status === \App\Enums\PaymentStatus::Paid;
+                        @endphp
+
+                        @if($isTicketPaid)
+                            <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-800">
+                                <span class="flex items-center gap-1.5">
+                                    <x-ui.icon name="check" class="w-4 h-4 text-emerald-600 shrink-0" />
+                                    <span>Pembayaran Sudah Lunas</span>
+                                </span>
+                                <span class="text-[10px] uppercase font-black px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-emerald-700">
+                                    Siap Dicukur
+                                </span>
+                            </div>
+
+                            <!-- Tombol Utama: Mulai Cukur (Customer Hadir & Sudah Bayar) -->
+                            <form method="POST" action="{{ route('cashier.tickets.transition', $servingTicket) }}">
+                                @csrf
+                                <input type="hidden" name="status" value="in_service" />
+                                <button
+                                    type="submit"
+                                    class="w-full py-3.5 px-5 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-[0.99] text-zinc-950 font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-zinc-950/10 transition cursor-pointer"
+                                >
+                                    <x-ui.icon name="scissors" class="w-5 h-5 text-zinc-950" />
+                                    <span>Pelanggan Hadir &bull; Mulai Cukur</span>
+                                </button>
+                            </form>
+                        @else
+                            <div class="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 text-left space-y-1">
+                                <div class="flex items-center gap-1.5 font-extrabold text-xs text-rose-700">
+                                    <x-ui.icon name="alert-triangle" class="w-4 h-4 text-rose-600 shrink-0" />
+                                    <span>Belum Bayar: Wajib Lunas Sebelum Dimulai</span>
+                                </div>
+                                <p class="text-[11px] text-rose-800 leading-tight">
+                                    Sesuai ketentuan, pelanggan wajib menyelesaikan pembayaran di kasir atau via QRIS sebelum potong rambut dimulai. Mohon arahkan pelanggan ke kasir terlebih dahulu.
+                                </p>
+                            </div>
+
                             <button
-                                type="submit"
-                                class="w-full py-3.5 px-5 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-[0.99] text-zinc-950 font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-zinc-950/10 transition cursor-pointer"
+                                type="button"
+                                disabled
+                                class="w-full py-3.5 px-5 rounded-2xl bg-zinc-200 text-zinc-400 font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed select-none border border-zinc-300"
+                                title="Pelanggan wajib melunasi pembayaran di kasir sebelum mulai cukur"
                             >
-                                <x-ui.icon name="scissors" class="w-5 h-5 text-zinc-950" />
-                                <span>Pelanggan Hadir &bull; Mulai Cukur</span>
+                                <x-ui.icon name="lock" class="w-4 h-4 text-zinc-400" />
+                                <span>Menunggu Pembayaran Kasir</span>
                             </button>
-                        </form>
+                        @endif
 
                         <!-- Tombol Alternatif: Panggil Ulang (TV) & Lewati Antrean (Mundur 1 / Batal Otomatis) -->
                         <div class="grid grid-cols-2 gap-2 pt-0.5">
@@ -164,21 +233,45 @@
                                 </button>
                             </form>
 
-                            <!-- 2. Tombol Lewati Antrean -->
+                            <!-- 2. Tombol Lewati Antrean (Terkunci selama 1 menit pertama panggilan) -->
                             @php
                                 $isLastCall = ($servingTicket->skip_count >= 1);
+                                $calledTimestamp = $servingTicket->called_at ? $servingTicket->called_at->timestamp : now()->timestamp;
+                                $secondsElapsed = max(0, now()->timestamp - $calledTimestamp);
+                                $isSkipUnlocked = $secondsElapsed >= 60;
+                                $remainingSeconds = max(0, 60 - $secondsElapsed);
                             @endphp
                             <button
                                 type="button"
-                                onclick="openSkipModal()"
-                                class="w-full py-2.5 px-3 rounded-xl {{ $isLastCall ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300' }} active:scale-[0.99] font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                                id="btn-skip-ticket"
+                                data-called-timestamp="{{ $calledTimestamp }}"
+                                data-is-last-call="{{ $isLastCall ? '1' : '0' }}"
+                                @if($isSkipUnlocked)
+                                    onclick="openSkipModal()"
+                                    class="w-full py-2.5 px-3 rounded-xl {{ $isLastCall ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300' }} active:scale-[0.99] font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                                @else
+                                    disabled
+                                    class="w-full py-2.5 px-3 rounded-xl bg-zinc-100 text-zinc-400 border border-zinc-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-2xs transition"
+                                @endif
                                 title="{{ $isLastCall ? 'Batalkan tiket otomatis (2x tidak hadir)' : 'Mundurkan 1 posisi antrean' }}"
                             >
-                                <x-ui.icon name="skip-forward" class="w-3.5 h-3.5 {{ $isLastCall ? 'text-rose-600' : 'text-amber-700' }}" />
-                                <span>{{ $isLastCall ? 'Lewati (Batal)' : 'Lewati (Mundur 1)' }}</span>
+                                <x-ui.icon name="skip-forward" class="w-3.5 h-3.5 {{ $isSkipUnlocked ? ($isLastCall ? 'text-rose-600' : 'text-amber-700') : 'text-zinc-400' }}" id="skip-btn-icon" />
+                                <span id="skip-btn-text">
+                                    @if($isSkipUnlocked)
+                                        {{ $isLastCall ? 'Lewati (Batal)' : 'Lewati (Mundur 1)' }}
+                                    @else
+                                        Lewati ({{ $remainingSeconds }}s)
+                                    @endif
+                                </span>
                             </button>
                         </div>
-                        <p class="text-[10px] text-center text-zinc-400">Tekan 'Panggil Ulang' jika suara belum terdengar, atau 'Lewati' jika customer belum datang.</p>
+                        <p class="text-[10px] text-center text-zinc-400" id="skip-hint-text">
+                            @if($isSkipUnlocked)
+                                Tekan 'Panggil Ulang' jika suara belum terdengar, atau 'Lewati' jika customer belum datang.
+                            @else
+                                Tombol Lewati akan terbuka setelah 1 menit panggilan (<span id="skip-timer-counter" class="font-bold text-amber-600 num">{{ $remainingSeconds }} detik lagi</span>).
+                            @endif
+                        </p>
                     </div>
                 @elseif($servingTicket->status === \App\Enums\QueueStatus::InService)
                     <form method="POST" action="{{ route('cashier.tickets.transition', $servingTicket) }}" class="space-y-1.5 pt-1">
@@ -192,7 +285,7 @@
                             <span>Selesai Cukur</span>
                         </button>
                         <p class="text-[10px] text-center text-zinc-400 leading-tight">
-                            Menekan Selesai Cukur akan mengaktifkan tombol selesai &amp; form ulasan bintang di smartphone pelanggan.
+                            Menekan Selesai Cukur akan menyelesaikan pengerjaan layanan. Pembayaran telah diselesaikan di muka.
                         </p>
                     </form>
                 @endif
@@ -236,7 +329,6 @@
                     <span class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-800 text-[10px] font-black uppercase tracking-wider">
                         Giliran Berikutnya
                     </span>
-                    <span class="text-xs text-zinc-400 num">~{{ $nextTicket->estimated_duration_minutes }} menit</span>
                 </div>
 
                 <div class="flex items-center justify-between gap-2">
@@ -251,7 +343,7 @@
                     </div>
 
                     @if($nextTicket->hairColor)
-                        <span class="w-4 h-4 rounded-full border border-black/20 shrink-0" style="background-color: {{ $nextTicket->hairColor->hex_code }}" title="{{ $nextTicket->hairColor->name }}"></span>
+                        <span class="w-4 h-4 rounded-full border border-black/20 shrink-0" @style(['background-color: ' . $nextTicket->hairColor->hex_code]) title="{{ $nextTicket->hairColor->name }}"></span>
                     @endif
                 </div>
 
@@ -278,6 +370,26 @@
                             Anda sedang menangani tiket <b>{{ $servingTicket->number }}</b>. Selesaikan cukur sebelum memanggil pelanggan berikutnya.
                         </p>
                     </div>
+                @elseif(! $hasCheckedInToday)
+                    <!-- BELUM ABSEN MASUK ATAU SUDAH ABSEN PULANG -->
+                    <div class="p-4 rounded-2xl {{ $hasCheckedOutToday ? 'bg-zinc-100 border border-zinc-200' : 'bg-rose-50 border border-rose-200' }} text-center space-y-2">
+                        <div class="flex items-center justify-center gap-2 {{ $hasCheckedOutToday ? 'text-zinc-800' : 'text-rose-800' }} font-bold text-xs">
+                            <x-ui.icon name="{{ $hasCheckedOutToday ? 'clock' : 'alert-triangle' }}" class="w-4 h-4 {{ $hasCheckedOutToday ? 'text-zinc-600' : 'text-rose-600' }} shrink-0" />
+                            <span>{{ $hasCheckedOutToday ? 'Shift Kerja Anda Hari Ini Telah Selesai' : 'Anda Belum Melakukan Absen Masuk Hari Ini' }}</span>
+                        </div>
+                        <p class="text-[11px] {{ $hasCheckedOutToday ? 'text-zinc-600' : 'text-rose-700' }}">
+                            {{ $hasCheckedOutToday ? 'Anda sudah absen pulang pada pukul ' . $todayAttendance->check_out_at->format('H:i') . ' WIB, sehingga tidak dapat mengambil antrean baru.' : 'Lakukan scan QR kehadiran di cabang Anda terlebih dahulu untuk dapat memanggil dan melayani antrean pelanggan.' }}
+                        </p>
+                        @if(! $hasCheckedOutToday)
+                            <a
+                                href="{{ route('barber.attendance') }}"
+                                class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs transition"
+                            >
+                                <x-ui.icon name="clock" class="w-3.5 h-3.5 text-white" />
+                                <span>Buka Menu Absensi Sekarang</span>
+                            </a>
+                        @endif
+                    </div>
                 @elseif(! $isBarberReady)
                     <!-- STATUS KERJA BUKAN READY -->
                     <div class="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-1">
@@ -295,7 +407,7 @@
                         <x-ui.button
                             type="submit"
                             size="lg"
-                            class="w-full !bg-amber-500 hover:!bg-amber-400 !text-zinc-950 font-black shadow-lg"
+                            class="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black shadow-lg"
                         >
                             <x-ui.icon name="megaphone" class="w-5 h-5" />
                             <span>Panggil Antrean Ini ({{ $nextTicket->number }})</span>
@@ -321,7 +433,6 @@
                                         {{ $rem->items->pluck('service_name')->join(', ') }}
                                     </p>
                                 </div>
-                                <span class="text-[11px] text-zinc-400 num shrink-0">~{{ $rem->estimated_duration_minutes }} mnt</span>
                             </div>
                         @endforeach
                     </div>
@@ -341,7 +452,7 @@
             $isLastCall = ($servingTicket->skip_count >= 1);
         @endphp
         <!-- Mini Popup Modal Konfirmasi Lewati Antrean -->
-        <div id="skip-ticket-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs transition-opacity duration-200">
+        <div id="skip-ticket-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs transition-opacity duration-200">
             <div class="relative w-full max-w-sm bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-zinc-200/80 space-y-4 animate-in fade-in zoom-in-95 duration-150">
                 <!-- Header Icon & Judul -->
                 <div class="flex items-start gap-3.5">
@@ -437,6 +548,59 @@
                 closeSkipModal();
             }
         });
+
+        // Countdown Timer: Tombol Lewati hanya terbuka setelah 1 menit panggilan
+        (function () {
+            const btn = document.getElementById('btn-skip-ticket');
+            if (!btn) return;
+
+            const calledTimestamp = parseInt(btn.dataset.calledTimestamp || '0', 10);
+            const isLastCall = btn.dataset.isLastCall === '1';
+            const icon = document.getElementById('skip-btn-icon');
+            const text = document.getElementById('skip-btn-text');
+            const hint = document.getElementById('skip-hint-text');
+            const counter = document.getElementById('skip-timer-counter');
+
+            function updateSkipCountdown() {
+                if (!calledTimestamp) return;
+                const nowSec = Math.floor(Date.now() / 1000);
+                const elapsed = Math.max(0, nowSec - calledTimestamp);
+                const remaining = Math.max(0, 60 - elapsed);
+
+                if (remaining > 0) {
+                    btn.disabled = true;
+                    btn.onclick = null;
+                    btn.className = 'w-full py-2.5 px-3 rounded-xl bg-zinc-100 text-zinc-400 border border-zinc-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-not-allowed select-none shadow-2xs transition';
+                    if (icon) icon.className = 'w-3.5 h-3.5 text-zinc-400';
+                    if (text) text.textContent = `Lewati (${remaining}s)`;
+                    if (counter) counter.textContent = `${remaining} detik lagi`;
+                } else {
+                    btn.disabled = false;
+                    btn.onclick = openSkipModal;
+                    if (isLastCall) {
+                        btn.className = 'w-full py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 active:scale-[0.99] font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs';
+                        if (icon) icon.className = 'w-3.5 h-3.5 text-rose-600';
+                        if (text) text.textContent = 'Lewati (Batal)';
+                    } else {
+                        btn.className = 'w-full py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 active:scale-[0.99] font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs';
+                        if (icon) icon.className = 'w-3.5 h-3.5 text-amber-700';
+                        if (text) text.textContent = 'Lewati (Mundur 1)';
+                    }
+                    if (hint) {
+                        hint.textContent = "Tekan 'Panggil Ulang' jika suara belum terdengar, atau 'Lewati' jika customer belum datang.";
+                    }
+                }
+            }
+
+            updateSkipCountdown();
+            const skipTimer = setInterval(() => {
+                updateSkipCountdown();
+                const nowSec = Math.floor(Date.now() / 1000);
+                if ((nowSec - calledTimestamp) >= 60) {
+                    clearInterval(skipTimer);
+                }
+            }, 1000);
+        })();
 
         (function () {
             setInterval(() => {

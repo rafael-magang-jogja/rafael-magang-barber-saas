@@ -14,13 +14,27 @@
     ];
 
     $todayDayOfWeek = now()->dayOfWeek;
+    $scannerAction = ($todayAttendance && $todayAttendance->check_in_at && !$todayAttendance->check_out_at) ? 'check_out' : 'check_in';
+
+    $statusFilterOptions = [
+        ['value' => 'all', 'label' => 'Semua Status'],
+        ['value' => 'present', 'label' => 'Hadir Tepat Waktu'],
+        ['value' => 'late', 'label' => 'Terlambat'],
+        ['value' => 'sick', 'label' => 'Sakit'],
+        ['value' => 'leave', 'label' => 'Izin / Cuti'],
+        ['value' => 'holiday', 'label' => 'Libur'],
+        ['value' => 'absent', 'label' => 'Alpa / Tidak Hadir'],
+    ];
+
+    $staffSelectOptions = ($branchStaff ?? collect())->map(fn ($b) => [
+        'value' => (string) $b->id,
+        'label' => $b->display_name ?? $b->user?->name,
+        'sublabel' => $b->role?->value === 'admin' ? 'Kasir / Admin' : ($b->role?->value === 'barber' ? 'Barber' : 'Staf'),
+    ])->all();
 @endphp
 
 <x-layouts.app title="Absensi & Jadwal Kerja" subtitle="Status absensi harian, jadwal operasional Anda, dan kehadiran staf di cabang" :role="$effectiveRole">
     <div class="space-y-6">
-        <!-- Notifikasi Flash -->
-        <x-ui.flash-alert />
-
         <!-- BANNER IZIN HARI INI JIKA DI-ACC OWNER -->
         @if($todayTimeOff)
             <div class="p-4 sm:p-5 rounded-3xl bg-emerald-50 border border-emerald-200/90 shadow-2xs space-y-2">
@@ -67,10 +81,7 @@
                 </div>
 
                 <div class="flex items-center gap-2 self-start sm:self-center shrink-0">
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 text-amber-700 border border-amber-500/20 font-mono font-bold text-xs">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        {{ now()->format('H:i') }} WIB
-                    </span>
+                    <livewire:attendance-clock :show-pulse="true" />
                 </div>
             </div>
 
@@ -156,14 +167,24 @@
                         <span>Absensi Hari Ini Lengkap</span>
                     </div>
                 @else
-                    <button
-                        type="button"
-                        onclick="startAttendanceScanner()"
-                        class="w-full py-3.5 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md shadow-zinc-950/20 transition cursor-pointer"
-                    >
-                        <x-ui.icon name="camera" class="w-4 h-4 text-amber-400 stroke-[2.5]" />
-                        <span>Pindai QR Kamera di Meja Kasir</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onclick="openStaffQrModal()"
+                            class="flex-1 py-3.5 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md shadow-zinc-950/20 transition cursor-pointer"
+                        >
+                            <x-ui.icon name="ticket" class="w-4 h-4 text-amber-400 stroke-[2.5]" />
+                            <span>Tampilkan QR Absen Saya</span>
+                        </button>
+                        <button
+                            type="button"
+                            onclick="triggerQuickDownloadStaffQr('{{ addslashes($membership?->display_name ?? auth()->user()->name) }}', '{{ addslashes($branch?->name ?? 'Cabang Outlet') }}', 'cashier-staff-qrcode', 'cashier-staff-qr-script')"
+                            class="p-3.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs sm:text-sm flex items-center justify-center shadow-md shadow-amber-500/20 transition cursor-pointer shrink-0"
+                            title="Unduh QR Code Absen ke Galeri HP"
+                        >
+                            <x-ui.icon name="download" class="w-4 h-4 text-zinc-950" />
+                        </button>
+                    </div>
                 @endif
 
                 <button
@@ -305,146 +326,297 @@
         </x-ui.card>
 
         <!-- ============================================================ -->
-        <!-- 3. KEHADIRAN REKAN BARBER CABANG HARI INI                   -->
+        <!-- 3. RIWAYAT & KEHADIRAN STAF CABANG (TERPADU 1 BAGIAN)        -->
         <!-- ============================================================ -->
-        @if($branchBarbers->isNotEmpty())
-        <style>
-            @media (min-width: 768px) and (max-width: 1023.98px) {
-                html.tablet-sidebar-open .branch-barber-grid {
-                    grid-template-columns: minmax(0, 1fr) !important;
-                }
-                html:not(.tablet-sidebar-open) .branch-barber-grid {
-                    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-                }
-            }
-        </style>
-        <x-ui.card>
+        @php
+            $branchDisplayName = $branch?->name ? (str_starts_with($branch->name, 'Cabang') ? $branch->name : 'Cabang ' . $branch->name) : 'Cabang';
+            $isTodayPeriod = ($period ?? 'today') === 'today';
+            $totalTableRows = $recentAttendances->count() + ($isTodayPeriod ? ($todayUnattendedStaff ?? collect())->count() : 0);
+        @endphp
+
+        <x-ui.card data-pagination-container="cashier-attendance">
             <x-slot:header>
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
                     <div>
                         <h2 class="font-bold flex items-center gap-2 text-zinc-900 text-sm">
-                            <x-ui.icon name="scissors" class="w-4 h-4 text-emerald-600" />
-                            <span>Jadwal &amp; Kehadiran Barber Cabang Hari Ini</span>
+                            <x-ui.icon name="users" class="w-4 h-4 text-emerald-600" />
+                            <span>Riwayat &amp; Kehadiran {{ $branchDisplayName }}</span>
                         </h2>
-                        <p class="text-xs text-zinc-500 mt-0.5">Pantau barber yang dijadwalkan bertugas dan status jam masuk mereka</p>
+                        <p class="text-xs text-zinc-500 mt-0.5">
+                            Rentang: {{ \Carbon\Carbon::parse($dateFrom)->translatedFormat('d M Y') }} s/d {{ \Carbon\Carbon::parse($dateTo)->translatedFormat('d M Y') }}
+                        </p>
                     </div>
-                    <span class="text-xs font-bold text-zinc-400">{{ $branchBarbers->count() }} Barber</span>
+
+                    <!-- Mini KPI Badges di Header -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-700 text-xs font-bold">
+                            Total: <strong class="text-zinc-950">{{ $totalRecords ?? 0 }}</strong>
+                        </span>
+                        <span class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/60">
+                            Tepat Waktu: <strong class="text-emerald-800">{{ $presentCount ?? 0 }}</strong>
+                        </span>
+                        @if(($lateCount ?? 0) > 0)
+                            <span class="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200/60">
+                                Telat: <strong class="text-amber-800">{{ $lateCount }} ({{ $totalLateMinutes }}m)</strong>
+                            </span>
+                        @endif
+                        @if(($leaveCount ?? 0) > 0)
+                            <span class="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-700 text-xs font-bold border border-sky-200/60">
+                                Izin/Sakit: <strong class="text-sky-800">{{ $leaveCount }}</strong>
+                            </span>
+                        @endif
+                    </div>
                 </div>
             </x-slot:header>
 
-            <div class="branch-barber-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" data-tablet-flip>
-                @foreach($branchBarbers as $barber)
-                    @php
-                        $bSched = $barberSchedulesToday->get($barber->id);
-                        $bAtt = $barberAttendancesToday->get($barber->id);
-                        $isBarberOff = $bSched ? (bool) $bSched->is_off : false;
-                    @endphp
-                    <div class="p-3.5 rounded-2xl bg-zinc-50/70 border border-zinc-200/80 flex items-center justify-between gap-3 min-w-0">
-                        <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div class="w-9 h-9 rounded-xl bg-zinc-900 text-amber-400 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                                {{ strtoupper(substr($barber->display_name ?? 'B', 0, 1)) }}
-                            </div>
-                            <div class="min-w-0 flex-1 leading-tight">
-                                <p class="font-bold text-xs text-zinc-900 truncate">{{ $barber->display_name }}</p>
-                                <p class="text-[10px] text-zinc-500 truncate mt-0.5">
-                                    @if($isBarberOff)
-                                        Jadwal: Libur (OFF)
-                                    @elseif($bSched)
-                                        Shift: {{ substr((string) $bSched->start_time, 0, 5) }} - {{ substr((string) $bSched->end_time, 0, 5) }}
-                                    @else
-                                        Shift Cabang
-                                    @endif
-                                </p>
-                            </div>
+            <!-- Filter Toolbar Terpadu (Menyatu di dalam Card) -->
+            <div class="p-3.5 sm:p-4 border-b border-zinc-100 bg-zinc-50/50">
+                <form method="GET" action="{{ route('cashier.attendance') }}" class="space-y-3">
+                    <!-- Baris 1: Preset Periode (Hari Ini, 7 Hari, Bulan Ini) -->
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                        <div class="w-full sm:w-auto grid grid-cols-3 sm:inline-flex items-center gap-1 p-1 rounded-xl bg-zinc-200/70 text-xs font-bold text-zinc-600">
+                            <a
+                                href="{{ route('cashier.attendance', array_merge(request()->except('page'), ['period' => 'today'])) }}"
+                                class="text-center py-2 sm:py-1.5 px-2.5 sm:px-3 rounded-lg whitespace-nowrap transition {{ ($period ?? 'today') === 'today' ? 'bg-white text-zinc-950 shadow-2xs' : 'hover:text-zinc-900' }}"
+                            >
+                                Hari Ini
+                            </a>
+                            <a
+                                href="{{ route('cashier.attendance', array_merge(request()->except('page'), ['period' => '7days'])) }}"
+                                class="text-center py-2 sm:py-1.5 px-2.5 sm:px-3 rounded-lg whitespace-nowrap transition {{ ($period ?? '') === '7days' ? 'bg-white text-zinc-950 shadow-2xs' : 'hover:text-zinc-900' }}"
+                            >
+                                7 Hari
+                            </a>
+                            <a
+                                href="{{ route('cashier.attendance', array_merge(request()->except('page'), ['period' => 'this_month'])) }}"
+                                class="text-center py-2 sm:py-1.5 px-2.5 sm:px-3 rounded-lg whitespace-nowrap transition {{ ($period ?? '') === 'this_month' ? 'bg-white text-zinc-950 shadow-2xs' : 'hover:text-zinc-900' }}"
+                            >
+                                Bulan Ini
+                            </a>
                         </div>
 
-                        <div class="shrink-0 text-right">
-                            @if($bAtt && $bAtt->check_in_at)
-                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 font-bold text-[10px] whitespace-nowrap">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                    Hadir: {{ $bAtt->check_in_at->format('H:i') }}
-                                </span>
-                            @elseif($isBarberOff)
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-zinc-200/80 text-zinc-600 font-bold text-[10px] whitespace-nowrap">
-                                    Off
-                                </span>
-                            @else
-                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 font-bold text-[10px] whitespace-nowrap">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                                    Belum Hadir
-                                </span>
-                            @endif
-                        </div>
+                        <span class="text-xs text-zinc-500 font-medium hidden sm:inline">
+                            Periode aktif: <strong class="text-zinc-800">{{ ($period ?? 'today') === 'today' ? 'Hari Ini' : (($period ?? '') === '7days' ? '7 Hari Terakhir' : (($period ?? '') === 'this_month' ? 'Bulan Ini' : 'Kustom')) }}</strong>
+                        </span>
                     </div>
-                @endforeach
+
+                    <!-- Baris 2: Dropdown Filter Status & Staf -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+                        <!-- Filter Status -->
+                        <x-ui.select
+                            name="status"
+                            size="sm"
+                            icon="filter"
+                            :options="$statusFilterOptions"
+                            :value="$statusFilter ?? 'all'"
+                            auto-submit
+                        />
+
+                        <!-- Filter Staf / Barber -->
+                        <x-ui.select
+                            name="barber_id"
+                            size="sm"
+                            icon="scissors"
+                            placeholder="Semua Staf & Barber"
+                            :options="$staffSelectOptions"
+                            :value="request('barber_id')"
+                            search-placeholder="Cari nama staf..."
+                            auto-submit
+                        />
+                    </div>
+
+                    <!-- Rentang Kustom (Jika dipilih) -->
+                    @if(($period ?? '') === 'custom')
+                        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-200/60 text-xs font-semibold">
+                            <span class="text-zinc-500 text-xs font-bold">Periode:</span>
+                            <input type="date" name="date_from" value="{{ $dateFrom }}" class="px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 flex-1 sm:flex-initial" />
+                            <span class="text-zinc-400">s/d</span>
+                            <input type="date" name="date_to" value="{{ $dateTo }}" class="px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 flex-1 sm:flex-initial" />
+                            <button type="submit" class="px-4 py-1.5 rounded-xl bg-zinc-900 text-white font-bold text-xs">Cari</button>
+                        </div>
+                    @endif
+                </form>
             </div>
-        </x-ui.card>
-        @endif
 
-        <!-- ============================================================ -->
-        <!-- 4. LOG RIWAYAT ABSENSI TERAKHIR                             -->
-        <!-- ============================================================ -->
-        <x-ui.card>
-            <x-slot:header>
-                <div>
-                    <h2 class="font-bold flex items-center gap-2 text-zinc-900 text-sm">
-                        <x-ui.icon name="file-text" class="w-4 h-4 text-zinc-500" />
-                        <span>Riwayat Absensi Terkini</span>
-                    </h2>
-                    <p class="text-xs text-zinc-500 mt-0.5">Catatan log kehadiran 14 hari terakhir Anda</p>
-                </div>
-            </x-slot:header>
-
-            @if($recentAttendances->isEmpty())
-                <div class="text-center py-8 text-xs text-zinc-400">
-                    Belum ada riwayat absensi yang tercatat.
+            <!-- Tabel Data Kehadiran -->
+            @if($totalTableRows === 0)
+                <div class="text-center py-10 px-4 text-zinc-400 italic text-xs">
+                    Belum ada data absensi untuk filter dan periode yang dipilih.
                 </div>
             @else
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs">
+                    <table class="w-full text-left text-xs min-w-[760px]">
                         <thead>
-                            <tr class="border-b border-zinc-200/80 text-[11px] font-bold text-zinc-500 bg-zinc-50/50">
-                                <th class="py-2.5 px-3">Tanggal</th>
-                                <th class="py-2.5 px-3">Jam Masuk</th>
-                                <th class="py-2.5 px-3">Jam Pulang</th>
-                                <th class="py-2.5 px-3">Status</th>
-                                <th class="py-2.5 px-3 text-right">Keterlambatan</th>
+                            <tr class="border-b border-zinc-200/80 text-[11px] font-bold text-zinc-500 bg-zinc-50/60">
+                                <th class="py-3 px-3.5 whitespace-nowrap">Tanggal</th>
+                                <th class="py-3 px-3.5 whitespace-nowrap">Nama Staf</th>
+                                <th class="py-3 px-3.5 whitespace-nowrap text-center">Jam Masuk</th>
+                                <th class="py-3 px-3.5 whitespace-nowrap text-center">Jam Pulang</th>
+                                <th class="py-3 px-3.5 whitespace-nowrap text-center">Status</th>
+                                <th class="py-3 px-3.5 whitespace-nowrap text-right pr-4">Keterangan / Keterlambatan</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 font-medium text-zinc-800">
+                            {{-- 1. Data Rekap Absensi yang Sudah Tercatat --}}
                             @foreach($recentAttendances as $att)
+                                @php
+                                    $isExcused = in_array($att->status, ['sick', 'leave', 'holiday', 'absent']);
+                                    $staffName = $att->membership?->user?->name ?? $att->membership?->display_name ?? 'Staf';
+                                    $roleLabel = $att->membership?->role?->value === 'admin' ? 'Kasir' : ($att->membership?->role?->value === 'barber' ? 'Barber' : 'Owner');
+                                @endphp
                                 <tr class="hover:bg-zinc-50/60 transition">
-                                    <td class="py-2.5 px-3 font-semibold">
-                                        {{ $att->date->locale('id')->isoFormat('dddd, D MMM Y') }}
+                                    <td class="py-3 px-3.5 font-semibold whitespace-nowrap">
+                                        <p class="font-bold text-zinc-900">{{ $att->date->locale('id')->isoFormat('D MMM Y') }}</p>
+                                        <p class="text-[10px] text-zinc-400 font-semibold">{{ $att->date->locale('id')->isoFormat('dddd') }}</p>
                                     </td>
-                                    <td class="py-2.5 px-3 font-mono">
-                                        {{ $att->check_in_at ? $att->check_in_at->format('H:i') . ' WIB' : '--:--' }}
+                                    <td class="py-3 px-3.5 whitespace-nowrap">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                                {{ strtoupper(substr($staffName, 0, 2)) }}
+                                            </div>
+                                            <div>
+                                                <p class="font-bold text-zinc-900 leading-snug">{{ $staffName }}</p>
+                                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold {{ $att->membership?->role?->value === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-700' }}">
+                                                    {{ $roleLabel }}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td class="py-2.5 px-3 font-mono">
-                                        {{ $att->check_out_at ? $att->check_out_at->format('H:i') . ' WIB' : '--:--' }}
+                                    <td class="py-3 px-3.5 num font-bold text-zinc-800 text-center whitespace-nowrap">
+                                        @if($isExcused)
+                                            <span class="text-zinc-400 font-semibold">-</span>
+                                        @elseif($att->check_in_at)
+                                            <span class="text-zinc-900 font-extrabold">{{ $att->check_in_at->format('H:i') }}</span>
+                                            <span class="text-[10px] text-zinc-400 font-normal">WIB</span>
+                                        @else
+                                            <span class="text-zinc-400 italic">-</span>
+                                        @endif
                                     </td>
-                                    <td class="py-2.5 px-3">
+                                    <td class="py-3 px-3.5 num font-bold text-zinc-800 text-center whitespace-nowrap">
+                                        @if($isExcused)
+                                            <span class="text-zinc-400 font-semibold">-</span>
+                                        @elseif($att->check_out_at)
+                                            <span class="text-zinc-900 font-extrabold">{{ $att->check_out_at->format('H:i') }}</span>
+                                            <span class="text-[10px] text-zinc-400 font-normal">WIB</span>
+                                        @else
+                                            <span class="text-amber-600 font-bold text-[11px] bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
+                                                Aktif Bertugas
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="py-3 px-3.5 text-center whitespace-nowrap">
                                         @if($att->status === 'present')
-                                            <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 font-bold text-[10px]">
+                                            <span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">
                                                 Hadir Tepat Waktu
                                             </span>
                                         @elseif($att->status === 'late')
-                                            <span class="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 font-bold text-[10px]">
-                                                Terlambat
+                                            <span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">
+                                                Terlambat Masuk
+                                            </span>
+                                        @elseif($att->status === 'leave')
+                                            <span class="px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 font-bold text-[11px] border border-sky-200/60">
+                                                Izin / Cuti
+                                            </span>
+                                        @elseif($att->status === 'sick')
+                                            <span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[11px] border border-indigo-200/60">
+                                                Sakit
+                                            </span>
+                                        @elseif($att->status === 'holiday')
+                                            <span class="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200/50 font-bold text-[11px]">
+                                                Libur
+                                            </span>
+                                        @elseif($att->status === 'absent')
+                                            <span class="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200/50 font-bold text-[11px]">
+                                                Alpa / Tidak Hadir
                                             </span>
                                         @else
-                                            <span class="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 font-bold text-[10px]">
+                                            <span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600 font-bold text-[11px] border border-zinc-200/50">
                                                 {{ ucfirst($att->status ?? 'hadir') }}
                                             </span>
                                         @endif
                                     </td>
-                                    <td class="py-2.5 px-3 text-right font-mono">
-                                        {{ $att->late_minutes > 0 ? $att->late_minutes . ' menit' : '-' }}
+                                    <td class="py-3 px-3.5 text-right pr-4 font-mono whitespace-nowrap">
+                                        @if($isExcused)
+                                            <span class="text-zinc-400 font-semibold">{{ ucfirst($att->status) }}</span>
+                                        @elseif($att->late_minutes > 0)
+                                            <span class="inline-flex items-center gap-1 text-rose-700 font-bold text-xs num">
+                                                <x-ui.icon name="clock" class="w-3 h-3 text-rose-500 shrink-0" />
+                                                <span>+{{ $att->late_minutes }} mnt</span>
+                                            </span>
+                                        @else
+                                            <span class="text-emerald-600 font-medium">Tepat Waktu</span>
+                                        @endif
                                     </td>
                                 </tr>
                             @endforeach
+
+                            {{-- 2. Data Staf yang Belum Absen Masuk Hari Ini (Disatukan ke Tabel) --}}
+                            @if($isTodayPeriod && isset($todayUnattendedStaff) && $todayUnattendedStaff->isNotEmpty())
+                                @foreach($todayUnattendedStaff as $unattStaff)
+                                    @php
+                                        $sched = ($allStaffSchedulesToday ?? collect())->get($unattStaff->id);
+                                        $isStaffOff = $sched ? (bool) $sched->is_off : false;
+                                        $staffName = $unattStaff->display_name ?? $unattStaff->user?->name ?? 'Staf';
+                                        $roleLabel = $unattStaff->role?->value === 'admin' ? 'Kasir' : ($unattStaff->role?->value === 'barber' ? 'Barber' : 'Owner');
+                                    @endphp
+                                    <tr class="hover:bg-zinc-50/60 transition bg-zinc-50/20">
+                                        <td class="py-3 px-3.5 font-semibold whitespace-nowrap">
+                                            <p class="font-bold text-zinc-900">{{ now()->locale('id')->isoFormat('D MMM Y') }}</p>
+                                            <p class="text-[10px] text-zinc-400 font-semibold">{{ now()->locale('id')->isoFormat('dddd') }}</p>
+                                        </td>
+                                        <td class="py-3 px-3.5 whitespace-nowrap">
+                                            <div class="flex items-center gap-2.5">
+                                                <div class="w-7 h-7 rounded-lg bg-zinc-200/80 text-zinc-600 flex items-center justify-center font-bold text-xs shrink-0">
+                                                    {{ strtoupper(substr($staffName, 0, 2)) }}
+                                                </div>
+                                                <div>
+                                                    <p class="font-bold text-zinc-800 leading-snug">{{ $staffName }}</p>
+                                                    <span class="px-1.5 py-0.2 rounded text-[10px] font-bold {{ $unattStaff->role?->value === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-700' }}">
+                                                        {{ $roleLabel }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="py-3 px-3.5 num text-zinc-400 text-center whitespace-nowrap">
+                                            -
+                                        </td>
+                                        <td class="py-3 px-3.5 num text-zinc-400 text-center whitespace-nowrap">
+                                            -
+                                        </td>
+                                        <td class="py-3 px-3.5 text-center whitespace-nowrap">
+                                            @if($isStaffOff)
+                                                <span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600 font-bold text-[11px] border border-zinc-200/50">
+                                                    Off (Libur)
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                                    Belum Masuk
+                                                </span>
+                                            @endif
+                                        </td>
+                                        <td class="py-3 px-3.5 text-right pr-4 font-mono whitespace-nowrap">
+                                            @if($isStaffOff)
+                                                <span class="text-zinc-400 font-semibold">Jadwal Libur</span>
+                                            @elseif($sched && $sched->start_time)
+                                                <span class="text-amber-700 font-bold text-xs num">
+                                                    Shift: {{ substr((string) $sched->start_time, 0, 5) }} - {{ substr((string) $sched->end_time, 0, 5) }}
+                                                </span>
+                                            @else
+                                                <span class="text-zinc-400 italic">Belum Hadir</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            @endif
                         </tbody>
                     </table>
+                </div>
+            @endif
+
+            @if($recentAttendances->hasPages())
+                <div class="p-4 border-t border-zinc-100">
+                    {{ $recentAttendances->links() }}
                 </div>
             @endif
         </x-ui.card>
@@ -454,21 +626,12 @@
         <!-- ============================================================ -->
         <x-ui.card>
             <x-slot:header>
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="font-bold flex items-center gap-2 text-zinc-900 text-sm">
-                            <x-ui.icon name="calendar" class="w-4 h-4 text-amber-500" />
-                            <span>Riwayat Pengajuan Izin Saya</span>
-                        </h2>
-                        <p class="text-xs text-zinc-500 mt-0.5">Status persetujuan permohonan cuti, sakit, dan izin libur oleh Owner</p>
-                    </div>
-                    <button
-                        type="button"
-                        onclick="document.getElementById('modal-request-time-off').showModal()"
-                        class="text-xs font-black text-zinc-950 bg-amber-500 hover:bg-amber-400 px-3 py-1.5 rounded-xl transition cursor-pointer shadow-2xs"
-                    >
-                        + Ajukan Izin
-                    </button>
+                <div>
+                    <h2 class="font-bold flex items-center gap-2 text-zinc-900 text-sm">
+                        <x-ui.icon name="calendar" class="w-4 h-4 text-amber-500" />
+                        <span>Riwayat Pengajuan Izin Saya</span>
+                    </h2>
+                    <p class="text-xs text-zinc-500 mt-0.5">Status persetujuan permohonan cuti, sakit, dan izin libur oleh Owner</p>
                 </div>
             </x-slot:header>
 
@@ -534,18 +697,19 @@
     </div>
 
     <!-- MODAL PENGAJUAN IZIN KASIR (CUTI / SAKIT / LIBUR) -->
-    <dialog id="modal-request-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/70 w-[calc(100%-2rem)] max-w-md mx-auto my-auto overflow-hidden border border-zinc-200">
-        <div class="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/80">
-            <div class="flex items-center gap-2">
-                <x-ui.icon name="calendar" class="w-4 h-4 text-amber-600" />
-                <h3 class="font-extrabold text-xs text-zinc-900">Form Pengajuan Izin Staf</h3>
+    <dialog id="modal-request-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/70 w-[calc(100%-2rem)] max-w-md max-h-[90vh] max-h-[90dvh] mx-auto my-auto overflow-hidden border border-zinc-200">
+        <div class="flex flex-col max-h-[90vh] max-h-[90dvh]">
+            <div class="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/80 shrink-0">
+                <div class="flex items-center gap-2">
+                    <x-ui.icon name="calendar" class="w-4 h-4 text-amber-600" />
+                    <h3 class="font-extrabold text-xs text-zinc-900">Form Pengajuan Izin Staf</h3>
+                </div>
+                <button type="button" onclick="document.getElementById('modal-request-time-off').close()" class="text-zinc-400 hover:text-zinc-700 p-1 cursor-pointer">
+                    <x-ui.icon name="x" class="w-4 h-4" />
+                </button>
             </div>
-            <button type="button" onclick="document.getElementById('modal-request-time-off').close()" class="text-zinc-400 hover:text-zinc-700 p-1 cursor-pointer">
-                <x-ui.icon name="x" class="w-4 h-4" />
-            </button>
-        </div>
 
-        <form method="POST" action="{{ route('cashier.time-off.store') }}" enctype="multipart/form-data" class="p-5 space-y-4 text-xs">
+            <form method="POST" action="{{ route('cashier.time-off.store') }}" enctype="multipart/form-data" class="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4 text-xs">
             @csrf
 
             <!-- Pilihan Jenis Izin: HANYA 3 SESUAI KETENTUAN -->
@@ -634,7 +798,7 @@
                 </p>
                 <div class="space-y-0.5 text-zinc-700 pl-5 text-[10px] sm:text-[11px]">
                     <p>&bull; <strong>Di-ACC:</strong> Bebas shift kerja &amp; jam kerja diakui penuh.</p>
-                    <p>&bull; <strong>Ditolak:</strong> Izin batal &amp; tercatat Alpha (kena potongan gaji).</p>
+                    <p>&bull; <strong>Ditolak:</strong> Izin batal &amp; tercatat Alpha.</p>
                 </div>
             </div>
 
@@ -654,354 +818,182 @@
                 </button>
             </div>
         </form>
-    </dialog>
+    </div>
+</dialog>
 
-    <!-- Modal Pemindai QR Kamera -->
-    <dialog id="modal-attendance-scanner" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/80 w-[calc(100%-2rem)] max-w-sm mx-auto my-auto overflow-hidden border border-zinc-200">
-        <div class="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/70">
+    <!-- Modal Tampilkan QR Absensi Staf -->
+    <dialog id="modal-staff-qr-code" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/80 w-[calc(100%-2rem)] max-w-sm mx-auto my-auto overflow-hidden border border-zinc-200 bg-white">
+        <div class="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/80">
             <div class="flex items-center gap-2">
-                <x-ui.icon name="camera" class="w-4 h-4 text-amber-500" />
-                <h3 class="font-bold text-xs text-zinc-800">Pindai QR Absensi Outlet</h3>
+                <x-ui.icon name="ticket" class="w-4 h-4 text-amber-500" />
+                <h3 class="font-extrabold text-xs text-zinc-900">QR Absensi Kasir / Admin</h3>
             </div>
-            <button type="button" onclick="stopAttendanceScanner()" class="text-zinc-400 hover:text-zinc-700 p-1">
+            <button type="button" onclick="document.getElementById('modal-staff-qr-code').close()" class="text-zinc-400 hover:text-zinc-700 p-1 cursor-pointer">
                 <x-ui.icon name="x" class="w-4 h-4" />
             </button>
         </div>
 
-        <div class="p-5 space-y-3">
-            <!-- Box Kotak Viewport Scanner Rapi -->
-            <div class="relative w-full aspect-square max-w-[270px] mx-auto rounded-2xl overflow-hidden bg-black border-2 border-amber-500 shadow-lg flex items-center justify-center">
-                <!-- 1. Dedicated Html5Qrcode Reader Container (Tidak boleh ditimpa innerHTML saat scanner aktif) -->
-                <div id="attendance-qr-reader" class="w-full h-full"></div>
-
-                <!-- 2. Overlay Status Hasil Absensi / Loading Pemrosesan -->
-                <div id="attendance-scanner-overlay" class="absolute inset-0 z-20 hidden flex-col items-center justify-center p-4 text-center bg-zinc-950/95 text-white backdrop-blur-sm transition-all duration-200">
-                    <div id="scanner-overlay-spinner" class="hidden flex-col items-center space-y-3">
-                        <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                        <div class="space-y-1">
-                            <p class="font-extrabold text-xs text-white">Memproses Absensi...</p>
-                            <p class="text-[11px] text-zinc-400">Mendeteksi lokasi GPS & memverifikasi radius</p>
-                        </div>
-                    </div>
-
-                    <div id="scanner-overlay-result" class="hidden flex-col items-center justify-center space-y-3">
-                        <div id="scanner-result-icon" class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl shadow-inner"></div>
-                        <p id="scanner-result-title" class="font-black text-sm tracking-wide"></p>
-                        <div class="pt-1 flex items-center justify-center">
-                            <button type="button" id="btn-scanner-retry" onclick="restartAttendanceScanner()" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs cursor-pointer transition shadow">
-                                Pindai Ulang
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3. Bingkai Kotak Sudut (Target Brackets) -->
-                <div id="scanner-brackets" class="absolute inset-4 pointer-events-none z-10">
-                    <span class="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-amber-400 rounded-tl-lg"></span>
-                    <span class="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-amber-400 rounded-tr-lg"></span>
-                    <span class="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-amber-400 rounded-bl-lg"></span>
-                    <span class="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-amber-400 rounded-br-lg"></span>
-                    <!-- Garis Laser Horizontal -->
-                    <span class="absolute inset-x-2 top-1/2 -translate-y-1/2 h-0.5 bg-amber-400 shadow-[0_0_8px_#f59e0b] animate-pulse"></span>
-                </div>
+        <div class="p-6 text-center space-y-4">
+            <!-- Profil Singkat Staf -->
+            <div class="space-y-1">
+                <h4 class="font-black text-base text-zinc-950">{{ $membership?->display_name ?? auth()->user()->name }}</h4>
+                <p class="text-xs text-zinc-500">{{ $branch?->name ?? 'Cabang Outlet' }} &bull; Kasir / Admin</p>
             </div>
 
-            <div id="scanner-feedback" class="text-center text-xs text-zinc-500 py-1">
-                Arahkan kotak pemindai ke QR Code absensi di meja kasir
+            <!-- Box QR Code Berkualitas Tinggi -->
+            <div class="p-4 rounded-3xl bg-zinc-50 border border-zinc-200 inline-block shadow-inner mx-auto">
+                <div id="cashier-staff-qrcode" class="flex items-center justify-center min-w-[210px] min-h-[210px] bg-white p-2 rounded-2xl"></div>
             </div>
+
+            <p class="text-[11px] text-zinc-400 leading-relaxed">
+                Tunjukkan QR ke scanner kasir untuk absen, atau unduh gambar QR untuk disimpan di galeri ponsel Anda.
+            </p>
         </div>
 
-        <div class="p-3 bg-zinc-50 border-t border-zinc-100 flex items-center justify-end">
+        <div class="p-3 bg-zinc-50 border-t border-zinc-100 flex items-center gap-2">
             <button
                 type="button"
-                onclick="stopAttendanceScanner()"
-                class="w-full py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition cursor-pointer"
+                onclick="downloadStaffQr('{{ addslashes($membership?->display_name ?? auth()->user()->name) }}', '{{ addslashes($branch?->name ?? 'Cabang Outlet') }}', 'cashier-staff-qrcode')"
+                class="flex-1 py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
             >
-                Tutup Kamera
+                <x-ui.icon name="download" class="w-4 h-4 text-zinc-950" />
+                <span>Unduh QR Absen</span>
+            </button>
+            <button
+                type="button"
+                onclick="document.getElementById('modal-staff-qr-code').close()"
+                class="py-2.5 px-4 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold text-xs transition cursor-pointer"
+            >
+                Tutup
             </button>
         </div>
     </dialog>
 
-    <style>
-        #attendance-qr-reader {
-            width: 100% !important;
-            height: 100% !important;
-            border: none !important;
-            position: relative;
-        }
-        #attendance-qr-reader video {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-            border-radius: 14px !important;
-        }
-        #attendance-qr-reader img,
-        #attendance-qr-reader select,
-        #attendance-qr-reader button,
-        #attendance-qr-reader #attendance-qr-reader__header_message {
-            display: none !important;
-        }
-        #attendance-qr-reader__scan_region {
-            min-height: 100% !important;
-        }
-    </style>
+    <!-- Script Vendor QRCode Generator -->
+    <script src="{{ asset('vendor/qrcode/qrcode.min.js') }}"></script>
+    <script
+        id="cashier-staff-qr-script"
+        data-payload="{{ $membership?->getAttendanceQrPayload() }}"
+    >
+        let qrCodeInstance = null;
 
-    <!-- Script Vendor HTML5-QRCode Scanner -->
-    <script src="{{ asset('vendor/html5-qrcode/html5-qrcode.min.js') }}"></script>
-    <script>
-        let html5Scanner = null;
-        let isScannerProcessing = false;
+        function renderStaffQr(boxId, scriptId) {
+            const qrBox = document.getElementById(boxId);
+            const scriptEl = document.getElementById(scriptId);
+            if (!qrBox || !scriptEl) return;
 
-        function extractToken(decodedText) {
-            let text = (decodedText || '').trim();
-            if (text.includes('/attend/')) {
-                const parts = text.split('/attend/');
-                text = parts[1].split('?')[0].split('#')[0];
-            }
-            return text.replace(/^\/+|\/+$/g, '');
-        }
-
-        function showScannerProcessing() {
-            const overlay = document.getElementById('attendance-scanner-overlay');
-            const spinner = document.getElementById('scanner-overlay-spinner');
-            const result = document.getElementById('scanner-overlay-result');
-            const brackets = document.getElementById('scanner-brackets');
-
-            if (brackets) brackets.classList.add('hidden');
-            if (result) {
-                result.classList.add('hidden');
-                result.classList.remove('flex');
-            }
-            if (spinner) {
-                spinner.classList.remove('hidden');
-                spinner.classList.add('flex');
-            }
-            if (overlay) {
-                overlay.classList.remove('hidden');
-                overlay.classList.add('flex');
-            }
-        }
-
-        function showScannerResult(isSuccess, title) {
-            const overlay = document.getElementById('attendance-scanner-overlay');
-            const spinner = document.getElementById('scanner-overlay-spinner');
-            const result = document.getElementById('scanner-overlay-result');
-            const icon = document.getElementById('scanner-result-icon');
-            const titleEl = document.getElementById('scanner-result-title');
-            const brackets = document.getElementById('scanner-brackets');
-            const btnRetry = document.getElementById('btn-scanner-retry');
-
-            if (brackets) brackets.classList.add('hidden');
-            if (spinner) {
-                spinner.classList.add('hidden');
-                spinner.classList.remove('flex');
-            }
-
-            if (icon) {
-                if (isSuccess) {
-                    icon.className = 'w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xl shadow-inner';
-                    icon.textContent = '✓';
-                } else {
-                    icon.className = 'w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xl shadow-inner';
-                    icon.textContent = '✕';
-                }
-            }
-
-            if (titleEl) {
-                titleEl.textContent = title;
-                titleEl.className = isSuccess ? 'font-black text-sm text-emerald-400 tracking-wide' : 'font-black text-sm text-rose-400 tracking-wide';
-            }
-
-            if (btnRetry) {
-                btnRetry.style.display = isSuccess ? 'none' : 'inline-block';
-            }
-
-            if (result) {
-                result.classList.remove('hidden');
-                result.classList.add('flex');
-            }
-            if (overlay) {
-                overlay.classList.remove('hidden');
-                overlay.classList.add('flex');
-            }
-        }
-
-        function hideScannerOverlay() {
-            const overlay = document.getElementById('attendance-scanner-overlay');
-            const spinner = document.getElementById('scanner-overlay-spinner');
-            const result = document.getElementById('scanner-overlay-result');
-            const brackets = document.getElementById('scanner-brackets');
-
-            if (brackets) brackets.classList.remove('hidden');
-            if (spinner) {
-                spinner.classList.add('hidden');
-                spinner.classList.remove('flex');
-            }
-            if (result) {
-                result.classList.add('hidden');
-                result.classList.remove('flex');
-            }
-            if (overlay) {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('flex');
-            }
-        }
-
-        async function safeStopScanner() {
-            if (html5Scanner) {
-                try {
-                    if (html5Scanner.isScanning) {
-                        await html5Scanner.stop();
-                    }
-                } catch (e) {
-                    // Ignore transition error
+            if (!qrBox.querySelector('canvas') && typeof QRCode !== 'undefined') {
+                const payload = scriptEl.dataset.payload || '';
+                if (payload) {
+                    qrBox.innerHTML = '';
+                    qrCodeInstance = new QRCode(qrBox, {
+                        text: payload,
+                        width: 210,
+                        height: 210,
+                        colorDark: '#18181b',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.H,
+                    });
                 }
             }
         }
 
-        async function startAttendanceScanner() {
-            const modal = document.getElementById('modal-attendance-scanner');
-            if (modal) modal.showModal();
+        function openStaffQrModal() {
+            const modal = document.getElementById('modal-staff-qr-code');
+            if (!modal) return;
+            modal.showModal();
+            renderStaffQr('cashier-staff-qrcode', 'cashier-staff-qr-script');
+        }
 
-            const feedback = document.getElementById('scanner-feedback');
-            if (feedback) {
-                feedback.className = 'text-center text-xs text-zinc-500 py-1';
-                feedback.textContent = 'Arahkan kotak pemindai ke QR Code absensi di meja kasir';
-            }
+        function downloadStaffQr(staffName = 'Staff', branchName = '', boxId = 'cashier-staff-qrcode') {
+            const qrBox = document.getElementById(boxId);
+            if (!qrBox) return;
 
-            hideScannerOverlay();
-            isScannerProcessing = false;
+            const canvas = qrBox.querySelector('canvas');
+            const img = qrBox.querySelector('img');
 
-            if (!window.Html5Qrcode) {
-                alert('Pemindai kamera sedang dimuat, harap coba sesaat lagi.');
+            if (!canvas && !img) {
+                renderStaffQr('cashier-staff-qrcode', 'cashier-staff-qr-script');
+                setTimeout(() => downloadStaffQr(staffName, branchName, boxId), 150);
                 return;
             }
 
-            // Hentikan scanner sebelumnya jika ada yang menggantung
-            await safeStopScanner();
+            const exportCanvas = document.createElement('canvas');
+            const ctx = exportCanvas.getContext('2d');
+            const width = 360;
+            const height = 480;
+            exportCanvas.width = width;
+            exportCanvas.height = height;
 
-            try {
-                if (!html5Scanner) {
-                    html5Scanner = new Html5Qrcode('attendance-qr-reader');
-                }
+            // Background putih bersih
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
 
-                await html5Scanner.start(
-                    { facingMode: 'environment' },
-                    { fps: 10, qrbox: { width: 220, height: 220 } },
-                    onScanSuccess,
-                    () => {}
-                );
-            } catch (err) {
-                console.warn('Gagal mengakses kamera:', err);
-                if (feedback) {
-                    feedback.textContent = 'Gagal mengakses kamera. Pastikan izin kamera aktif: ' + (err.message || err);
-                    feedback.className = 'text-center text-xs text-rose-500 py-1 font-semibold';
-                }
-            }
-        }
+            // Border kartu tipis elegan
+            ctx.strokeStyle = '#e4e4e7';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, width - 2, height - 2);
 
-        async function stopAttendanceScanner() {
-            isScannerProcessing = false;
-            await safeStopScanner();
-            hideScannerOverlay();
-            const modal = document.getElementById('modal-attendance-scanner');
-            if (modal) modal.close();
-        }
+            // Header - Nama Barbershop / Cabang
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText((branchName || 'BARBERSHOP').toUpperCase(), width / 2, 38);
 
-        async function restartAttendanceScanner() {
-            hideScannerOverlay();
-            await startAttendanceScanner();
-        }
+            // Nama Staf
+            ctx.fillStyle = '#09090b';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText(staffName, width / 2, 65);
 
-        async function onScanSuccess(decodedText) {
-            // Guard: Cegah pemrosesan berulang dari frame kamera berikutnya
-            if (isScannerProcessing) return;
-            isScannerProcessing = true;
+            ctx.fillStyle = '#71717a';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('QR KARTU ABSENSI STAF', width / 2, 86);
 
-            // Hentikan pemindaian kamera secara aman tanpa merusak struktur DOM
-            await safeStopScanner();
+            // Gambar QR Code di tengah
+            const qrSize = 250;
+            const qrX = (width - qrSize) / 2;
+            const qrY = 110;
 
-            // Tampilkan status pemrosesan pada overlay
-            showScannerProcessing();
+            const drawAndDownload = (sourceElement) => {
+                ctx.drawImage(sourceElement, qrX, qrY, qrSize, qrSize);
 
-            const token = extractToken(decodedText);
-            const feedback = document.getElementById('scanner-feedback');
+                // Footer petunjuk
+                ctx.fillStyle = '#18181b';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.fillText('Arahkan ke Scanner Absensi', width / 2, 395);
 
-            if (feedback) {
-                feedback.className = 'text-center text-xs text-amber-500 py-1 font-semibold';
-                feedback.innerHTML = '<span class="animate-pulse">Sedang memverifikasi lokasi & mencatat waktu shift...</span>';
-            }
+                ctx.fillStyle = '#71717a';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('Untuk Check-in Masuk & Check-out Pulang', width / 2, 418);
 
-            const sendAttendance = (lat, lng) => {
-                const formData = new FormData();
-                formData.append('_token', '{{ csrf_token() }}');
-                if (lat !== null) formData.append('lat', lat);
-                if (lng !== null) formData.append('lng', lng);
-                @if($todayAttendance && $todayAttendance->check_in_at && !$todayAttendance->check_out_at)
-                formData.append('action', 'check_out');
-                @else
-                formData.append('action', 'check_in');
-                @endif
+                ctx.fillStyle = '#a1a1aa';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('Simpan di Galeri HP untuk absen cepat', width / 2, 445);
 
-                fetch('/attend/' + encodeURIComponent(token), {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: formData
-                })
-                .then(async (res) => {
-                    let data = {};
-                    try {
-                        data = await res.json();
-                    } catch (e) {
-                        data = { success: false, message: 'Respons server tidak valid.' };
-                    }
-                    return { ok: res.ok, status: res.status, body: data };
-                })
-                .then(({ ok, body }) => {
-                    if (ok && body.success) {
-                        showScannerResult(true, 'Absensi Berhasil');
-                        if (feedback) {
-                            feedback.className = 'text-center text-xs text-emerald-600 bg-emerald-50 border border-emerald-200/80 rounded-xl p-2.5 font-bold';
-                            feedback.textContent = body.message || 'Absensi berhasil! Memperbarui halaman...';
-                        }
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1200);
-                    } else {
-                        const errMsg = body.message || 'Gagal mencatat absensi. Pastikan Anda berada di area outlet.';
-                        const errorTitle = errMsg === 'Belum saatnya absen' ? 'Belum Saatnya Absen' : 'Absensi Ditolak';
-                        showScannerResult(false, errorTitle);
-                        if (feedback) {
-                            feedback.className = 'text-center text-xs text-rose-600 bg-rose-50 border border-rose-200/80 rounded-xl p-2.5 font-medium leading-relaxed';
-                            feedback.textContent = errMsg;
-                        }
-                    }
-                })
-                .catch((err) => {
-                    console.error('Attendance scan fetch error:', err);
-                    showScannerResult(false, 'Gangguan Jaringan');
-                    if (feedback) {
-                        feedback.className = 'text-center text-xs text-rose-600 bg-rose-50 border border-rose-200/80 rounded-xl p-2.5 font-semibold';
-                        feedback.textContent = 'Terjadi gangguan jaringan saat menghubungi server. Silakan coba lagi.';
-                    }
-                });
+                const dataUrl = exportCanvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                const safeName = staffName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                link.download = `qr-absen-${safeName}.png`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             };
 
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => sendAttendance(pos.coords.latitude, pos.coords.longitude),
-                    (err) => {
-                        console.warn('Geolocation warning:', err);
-                        sendAttendance(null, null);
-                    },
-                    { enableHighAccuracy: true, timeout: 6000 }
-                );
-            } else {
-                sendAttendance(null, null);
+            if (canvas) {
+                drawAndDownload(canvas);
+            } else if (img && img.complete) {
+                drawAndDownload(img);
+            } else if (img) {
+                img.onload = () => drawAndDownload(img);
             }
+        }
+
+        function triggerQuickDownloadStaffQr(staffName, branchName, boxId, scriptId) {
+            renderStaffQr(boxId, scriptId);
+            setTimeout(() => {
+                downloadStaffQr(staffName, branchName, boxId);
+            }, 100);
         }
 
         function updateFileNameDisplay(input, nameContainerId, placeholderId) {

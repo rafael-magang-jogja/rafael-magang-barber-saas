@@ -11,100 +11,9 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 
 final class AttendanceScanController extends Controller
 {
-    /**
-     * Tampilkan halaman konfirmasi absensi hasil scan QR code cabang.
-     */
-    public function show(Request $request, string $token): View|RedirectResponse
-    {
-        $branch = Branch::query()
-            ->withoutGlobalScope('tenant')
-            ->where('qr_token', $token)
-            ->where('is_active', true)
-            ->with(['tenant'])
-            ->first();
-
-        if ($branch === null) {
-            abort(404, 'Kode QR absensi cabang tidak valid atau sudah tidak aktif.');
-        }
-
-        $tenant = $branch->tenant;
-        $user = $request->user();
-
-        // Cari membership user pada tenant ini (bisa sebagai barber, admin/kasir, atau owner)
-        $membership = Membership::query()
-            ->withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->where('user_id', $user->id)
-            ->where('is_active', true)
-            ->first();
-
-        if ($membership === null) {
-            return view('attendance.scan-confirm', [
-                'branch' => $branch,
-                'tenant' => $tenant,
-                'user' => $user,
-                'membership' => null,
-                'attendance' => null,
-                'error' => "Akun Anda ({$user->email}) tidak terdaftar sebagai staf atau pengelola pada {$tenant->name}.",
-            ]);
-        }
-
-        $today = now()->format('Y-m-d');
-        $now = now();
-        $attendance = Attendance::query()
-            ->withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->where('membership_id', $membership->id)
-            ->whereDate('date', $today)
-            ->first();
-
-        $error = null;
-        if ($attendance === null || $attendance->check_in_at === null) {
-            $dayNum = $now->dayOfWeek;
-            $sched = \App\Models\BarberSchedule::query()
-                ->withoutGlobalScope('tenant')
-                ->where('membership_id', $membership->id)
-                ->where('day_of_week', $dayNum)
-                ->first();
-
-            $openingHours = $branch->opening_hours[$dayNum] ?? null;
-            $isOff = false;
-            $shiftStartStr = '09:00';
-
-            if ($sched !== null) {
-                $isOff = (bool) $sched->is_off;
-                $shiftStartStr = $sched->start_time ? substr((string) $sched->start_time, 0, 5) : '09:00';
-            } elseif ($openingHours !== null) {
-                $isOff = empty($openingHours['is_open']);
-                $shiftStartStr = $openingHours['open'] ?? '09:00';
-            }
-
-            if ($isOff) {
-                $error = 'Belum saatnya absen';
-            } else {
-                $scheduledStart = Carbon::parse("{$today} {$shiftStartStr}:00");
-                $earliestAllowedCheckIn = $scheduledStart->copy()->subMinutes(60);
-
-                if ($now->lessThan($earliestAllowedCheckIn)) {
-                    $error = 'Belum saatnya absen';
-                }
-            }
-        }
-
-        return view('attendance.scan-confirm', [
-            'branch' => $branch,
-            'tenant' => $tenant,
-            'user' => $user,
-            'membership' => $membership,
-            'attendance' => $attendance,
-            'error' => $error,
-        ]);
-    }
-
     /**
      * Hitung jarak antara dua koordinat GPS menggunakan formula Haversine (dalam meter).
      */
@@ -137,7 +46,7 @@ final class AttendanceScanController extends Controller
             ->first();
 
         if ($branch === null) {
-            $msg = 'Kode QR absensi cabang tidak valid atau sudah tidak aktif.';
+            $msg = 'Gunakan QR code absensi resmi outlet.';
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => $msg], 200);
             }

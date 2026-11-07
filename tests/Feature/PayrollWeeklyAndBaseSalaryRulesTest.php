@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Enums\PaymentStatus;
-use App\Enums\PayrollStatus;
 use App\Enums\Role;
 use App\Enums\WorkStatus;
 use App\Models\Branch;
@@ -14,7 +12,6 @@ use App\Models\Membership;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payroll;
-use App\Models\PayrollItem;
 use App\Models\SalaryScheme;
 use App\Models\Service;
 use App\Models\Tenant;
@@ -33,6 +30,8 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
     private User $ownerUser;
     private User $barberUser;
     private Membership $barber;
+    private User $adminUser;
+    private Membership $fixedStaff;
     private SalaryScheme $fixedPlusCommScheme;
     private Service $service;
     private OwnerManagementService $serviceManager;
@@ -92,6 +91,23 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
             'branch_id' => $this->branch->id,
             'role' => Role::Barber,
             'display_name' => 'Budi',
+            'salary_scheme_id' => $this->fixedPlusCommScheme->id,
+            'work_status' => WorkStatus::Active,
+            'is_active' => true,
+        ]);
+
+        $this->adminUser = User::query()->create([
+            'name' => 'Siti Kasir',
+            'email' => 'siti@barberking.id',
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->fixedStaff = Membership::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'user_id' => $this->adminUser->id,
+            'branch_id' => $this->branch->id,
+            'role' => Role::Admin,
+            'display_name' => 'Siti',
             'salary_scheme_id' => $this->fixedPlusCommScheme->id,
             'work_status' => WorkStatus::Active,
             'is_active' => true,
@@ -166,15 +182,20 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
         );
 
         $itemW1 = $payrollW1->items()->where('membership_id', $this->barber->id)->firstOrFail();
+        $fixedItemW1 = $payrollW1->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
 
-        // Verifikasi Aturan: Gaji Pokok TIDAK dicairkan pada minggu 1 (Rp0, ditahan)
+        // Verifikasi Aturan Barber: Tanpa Gaji Pokok, Murni Komisi per Kepala (Rp15.000)
         $this->assertSame(0, $itemW1->base_salary);
-        $this->assertSame('held_period', $itemW1->scheme_snapshot['base_salary_status']);
-        $this->assertSame(2000000, $itemW1->scheme_snapshot['original_base_salary']);
-
-        // Verifikasi Aturan: Komisi pangkas tetap bisa dicairkan (Rp15.000)
+        $this->assertSame('none', $itemW1->scheme_snapshot['base_salary_status']);
+        $this->assertSame(0, $itemW1->scheme_snapshot['original_base_salary']);
         $this->assertSame(15000, $itemW1->commission_total);
         $this->assertSame(15000, $itemW1->net_total);
+
+        // Verifikasi Aturan Staf Tetap: Gaji Pokok TIDAK dicairkan pada minggu 1 (Rp0, ditahan)
+        $this->assertSame(0, $fixedItemW1->base_salary);
+        $this->assertSame('held_period', $fixedItemW1->scheme_snapshot['base_salary_status']);
+        $this->assertSame(2000000, $fixedItemW1->scheme_snapshot['original_base_salary']);
+        $this->assertSame(0, $fixedItemW1->net_total);
 
         // 2. Tandai item Minggu 1 sebagai LUNAS
         $this->serviceManager->markPayrollItemPaid($itemW1, 'transfer', 'Gaji Komisi W1');
@@ -239,10 +260,16 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
         );
 
         $itemFull = $payrollFull->items()->where('membership_id', $this->barber->id)->firstOrFail();
+        $fixedItemFull = $payrollFull->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
 
-        // Verifikasi Aturan Gaji Pokok: Dicairkan penuh di akhir bulan (Rp2.000.000)
-        $this->assertSame(2000000, $itemFull->base_salary);
-        $this->assertSame('disbursed', $itemFull->scheme_snapshot['base_salary_status']);
+        // Verifikasi Aturan Gaji Pokok Staf Tetap: Dicairkan penuh di akhir bulan (Rp2.000.000)
+        $this->assertSame(2000000, $fixedItemFull->base_salary);
+        $this->assertSame('disbursed', $fixedItemFull->scheme_snapshot['base_salary_status']);
+        $this->assertSame(2000000, $fixedItemFull->net_total);
+
+        // Verifikasi Aturan Barber: Gaji Pokok tetap 0, murni sisa komisi
+        $this->assertSame(0, $itemFull->base_salary);
+        $this->assertSame('none', $itemFull->scheme_snapshot['base_salary_status']);
 
         // Verifikasi Aturan Bagi Hasil / Komisi:
         // Total komisi bulan ini: 15.000 + 20.000 + 25.000 = 60.000.
@@ -251,13 +278,14 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
         $this->assertSame(60000, $itemFull->scheme_snapshot['gross_commissions']);
         $this->assertSame(15000, $itemFull->scheme_snapshot['already_paid_commissions']);
         $this->assertSame(45000, $itemFull->commission_total);
-
-        // Net total: Gaji Pokok Rp2.000.000 + Sisa Komisi Rp45.000 = Rp2.045.000
-        $this->assertSame(2045000, $itemFull->net_total);
+        $this->assertSame(45000, $itemFull->net_total);
 
         // 4. Bayar payroll akhir bulan
-        $this->serviceManager->markPayrollItemPaid($itemFull, 'transfer', 'Pelunasan Gaji Pokok & Sisa Komisi');
+        $this->serviceManager->markPayrollItemPaid($itemFull, 'transfer', 'Pelunasan Sisa Komisi Barber');
         $this->assertSame('paid', $itemFull->fresh()->payment_status);
+
+        $this->serviceManager->markPayrollItemPaid($fixedItemFull, 'transfer', 'Pelunasan Gaji Pokok Staf Tetap');
+        $this->assertSame('paid', $fixedItemFull->fresh()->payment_status);
 
         // 5. Coba generate lagi payroll di bulan Oktober
         $payrollExtra = $this->serviceManager->generatePayroll(
@@ -269,13 +297,14 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
         );
 
         $itemExtra = $payrollExtra->items()->where('membership_id', $this->barber->id)->firstOrFail();
+        $fixedItemExtra = $payrollExtra->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
 
-        // Verifikasi Aturan: Gaji pokok hanya bisa 1x per bulan kalender.
+        // Verifikasi Aturan Staf Tetap: Gaji pokok hanya bisa 1x per bulan kalender.
         // Karena sudah dibayar, maka di payroll berikutnya dalam bulan yang sama menjadi Rp0
-        $this->assertSame(0, $itemExtra->base_salary);
-        $this->assertSame('already_paid', $itemExtra->scheme_snapshot['base_salary_status']);
+        $this->assertSame(0, $fixedItemExtra->base_salary);
+        $this->assertSame('already_paid', $fixedItemExtra->scheme_snapshot['base_salary_status']);
 
-        // Sisa komisi juga sudah 0 karena seluruh komisi telah lunas
+        // Sisa komisi barber juga sudah 0 karena seluruh komisi telah lunas
         $this->assertSame(0, $itemExtra->commission_total);
         $this->assertSame(0, $itemExtra->net_total);
     }
@@ -293,13 +322,13 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
             userId: $this->ownerUser->id,
         );
 
-        $item = $payroll->items()->where('membership_id', $this->barber->id)->firstOrFail();
+        $item = $payroll->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
 
-        // Gaji pokok harus ditahan karena tanggal belum menyentuh akhir bulan (mulai tanggal 25)
-        $this->assertSame(0, $item->base_salary);
-        $this->assertSame('held_date', $item->scheme_snapshot['base_salary_status']);
+        // Gaji pokok tetap dimasukkan di draf (tidak 0) dengan status unpaid, tetapi tidak bisa dicairkan sebelum akhir bulan
+        $this->assertGreaterThan(0, $item->base_salary);
+        $this->assertSame('unpaid', $item->payment_status);
 
-        // Coba bayar gaji tetap sebelum H-3 akhir bulan -> harus Exception
+        // Coba bayar gaji tetap sebelum H-7 akhir bulan -> harus Exception
         $this->expectException(\DomainException::class);
         $this->expectExceptionMessage('Pembayaran gaji staf tetap terkunci hingga mendekati akhir bulan');
         $this->serviceManager->markPayrollItemPaid($item);
@@ -421,11 +450,11 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
             periodStart: '2026-10-01',
             periodEnd: '2026-10-31',
             userId: $this->ownerUser->id,
-            membershipId: $this->barber->id,
+            membershipId: $this->fixedStaff->id,
         );
         $this->serviceManager->approvePayroll($octoberPayroll, $this->ownerUser->id);
 
-        $octoberItem = $octoberPayroll->items()->where('membership_id', $this->barber->id)->firstOrFail();
+        $octoberItem = $octoberPayroll->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
         $this->assertSame(2000000, $octoberItem->base_salary);
         $this->assertSame('unpaid', $octoberItem->payment_status);
 
@@ -444,11 +473,44 @@ final class PayrollWeeklyAndBaseSalaryRulesTest extends TestCase
             periodStart: '2026-11-01',
             periodEnd: '2026-11-07',
             userId: $this->ownerUser->id,
-            membershipId: $this->barber->id,
+            membershipId: $this->fixedStaff->id,
         );
-        $novemberItemW1 = $novemberPayrollW1->items()->where('membership_id', $this->barber->id)->firstOrFail();
+        $novemberItemW1 = $novemberPayrollW1->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
 
         // Gaji pokok November statusnya 'held_period' (bukan 'already_paid' karena Oktober dan November beda bulan kalender)
         $this->assertSame('held_period', $novemberItemW1->scheme_snapshot['base_salary_status']);
+    }
+
+    public function test_alpha_absent_does_not_deduct_salary_and_records_days_in_snapshot(): void
+    {
+        // 1. Waktu tes di akhir November 2026
+        Carbon::setTestNow('2026-11-28 22:00:00');
+
+        // Buat 1 absensi alpha di bulan November (tanggal 10 November 2026)
+        \App\Models\Attendance::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'membership_id' => $this->fixedStaff->id,
+            'date' => '2026-11-10',
+            'status' => 'absent',
+            'late_minutes' => 0,
+        ]);
+
+        // 2. Generate Payroll Bulan November (2026-11-01 s/d 2026-11-30)
+        $payrollNovember = $this->serviceManager->generatePayroll(
+            tenantId: $this->tenant->id,
+            branchId: null,
+            periodStart: '2026-11-01',
+            periodEnd: '2026-11-30',
+            userId: $this->ownerUser->id,
+            membershipId: $this->fixedStaff->id,
+        );
+
+        $itemNov = $payrollNovember->items()->where('membership_id', $this->fixedStaff->id)->firstOrFail();
+        
+        // Verifikasi Aturan: Denda alpha ditiadakan (deduction_total = 0, net_total utuh)
+        $this->assertSame(0, $itemNov->deduction_total);
+        $this->assertEquals(1, $itemNov->scheme_snapshot['alpha_days'] ?? 0);
+        $this->assertEquals($itemNov->gross_total, $itemNov->net_total);
     }
 }

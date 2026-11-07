@@ -174,7 +174,7 @@
                             <textarea
                                 name="address"
                                 rows="2"
-                                class="w-full text-xs font-semibold p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50"
+                                class="w-full text-xs font-semibold p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 bg-zinc-50"
                                 placeholder="Contoh: Jl. Jend. Sudirman No. 45, Jakarta Selatan"
                             >{{ old('address') }}</textarea>
                         </div>

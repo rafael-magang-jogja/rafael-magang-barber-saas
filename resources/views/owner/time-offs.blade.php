@@ -106,7 +106,7 @@
     </div>
 
     <!-- Tabel Daftar Pengajuan & Izin Libur -->
-    <x-ui.card>
+    <x-ui.card data-pagination-container="owner-time-offs">
         <x-slot:header>
             <div class="flex flex-wrap items-center justify-between gap-2 w-full">
                 <div>
@@ -208,19 +208,22 @@
                             <td class="text-right pr-2">
                                 @if($to->status === 'pending')
                                     <div class="inline-flex items-center gap-1.5">
-                                        <form method="POST" action="{{ route('owner.time-offs.approve', $to) }}">
-                                            @csrf
-                                            <button
-                                                type="submit"
-                                                class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-2xs"
-                                                title="Setujui permohonan izin ini"
-                                            >
-                                                Setujui
-                                            </button>
-                                        </form>
                                         <button
                                             type="button"
-                                            onclick="openRejectModal({{ $to->id }}, '{{ addslashes($to->membership?->display_name ?? $to->membership?->user?->name) }}')"
+                                            data-id="{{ $to->id }}"
+                                            data-staff="{{ $to->membership?->display_name ?? $to->membership?->user?->name ?? 'Staff' }}"
+                                            data-summary="{{ $to->type_label }} &bull; {{ $to->date_from->format('d M') }}{{ $to->date_from->ne($to->date_to) ? ' - ' . $to->date_to->format('d M') : '' }}"
+                                            onclick="openApproveModal(Number(this.dataset.id), this.dataset.staff, this.dataset.summary)"
+                                            class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-2xs"
+                                            title="Setujui permohonan izin ini"
+                                        >
+                                            Setujui
+                                        </button>
+                                        <button
+                                            type="button"
+                                            data-id="{{ $to->id }}"
+                                            data-staff="{{ $to->membership?->display_name ?? $to->membership?->user?->name ?? 'Staff' }}"
+                                            onclick="openRejectModal(Number(this.dataset.id), this.dataset.staff)"
                                             class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition cursor-pointer shadow-2xs"
                                             title="Tolak permohonan izin ini"
                                         >
@@ -347,19 +350,22 @@
 
                         @if($to->status === 'pending')
                             <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-                                <form method="POST" action="{{ route('owner.time-offs.approve', $to) }}" class="flex-1 sm:flex-initial">
-                                    @csrf
-                                    <button
-                                        type="submit"
-                                        class="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-2xs text-center"
-                                        title="Setujui permohonan izin ini"
-                                    >
-                                        Setujui
-                                    </button>
-                                </form>
                                 <button
                                     type="button"
-                                    onclick="openRejectModal({{ $to->id }}, '{{ addslashes($to->membership?->display_name ?? $to->membership?->user?->name) }}')"
+                                    data-id="{{ $to->id }}"
+                                    data-staff="{{ $to->membership?->display_name ?? $to->membership?->user?->name ?? 'Staff' }}"
+                                    data-summary="{{ $to->type_label }} &bull; {{ $to->date_from->format('d M') }}{{ $to->date_from->ne($to->date_to) ? ' - ' . $to->date_to->format('d M') : '' }}"
+                                    onclick="openApproveModal(Number(this.dataset.id), this.dataset.staff, this.dataset.summary)"
+                                    class="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-2xs text-center"
+                                    title="Setujui permohonan izin ini"
+                                >
+                                    Setujui
+                                </button>
+                                <button
+                                    type="button"
+                                    data-id="{{ $to->id }}"
+                                    data-staff="{{ $to->membership?->display_name ?? $to->membership?->user?->name ?? 'Staff' }}"
+                                    onclick="openRejectModal(Number(this.dataset.id), this.dataset.staff)"
                                     class="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition cursor-pointer shadow-2xs text-center"
                                     title="Tolak permohonan izin ini"
                                 >
@@ -384,21 +390,22 @@
     </x-ui.card>
 
     <!-- Modal Form Tambah Izin / Libur Baru (Owner Input) -->
-    <dialog id="modal-create-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/50 w-[calc(100%-2rem)] max-w-lg mx-auto my-auto">
-        <div class="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-            <div>
-                <h3 class="font-extrabold text-sm text-zinc-900 flex items-center gap-2">
-                    <x-ui.icon name="plus" class="w-4 h-4 text-amber-600" />
-                    <span>Input Izin / Libur Barber Baru</span>
-                </h3>
-                <p class="text-xs text-zinc-400 mt-0.5">Catat libur atau izin barber secara langsung oleh Owner / Manajemen</p>
+    <dialog id="modal-create-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/50 w-[calc(100%-2rem)] max-w-lg max-h-[90vh] max-h-[90dvh] mx-auto my-auto overflow-hidden border border-zinc-200">
+        <div class="flex flex-col max-h-[90vh] max-h-[90dvh]">
+            <div class="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
+                <div>
+                    <h3 class="font-extrabold text-sm text-zinc-900 flex items-center gap-2">
+                        <x-ui.icon name="plus" class="w-4 h-4 text-amber-600" />
+                        <span>Input Izin / Libur Barber Baru</span>
+                    </h3>
+                    <p class="text-xs text-zinc-400 mt-0.5">Catat libur atau izin barber secara langsung oleh Owner / Manajemen</p>
+                </div>
+                <button type="button" onclick="document.getElementById('modal-create-time-off').close()" class="text-zinc-400 hover:text-zinc-700">
+                    <x-ui.icon name="x" class="w-4 h-4" />
+                </button>
             </div>
-            <button type="button" onclick="document.getElementById('modal-create-time-off').close()" class="text-zinc-400 hover:text-zinc-700">
-                <x-ui.icon name="x" class="w-4 h-4" />
-            </button>
-        </div>
 
-        <form method="POST" action="{{ route('owner.time-offs.store') }}" enctype="multipart/form-data" class="p-5 space-y-4">
+            <form method="POST" action="{{ route('owner.time-offs.store') }}" enctype="multipart/form-data" class="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
             @csrf
 
             <div>
@@ -472,48 +479,91 @@
                 </x-ui.button>
             </div>
         </form>
-    </dialog>
+    </div>
+</dialog>
 
-    <!-- Modal Form Tolak Pengajuan -->
-    <dialog id="modal-reject-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/50 w-[calc(100%-2rem)] max-w-md mx-auto my-auto">
-        <div class="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-            <div>
-                <h3 class="font-extrabold text-sm text-zinc-900 flex items-center gap-2">
-                    <x-ui.icon name="x" class="w-4 h-4 text-rose-600" />
-                    <span>Tolak Permohonan Libur: <span id="modal-reject-barber-name" class="text-rose-600"></span></span>
-                </h3>
-            </div>
-            <button type="button" onclick="document.getElementById('modal-reject-time-off').close()" class="text-zinc-400 hover:text-zinc-700">
-                <x-ui.icon name="x" class="w-4 h-4" />
-            </button>
-        </div>
-
-        <form id="form-reject-time-off" method="POST" action="" class="p-5 space-y-4">
-            @csrf
-            <div>
-                <label class="block text-xs font-bold text-zinc-700 mb-1.5">Alasan Penolakan (Opsional)</label>
-                <textarea name="notes" rows="3" placeholder="Contoh: Jadwal antrean hari tersebut sangat padat, mohon ajukan di hari lain." class="w-full text-xs font-medium p-3 rounded-xl bg-white border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-rose-500/40"></textarea>
+    <!-- Modal Konfirmasi Terima / Setujui Izin -->
+    <dialog id="modal-approve-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/60 w-[calc(100%-2rem)] max-w-sm mx-auto my-auto overflow-hidden border border-zinc-200">
+        <div class="p-5 text-center space-y-4">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+                <x-ui.icon name="check-circle" class="w-6 h-6 stroke-[2.5]" />
             </div>
 
-            <div class="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+            <div class="space-y-1">
+                <h3 class="font-extrabold text-sm text-zinc-900">Setujui Permohonan Izin?</h3>
+                <p class="text-xs text-zinc-500 leading-relaxed">
+                    Setujui izin untuk <strong id="modal-approve-staff-name" class="text-zinc-800"></strong> (<span id="modal-approve-staff-info" class="text-zinc-600 font-medium"></span>). Jadwal shift staf akan dibebaskan &amp; jam kerja diakui penuh.
+                </p>
+            </div>
+
+            <form id="form-approve-time-off" method="POST" action="" class="pt-2 flex items-center justify-center gap-2">
+                @csrf
                 <button
                     type="button"
-                    onclick="document.getElementById('modal-reject-time-off').close()"
-                    class="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-800 bg-zinc-200 hover:bg-zinc-300 transition cursor-pointer"
+                    onclick="document.getElementById('modal-approve-time-off').close()"
+                    class="w-1/2 py-2.5 px-4 rounded-xl text-xs font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
                 >
                     Batal
                 </button>
                 <button
                     type="submit"
-                    class="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-xs"
+                    class="w-1/2 py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-xs"
                 >
-                    Konfirmasi Tolak Izin
+                    Ya, Setujui
                 </button>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Modal Konfirmasi Tolak Pengajuan Izin -->
+    <dialog id="modal-reject-time-off" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/60 w-[calc(100%-2rem)] max-w-sm mx-auto my-auto overflow-hidden border border-zinc-200">
+        <div class="p-5 space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0 shadow-inner">
+                    <x-ui.icon name="x-circle" class="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div class="min-w-0">
+                    <h3 class="font-extrabold text-sm text-zinc-900">Tolak Permohonan Izin</h3>
+                    <p class="text-xs text-zinc-500 truncate">
+                        Staf: <strong id="modal-reject-barber-name" class="text-zinc-800"></strong>
+                    </p>
+                </div>
             </div>
-        </form>
+
+            <form id="form-reject-time-off" method="POST" action="" class="space-y-3.5">
+                @csrf
+                <div>
+                    <label class="block text-xs font-bold text-zinc-700 mb-1.5">Alasan Penolakan (Opsional)</label>
+                    <textarea name="notes" rows="2.5" placeholder="Contoh: Jadwal antrean hari tersebut sangat padat..." class="w-full text-xs font-medium p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/40"></textarea>
+                </div>
+
+                <div class="pt-1 flex items-center justify-end gap-2">
+                    <button
+                        type="button"
+                        onclick="document.getElementById('modal-reject-time-off').close()"
+                        class="w-1/2 py-2.5 px-4 rounded-xl text-xs font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer text-center"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="submit"
+                        class="w-1/2 py-2.5 px-4 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-xs text-center"
+                    >
+                        Ya, Tolak Izin
+                    </button>
+                </div>
+            </form>
+        </div>
     </dialog>
 
     <script>
+        function openApproveModal(timeOffId, staffName, infoText) {
+            document.getElementById('modal-approve-staff-name').textContent = staffName;
+            document.getElementById('modal-approve-staff-info').textContent = infoText || '';
+            document.getElementById('form-approve-time-off').action = `/owner/time-offs/${timeOffId}/approve`;
+            document.getElementById('modal-approve-time-off').showModal();
+        }
+
         function openRejectModal(timeOffId, barberName) {
             document.getElementById('modal-reject-barber-name').textContent = barberName;
             document.getElementById('form-reject-time-off').action = `/owner/time-offs/${timeOffId}/reject`;

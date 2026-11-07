@@ -225,15 +225,18 @@
                     placeholder="Fade · Undercut"
                 />
 
-                <x-ui.select
-                    label="Skema Gaji *"
-                    name="salary_scheme_id"
-                    icon="banknote"
-                    direction="up"
-                    :options="$schemeOptions"
-                    :value="$editingStaff?->salary_scheme_id"
-                    search-placeholder="Cari skema gaji..."
-                />
+                <div>
+                    <x-ui.select
+                        label="Skema Gaji &amp; Komisi *"
+                        name="salary_scheme_id"
+                        icon="banknote"
+                        direction="up"
+                        :options="$schemeOptions"
+                        :value="$editingStaff?->salary_scheme_id"
+                        search-placeholder="Cari skema..."
+                    />
+                    <p class="text-[11px] text-zinc-400 mt-1">Staff Barber murni sistem komisi per kepala / layanan (tanpa gaji pokok). Kasir menggunakan skema gaji tetap.</p>
+                </div>
 
                 @if($editingStaff)
                     <div class="sm:col-span-2 xl:col-span-1">

@@ -1,27 +1,30 @@
 <x-layouts.guest :title="'Daftar Akun di ' . $tenant->name" :tenant="$tenant">
-    <div class="space-y-1">
-        <h1 class="text-2xl font-black tracking-tight text-zinc-900">Daftar Akun Baru</h1>
-        <p class="text-xs text-zinc-500">
+    <div class="text-center mb-5">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20 mb-3.5">
+            <x-ui.icon name="user" class="w-5 h-5" />
+        </div>
+        <h1 class="text-2xl font-black tracking-tight text-zinc-900 leading-tight">Daftar Akun</h1>
+        <p class="text-xs text-zinc-500 mt-1 max-w-xs mx-auto">
             Daftar sekali untuk kemudahan booking &amp; cek antrean di <span class="font-bold text-zinc-800">{{ $tenant->name }}</span>.
         </p>
     </div>
 
-    <form method="POST" action="{{ route('tenant.register.store', $tenant->slug) }}" class="mt-6 space-y-3.5">
+    <form method="POST" action="{{ route('tenant.register.store', $tenant->slug) }}" class="space-y-3.5">
         @csrf
 
         <x-ui.input
-            label="Nama Lengkap"
+            label="Nama Lengkap *"
             name="name"
             :value="old('name')"
-            placeholder="Rafael"
+            placeholder="Contoh: Budi Santoso"
             required
             autofocus />
 
         <x-ui.input
-            label="Nomor WhatsApp / HP"
+            label="Nomor WhatsApp / HP *"
             name="phone"
             :value="old('phone')"
-            placeholder="08123456789"
+            placeholder="081234567890"
             required />
 
         <x-ui.input
@@ -32,46 +35,46 @@
             placeholder="nama@domain.com" />
 
         <x-ui.input
-            label="Kata Sandi (Min. 8 karakter)"
+            label="Kata Sandi *"
             name="password"
             type="password"
-            placeholder="••••••••"
+            placeholder="Minimal 8 karakter"
             required />
 
         <x-ui.input
-            label="Konfirmasi Kata Sandi"
+            label="Konfirmasi Kata Sandi *"
             name="password_confirmation"
             type="password"
-            placeholder="••••••••"
+            placeholder="Ulangi kata sandi"
             required />
 
         <div class="pt-2">
-            <button
+            <x-ui.button
                 type="submit"
-                class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-white font-extrabold text-sm shadow-md transition hover:brightness-110 active:scale-[0.98] cursor-pointer"
-                style="background-color: {{ $tenant->brand_color ?? '#D97706' }}; box-shadow: 0 4px 14px 0 {{ $tenant->brand_color ?? '#D97706' }}55;"
+                variant="primary"
+                size="lg"
+                class="w-full !rounded-xl active:scale-[0.99] font-extrabold text-sm tracking-wide shadow-md shadow-amber-500/20 py-3"
             >
-                <span>Daftar Akun Sekarang</span>
-                <x-ui.icon name="arrow-right" class="w-4 h-4" />
-            </button>
+                <span>Daftar Sekarang</span>
+                <x-ui.icon name="arrow-right" class="w-4 h-4 ml-1" />
+            </x-ui.button>
         </div>
     </form>
 
-    <div class="mt-6 text-center text-xs text-zinc-500 pt-4 border-t border-zinc-100 space-y-2">
+    <div class="mt-5 text-center text-xs text-zinc-500 pt-4 border-t border-zinc-100 space-y-2">
         <div>
             <span>Sudah memiliki akun?</span>
             <a
-                href="{{ route('tenant.login', $tenant->slug) }}"
-                class="font-black hover:underline ml-1"
-                style="color: {{ $tenant->brand_color ?? '#D97706' }};"
+                href="{{ $tenant->loginUrl() }}"
+                class="font-bold text-amber-600 hover:text-amber-700 hover:underline ml-1"
             >
-                Masuk ke Akun
+                Login
             </a>
         </div>
 
         <div class="pt-2">
             <a
-                href="{{ route('customer.portal', $tenant->slug) }}"
+                href="{{ $tenant->customerPortalUrl() }}"
                 class="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-900 font-medium transition text-xs"
             >
                 <x-ui.icon name="arrow-left" class="w-3.5 h-3.5" />

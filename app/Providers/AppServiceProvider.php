@@ -21,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \App\Support\Platform\PlatformConfig::flushMemo();
         Model::preventLazyLoading(! $this->app->isProduction());
         \Illuminate\Pagination\Paginator::useTailwind();
     }

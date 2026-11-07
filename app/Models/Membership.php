@@ -65,6 +65,11 @@ final class Membership extends Model
 
     public function getEffectiveBaseSalaryAttribute(): int
     {
+        // Staf Barber tidak ada model gaji pokok, murni komisi per kepala / layanan
+        if ($this->role === Role::Barber || (is_object($this->role) && $this->role->value === 'barber') || $this->role === 'barber') {
+            return 0;
+        }
+
         if ($this->custom_base_salary !== null) {
             return (int) $this->custom_base_salary;
         }
@@ -80,5 +85,45 @@ final class Membership extends Model
     public function attendances(): HasMany
     {
         return $this->hasMany(Attendance::class);
+    }
+
+    /**
+     * Generate secure attendance QR token for a given date (default today).
+     */
+    public function getAttendanceQrToken(?string $date = null): string
+    {
+        $dateStr = $date ?? now()->toDateString();
+        $secret = (string) config('app.key', 'barberos-attendance-secret');
+
+        return hash_hmac('sha256', "membership:{$this->id}:tenant:{$this->tenant_id}:date:{$dateStr}", $secret);
+    }
+
+    /**
+     * Get structured JSON payload to encode in the staff attendance QR code.
+     */
+    public function getAttendanceQrPayload(?string $date = null): string
+    {
+        $dateStr = $date ?? now()->toDateString();
+        $token = $this->getAttendanceQrToken($dateStr);
+
+        return (string) json_encode([
+            'type' => 'staff_attendance',
+            'membership_id' => $this->id,
+            'tenant_id' => $this->tenant_id,
+            'user_id' => $this->user_id,
+            'name' => $this->display_name ?? $this->user?->name ?? 'Staff',
+            'date' => $dateStr,
+            'token' => substr($token, 0, 32),
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Verify whether an attendance QR token is authentic for a given date.
+     */
+    public function verifyAttendanceQrToken(string $token, ?string $date = null): bool
+    {
+        $expectedToken = substr($this->getAttendanceQrToken($date), 0, 32);
+
+        return hash_equals($expectedToken, $token);
     }
 }

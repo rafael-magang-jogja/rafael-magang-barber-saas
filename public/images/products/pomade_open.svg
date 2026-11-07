@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="openClay" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#71717a"/>
+      <stop offset="50%" stop-color="#52525b"/>
+      <stop offset="100%" stop-color="#3f3f46"/>
+    </radialGradient>
+    <linearGradient id="jarRim" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#b45309"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shadow -->
+  <ellipse cx="100" cy="168" rx="60" ry="12" fill="#000000" opacity="0.45"/>
+
+  <!-- Jar Base (Open view perspective) -->
+  <rect x="42" y="94" width="116" height="66" rx="14" fill="#18181b" stroke="#27272a" stroke-width="2"/>
+  <rect x="48" y="112" width="104" height="40" rx="6" fill="#09090b" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
+  <text x="100" y="132" text-anchor="middle" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="8" font-weight="900" letter-spacing="1">BARBEROS</text>
+  <text x="100" y="143" text-anchor="middle" fill="#a1a1aa" font-family="system-ui, sans-serif" font-size="6" font-weight="600">CLAY TEXTURE</text>
+
+  <!-- Metallic Gold Jar Rim -->
+  <ellipse cx="100" cy="94" rx="58" ry="18" fill="url(#jarRim)" stroke="#78350f" stroke-width="1.5"/>
+
+  <!-- Inside Clay Paste (Swirled matte surface) -->
+  <ellipse cx="100" cy="94" rx="50" ry="14" fill="url(#openClay)"/>
+  <path d="M75 94 Q100 86 125 94 Q105 102 75 94 Z" fill="#27272a" opacity="0.4"/>
+  <path d="M85 92 Q100 98 115 92" stroke="#a1a1aa" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+  <circle cx="102" cy="93" r="3" fill="#71717a" opacity="0.7"/>
+
+  <!-- Open Lid resting in the back -->
+  <ellipse cx="152" cy="80" rx="30" ry="10" fill="url(#jarRim)" stroke="#78350f" stroke-width="1" transform="rotate(-25 152 80)"/>
+</svg>

@@ -170,16 +170,160 @@
                                     />
                                 </div>
                             </div>
-                        </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-zinc-700 mb-1">Pengumuman Pelanggan</label>
-                            <textarea
-                                name="announcement"
-                                rows="2"
-                                placeholder="Contoh: Buka setiap hari 10.00 - 21.00 WIB."
-                                class="w-full text-xs font-medium px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
-                            >{{ old('announcement', $settings['announcement'] ?? '') }}</textarea>
+                            <!-- Pengaturan Rekening Bank & Gambar QRIS untuk Booking Pelanggan -->
+                            <div class="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3.5">
+                                <div class="flex items-center gap-2">
+                                    <x-ui.icon name="credit-card" class="w-4 h-4 text-amber-600 shrink-0" />
+                                    <div>
+                                        <h4 class="text-xs font-extrabold text-amber-950">Rekening Bank &amp; QRIS Pembayaran Booking</h4>
+                                        <p class="text-[11px] text-zinc-500">Informasi ini akan langsung ditampilkan kepada pelanggan saat melakukan reservasi booking jadwal.</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nama Bank</label>
+                                        <input
+                                            type="text"
+                                            name="bank_name"
+                                            value="{{ old('bank_name', $settings['bank_name'] ?? 'BCA') }}"
+                                            placeholder="Contoh: BCA / Mandiri / BRI"
+                                            class="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nomor Rekening</label>
+                                        <input
+                                            type="text"
+                                            name="bank_account_number"
+                                            value="{{ old('bank_account_number', $settings['bank_account_number'] ?? '') }}"
+                                            placeholder="Contoh: 8830123456"
+                                            class="w-full text-xs font-semibold font-mono px-3 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Atas Nama (Pemilik)</label>
+                                        <input
+                                            type="text"
+                                            name="bank_account_holder"
+                                            value="{{ old('bank_account_holder', $settings['bank_account_holder'] ?? $tenant->name) }}"
+                                            placeholder="Contoh: {{ $tenant->name }}"
+                                            class="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div
+                                    x-data="{
+                                        previewUrl: null,
+                                        fileName: '',
+                                        removeExisting: false,
+                                        handleFileChange(event) {
+                                            const file = event.target.files[0];
+                                            if (file) {
+                                                this.fileName = file.name;
+                                                this.previewUrl = URL.createObjectURL(file);
+                                                this.removeExisting = false;
+                                            }
+                                        },
+                                        clearFile() {
+                                            this.previewUrl = null;
+                                            this.fileName = '';
+                                            $refs.qrisInput.value = '';
+                                        }
+                                    }"
+                                    class="space-y-2 pt-1"
+                                >
+                                    <div class="flex items-center justify-between">
+                                        <label class="block text-xs font-bold text-zinc-800">
+                                            Stiker / Gambar Barcode QRIS
+                                        </label>
+                                        <span class="text-[10px] font-bold text-zinc-500 bg-white px-2 py-0.5 rounded-md border border-zinc-200">
+                                            Opsional
+                                        </span>
+                                    </div>
+
+                                    @if(!empty($settings['qris_image_path']))
+                                        <div x-show="!removeExisting" class="flex items-center gap-3 p-3 bg-white rounded-2xl border border-zinc-200 shadow-2xs">
+                                            <img src="{{ Storage::url($settings['qris_image_path']) }}" alt="QRIS" class="w-16 h-16 object-contain rounded-xl border border-zinc-100 bg-zinc-50 p-1 shrink-0" />
+                                            <div class="text-xs min-w-0 flex-1">
+                                                <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mb-1">
+                                                    <x-ui.icon name="check-circle" class="w-3 h-3 text-emerald-600" />
+                                                    <span>QRIS Aktif Saat Ini</span>
+                                                </span>
+                                                <p class="text-[11px] text-zinc-500">Gambar ini sedang ditampilkan ke pelanggan saat reservasi online.</p>
+                                                <label class="inline-flex items-center gap-1.5 mt-1.5 text-rose-600 hover:text-rose-700 font-bold cursor-pointer text-xs transition">
+                                                    <input type="checkbox" name="remove_qris_image" value="1" x-model="removeExisting" class="rounded text-rose-600 focus:ring-rose-500" />
+                                                    <span>Hapus gambar QRIS ini</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div x-show="removeExisting" x-cloak class="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center justify-between">
+                                            <span class="font-medium">Gambar QRIS lama akan dihapus setelah Anda menekan tombol simpan.</span>
+                                            <button type="button" @click="removeExisting = false" class="font-bold underline text-xs ml-2 cursor-pointer">Batal Hapus</button>
+                                        </div>
+                                    @endif
+
+                                    <div
+                                        @click="$refs.qrisInput.click()"
+                                        class="group relative border-2 border-dashed border-zinc-300 hover:border-amber-500 bg-white hover:bg-amber-50/20 rounded-2xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2"
+                                    >
+                                        <input
+                                            x-ref="qrisInput"
+                                            type="file"
+                                            name="qris_image"
+                                            accept="image/png,image/jpeg,image/webp"
+                                            class="hidden"
+                                            @change="handleFileChange($event)"
+                                        />
+
+                                        <template x-if="!previewUrl">
+                                            <div class="flex flex-col items-center gap-1.5 py-1">
+                                                <div class="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 group-hover:scale-105 grid place-items-center transition shadow-2xs">
+                                                    <x-ui.icon name="qr-code" class="w-5 h-5" />
+                                                </div>
+                                                <div>
+                                                    <p class="text-xs font-bold text-zinc-800 group-hover:text-amber-800 transition">
+                                                        @if(!empty($settings['qris_image_path']))
+                                                            Klik untuk Mengunggah / Mengganti Gambar QRIS
+                                                        @else
+                                                            Klik untuk Memilih Gambar / Barcode QRIS
+                                                        @endif
+                                                    </p>
+                                                    <p class="text-[11px] text-zinc-400 mt-0.5">
+                                                        Format PNG, JPG, atau WebP (Maksimal 2 MB)
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="previewUrl">
+                                            <div class="flex flex-col items-center gap-2 py-1 w-full" @click.stop>
+                                                <div class="relative p-1.5 bg-white rounded-2xl border border-amber-300 shadow-xs">
+                                                    <img :src="previewUrl" alt="Preview QRIS Baru" class="w-24 h-24 object-contain rounded-xl" />
+                                                </div>
+                                                <div class="flex items-center gap-2 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 text-xs">
+                                                    <x-ui.icon name="check-circle" class="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                                    <span class="font-bold text-emerald-950 truncate max-w-[200px]" x-text="fileName"></span>
+                                                    <button
+                                                        type="button"
+                                                        @click.stop="clearFile()"
+                                                        class="text-rose-600 hover:text-rose-800 font-bold ml-1 text-xs cursor-pointer"
+                                                    >
+                                                        Hapus
+                                                    </button>
+                                                </div>
+                                                <p class="text-[10px] text-zinc-400">Klik kembali pada kotak untuk mengganti dengan berkas lain</p>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <p class="text-[11px] text-zinc-500 leading-relaxed">
+                                        Upload gambar barcode QRIS statis outlet Anda agar pelanggan dapat langsung men-scan kode pembayaran dari HP saat melakukan reservasi booking jadwal online.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="pt-3 flex items-center justify-end">
@@ -455,8 +599,7 @@
                                     />
                                     <div
                                         id="logo-placeholder-icon"
-                                        class="w-full h-full grid place-items-center text-white font-black"
-                                        style="background-color: {{ $tenant->brand_color ?? \App\Support\Platform\PlatformConfig::themeColor() }};"
+                                        class="w-full h-full grid place-items-center bg-amber-500 text-zinc-950 font-black"
                                     >
                                         <x-ui.icon name="{{ \App\Support\Platform\PlatformConfig::logoIcon() }}" class="w-10 h-10" />
                                     </div>
@@ -550,29 +693,34 @@
                             <div class="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 space-y-3">
                                 <div class="flex items-center gap-3">
                                     <div class="w-10 h-10 rounded-xl bg-white border border-zinc-200 shadow-2xs flex items-center justify-center shrink-0 overflow-hidden p-1.5">
-                                        <img src="{{ $tenant->faviconUrl() }}" alt="Favicon Barbershop" class="w-full h-full object-contain" />
+                                        <img src="{{ $tenant->faviconUrl() }}" id="favicon-preview-img" alt="Favicon Barbershop" class="w-full h-full object-contain" />
                                     </div>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-xs font-bold text-zinc-900 truncate">Favicon Subdomain</p>
-                                        <p class="text-[11px] text-zinc-500">Khusus subdomain barbershop Anda</p>
+                                        <p class="text-xs font-bold text-zinc-900 truncate">Favicon Tab Browser</p>
+                                        <p class="text-[11px] text-zinc-500">Ikon unik tab browser portal barbershop</p>
                                     </div>
                                 </div>
 
                                 <label class="w-full cursor-pointer inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300 shadow-2xs transition">
                                     <x-ui.icon name="upload" class="w-3.5 h-3.5 text-zinc-600" />
-                                    <span>Upload Berkas Favicon (.ico / .svg)</span>
+                                    <span>Upload Berkas Favicon</span>
                                     <input
                                         type="file"
                                         name="favicon"
                                         id="favicon-input"
                                         form="form-barbershop-settings"
-                                        accept=".ico,.png,.svg"
+                                        accept=".ico,.png,.svg,image/x-icon,image/png,image/svg+xml"
                                         class="hidden"
                                     />
                                 </label>
+
+                                <p id="favicon-error" class="text-[11px] font-semibold text-rose-600 text-center hidden"></p>
                                 @error('favicon')
                                     <p class="text-[11px] font-semibold text-rose-600 text-center">{{ $message }}</p>
                                 @enderror
+
+                                <p id="favicon-file-name" class="text-[11px] text-zinc-500 text-center truncate">Belum ada file favicon dipilih</p>
+                                <p class="text-[10px] text-zinc-400 text-center">Format: .ICO, .PNG, .SVG (Maks. 2MB)</p>
 
                                 @if(! empty($tenant->settings['favicon_path']))
                                     <div class="pt-2 border-t border-zinc-200/80">
@@ -583,43 +731,28 @@
                                     </div>
                                 @endif
                             </div>
-                        @elseif($hasBrandColor)
-                            <!-- Pro Tier: Simpel, Bersih, dan Kompak -->
+                        @else
+                            <!-- Starter & Pro Tier: Favicon Otomatis Ikon Platform Resmi + Warna Brand -->
                             <div class="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 space-y-2.5">
                                 <div class="flex items-center gap-3">
                                     <div class="w-10 h-10 rounded-xl bg-white border border-zinc-200 shadow-2xs flex items-center justify-center shrink-0 overflow-hidden p-1.5">
-                                        <img src="{{ $tenant->faviconUrl() }}" alt="Favicon Barbershop" class="w-full h-full object-contain" />
+                                        <img src="{{ $tenant->faviconUrl() }}" id="favicon-preview-img" alt="Favicon Barbershop" class="w-full h-full object-contain" />
                                     </div>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-xs font-bold text-zinc-900 truncate">Favicon Otomatis</p>
-                                        <p class="text-[11px] text-zinc-500">Sinkron dengan logo &amp; warna brand</p>
+                                        <div class="flex items-center gap-1.5">
+                                            <p class="text-xs font-bold text-zinc-900 truncate">Favicon Otomatis</p>
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Aktif</span>
+                                        </div>
+                                        <p class="text-[11px] text-zinc-500">Ikon resmi platform berlatar warna brand barbershop</p>
                                     </div>
                                 </div>
                                 <div class="pt-2 border-t border-zinc-200/60 flex items-center justify-between text-[11px]">
-                                    <span class="text-zinc-500">Upload berkas tersendiri?</span>
+                                    <span class="text-zinc-500">Upload favicon kustom (.ico/.png)?</span>
                                     <a href="{{ route('owner.subscription') }}" class="font-bold text-amber-600 hover:text-amber-700 hover:underline inline-flex items-center gap-0.5">
                                         <span>Paket Business</span>
                                         <x-ui.icon name="chevron-right" class="w-3 h-3" />
                                     </a>
                                 </div>
-                            </div>
-                        @else
-                            <!-- Starter Tier: Locked -->
-                            <div class="w-full p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-center space-y-2">
-                                <div class="flex items-center justify-center gap-1.5 text-amber-900 font-extrabold text-xs">
-                                    <x-ui.icon name="lock" class="w-3.5 h-3.5 text-amber-700" />
-                                    <span>Favicon Barbershop Terkunci</span>
-                                </div>
-                                <p class="text-[11px] text-zinc-500 leading-snug">
-                                    Favicon kustom dengan warna brand aktif mulai paket Pro, dan upload berkas favicon kustom tersedia di paket Business.
-                                </p>
-                                <a
-                                    href="{{ route('owner.subscription') }}"
-                                    class="inline-flex items-center justify-center gap-1.5 w-full py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition shadow-2xs"
-                                >
-                                    <x-ui.icon name="zap" class="w-3.5 h-3.5" />
-                                    <span>Upgrade Paket</span>
-                                </a>
                             </div>
                         @endif
                     </div>
@@ -662,7 +795,7 @@
                                         </a>
                                     @else
                                         <a
-                                            href="{{ route('display.queue', [$tenant->slug, $b->code]) }}"
+                                            href="{{ $tenant->tvDisplayUrl($b->code) }}"
                                             target="_blank"
                                             class="p-1.5 rounded-lg bg-zinc-200/60 hover:bg-zinc-200 text-zinc-700 transition inline-flex items-center justify-center"
                                             title="Buka Layar TV Cabang {{ $b->name }}"
@@ -776,6 +909,69 @@
                     }
                     if (logoPlaceholder) {
                         logoPlaceholder.classList.add('hidden');
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+
+            // Handler Favicon Input
+            const faviconInput = document.getElementById('favicon-input');
+            const faviconFileName = document.getElementById('favicon-file-name');
+            const faviconError = document.getElementById('favicon-error');
+            const faviconPreview = document.getElementById('favicon-preview-img');
+            const removeFaviconCheckbox = document.querySelector('input[name="remove_favicon"]');
+            const initialFaviconSrc = faviconPreview ? faviconPreview.src : '';
+
+            faviconInput?.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (faviconError) {
+                    faviconError.textContent = '';
+                    faviconError.classList.add('hidden');
+                }
+
+                const MAX_FAVICON_SIZE = 2 * 1024 * 1024; // 2MB
+                if (file.size > MAX_FAVICON_SIZE) {
+                    this.value = '';
+                    if (faviconFileName) faviconFileName.textContent = 'Belum ada file favicon dipilih';
+                    if (faviconError) {
+                        faviconError.textContent = 'Ukuran berkas favicon melebihi 2MB! Maksimal 2MB.';
+                        faviconError.classList.remove('hidden');
+                    }
+                    if (faviconPreview) faviconPreview.src = initialFaviconSrc;
+                    return;
+                }
+
+                const allowedFaviconExts = ['ico', 'png', 'svg'];
+                const ext = (file.name.split('.').pop() || '').toLowerCase();
+                if (!allowedFaviconExts.includes(ext)) {
+                    this.value = '';
+                    if (faviconFileName) faviconFileName.textContent = 'Belum ada file favicon dipilih';
+                    if (faviconError) {
+                        faviconError.textContent = 'Format tidak didukung! Harap pilih berkas .ICO, .PNG, atau .SVG.';
+                        faviconError.classList.remove('hidden');
+                    }
+                    if (faviconPreview) faviconPreview.src = initialFaviconSrc;
+                    return;
+                }
+
+                if (removeFaviconCheckbox) {
+                    removeFaviconCheckbox.checked = false;
+                }
+
+                const readableSize = file.size >= 1024 * 1024
+                    ? (file.size / (1024 * 1024)).toFixed(2) + ' MB'
+                    : Math.round(file.size / 1024) + ' KB';
+
+                if (faviconFileName) {
+                    faviconFileName.textContent = `${file.name} (${readableSize})`;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    if (faviconPreview) {
+                        faviconPreview.src = evt.target.result;
                     }
                 };
                 reader.readAsDataURL(file);

@@ -9,7 +9,6 @@ use App\Models\Booking;
 use App\Models\Branch;
 use App\Models\HairColor;
 use App\Models\Tenant;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 final class CurrentTenant
@@ -32,17 +31,54 @@ final class CurrentTenant
 
     private bool $subscriptionResolved = false;
 
+    private ?\App\Models\SubscriptionInvoice $latestPendingInvoice = null;
+
+    private bool $latestPendingInvoiceResolved = false;
+
+    private ?int $pendingTimeOffsCount = null;
+
+    private ?int $superadminPendingInvoicesCount = null;
+
+    private ?string $staffAttendanceStatus = null;
+
+    private bool $staffAttendanceStatusResolved = false;
+
+    private ?\App\Models\Membership $staffMembership = null;
+
+    private bool $staffMembershipResolved = false;
+
+    /**
+     * @var \Illuminate\Database\Eloquent\Collection<int, Branch>|null
+     */
+    private ?\Illuminate\Database\Eloquent\Collection $activeAllowedBranches = null;
+
+    /**
+     * @var array{queue: int, booking: int}|null
+     */
+    private ?array $cashierNavBadgeCounts = null;
+
     public function set(?Tenant $tenant): void
     {
-        if ($this->tenant?->id !== $tenant?->id) {
-            $this->hasWalkinBookingDot = null;
-            $this->hasLowColorStockDot = null;
-            $this->hasPendingTimeOffDot = null;
-            $this->firstBranchCode = null;
-            $this->firstBranchResolved = false;
-            $this->subscription = null;
-            $this->subscriptionResolved = false;
-        }
+        $this->hasWalkinBookingDot = null;
+        $this->hasLowColorStockDot = null;
+        $this->hasPendingTimeOffDot = null;
+        $this->firstBranchCode = null;
+        $this->firstBranchResolved = false;
+        $this->subscription = null;
+        $this->subscriptionResolved = false;
+        $this->latestPendingInvoice = null;
+        $this->latestPendingInvoiceResolved = false;
+        $this->pendingTimeOffsCount = null;
+        $this->superadminPendingInvoicesCount = null;
+        $this->staffAttendanceStatus = null;
+        $this->staffAttendanceStatusResolved = false;
+        $this->staffMembership = null;
+        $this->staffMembershipResolved = false;
+        $this->activeAllowedBranches = null;
+        $this->cashierNavBadgeCounts = null;
+
+        $tenant?->flushMemo();
+        \App\Support\Platform\PlatformConfig::flushMemo();
 
         $this->tenant = $tenant;
     }
@@ -104,25 +140,11 @@ final class CurrentTenant
 
     public function subscription(): ?\App\Models\Subscription
     {
-        if ($this->subscriptionResolved) {
-            return $this->subscription;
-        }
-
-        $this->subscriptionResolved = true;
-
         if ($this->tenant === null) {
             return null;
         }
 
-        $this->subscription = \App\Models\Subscription::query()
-            ->withoutGlobalScope('tenant')
-            ->where('tenant_id', $this->tenant->id)
-            ->with('plan')
-            ->orderByRaw("CASE WHEN status IN ('active', 'trialing') THEN 0 ELSE 1 END")
-            ->latest('id')
-            ->first();
-
-        return $this->subscription;
+        return $this->tenant->activeSubscription();
     }
 
     public function hasWalkinBookingDot(?bool $knownHasPendingBookings = null): bool
@@ -140,9 +162,10 @@ final class CurrentTenant
         }
 
         return $this->hasWalkinBookingDot = Booking::query()
+            ->withoutGlobalScope('tenant')
             ->where('tenant_id', $this->tenant->id)
-            ->whereDate('scheduled_at', now()->toDateString())
-            ->where('status', BookingStatus::Confirmed)
+            ->where('scheduled_at', '>=', now()->startOfDay())
+            ->whereIn('status', [BookingStatus::Confirmed, BookingStatus::Pending])
             ->exists();
     }
 
@@ -183,10 +206,160 @@ final class CurrentTenant
             return $this->hasPendingTimeOffDot = false;
         }
 
-        return $this->hasPendingTimeOffDot = \App\Models\BarberTimeOff::query()
+        return $this->hasPendingTimeOffDot = $this->pendingTimeOffsCount() > 0;
+    }
+
+    public function pendingTimeOffsCount(): int
+    {
+        if ($this->pendingTimeOffsCount !== null) {
+            return $this->pendingTimeOffsCount;
+        }
+
+        if ($this->tenant === null) {
+            return $this->pendingTimeOffsCount = 0;
+        }
+
+        return $this->pendingTimeOffsCount = \App\Models\BarberTimeOff::query()
             ->where('tenant_id', $this->tenant->id)
             ->where('status', 'pending')
-            ->exists();
+            ->count();
+    }
+
+    public function superadminPendingInvoicesCount(): int
+    {
+        if ($this->superadminPendingInvoicesCount !== null) {
+            return $this->superadminPendingInvoicesCount;
+        }
+
+        return $this->superadminPendingInvoicesCount = \App\Models\SubscriptionInvoice::query()
+            ->withoutGlobalScope('tenant')
+            ->where('status', 'pending')
+            ->count();
+    }
+
+    public function staffMembership(?int $userId): ?\App\Models\Membership
+    {
+        if ($this->staffMembershipResolved) {
+            return $this->staffMembership;
+        }
+
+        $this->staffMembershipResolved = true;
+
+        if ($this->tenant === null || $userId === null) {
+            return $this->staffMembership = null;
+        }
+
+        return $this->staffMembership = \App\Models\Membership::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $this->tenant->id)
+            ->where('user_id', $userId)
+            ->where('is_active', true)
+            ->with('branch')
+            ->first();
+    }
+
+    public function staffAttendanceStatus(?int $userId): ?string
+    {
+        if ($this->staffAttendanceStatusResolved) {
+            return $this->staffAttendanceStatus;
+        }
+
+        $this->staffAttendanceStatusResolved = true;
+
+        $staffMembership = $this->staffMembership($userId);
+
+        if ($staffMembership === null) {
+            return $this->staffAttendanceStatus = null;
+        }
+
+        $todayAtt = \App\Models\Attendance::query()
+            ->withoutGlobalScope('tenant')
+            ->where('membership_id', $staffMembership->id)
+            ->whereDate('date', now()->format('Y-m-d'))
+            ->first();
+
+        return $this->staffAttendanceStatus = ($todayAtt !== null && $todayAtt->check_in_at !== null)
+            ? 'checked_in'
+            : 'not_checked_in';
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, Branch>
+     */
+    public function activeAllowedBranches(): \Illuminate\Database\Eloquent\Collection
+    {
+        if ($this->activeAllowedBranches !== null) {
+            return $this->activeAllowedBranches;
+        }
+
+        if ($this->tenant === null) {
+            return $this->activeAllowedBranches = new \Illuminate\Database\Eloquent\Collection();
+        }
+
+        return $this->activeAllowedBranches = $this->tenant->branches()
+            ->whereIn('id', $this->tenant->allowedBranchIds())
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return array{queue: int, booking: int}
+     */
+    public function cashierNavBadgeCounts(): array
+    {
+        if ($this->cashierNavBadgeCounts !== null) {
+            return $this->cashierNavBadgeCounts;
+        }
+
+        if ($this->tenant === null) {
+            return $this->cashierNavBadgeCounts = ['queue' => 0, 'booking' => 0];
+        }
+
+        $tenantId = $this->tenant->id;
+        $today = now()->toDateString();
+        $todayStart = now()->startOfDay();
+        $todayEnd = now()->endOfDay();
+
+        $branchId = null;
+        if (auth()->check()) {
+            $branchId = \App\Models\Membership::query()
+                ->withoutGlobalScope('tenant')
+                ->where('tenant_id', $tenantId)
+                ->where('user_id', auth()->id())
+                ->where('is_active', true)
+                ->value('branch_id');
+        }
+
+        return $this->cashierNavBadgeCounts = [
+            'queue' => \App\Models\QueueTicket::query()
+                ->withoutGlobalScope('tenant')
+                ->where('tenant_id', $tenantId)
+                ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
+                ->whereDate('date', $today)
+                ->whereIn('status', [\App\Enums\QueueStatus::Waiting, \App\Enums\QueueStatus::Called])
+                ->where(function ($sub): void {
+                    $sub->where('status', '!=', \App\Enums\QueueStatus::Waiting->value)
+                        ->orWhere(function ($w): void {
+                            $w->whereNull('booking_id')
+                                ->where('type', '!=', 'booking');
+                        })
+                        ->orWhere(function ($b): void {
+                            $b->where(function ($typeSub) {
+                                $typeSub->whereNotNull('booking_id')
+                                    ->orWhere('type', 'booking');
+                            })->where('priority_at', '<=', now()->addMinutes(15));
+                        });
+                })
+                ->count(),
+            'booking' => Booking::query()
+                ->withoutGlobalScope('tenant')
+                ->where('tenant_id', $tenantId)
+                ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
+                ->where('scheduled_at', '>=', now()->startOfDay())
+                ->whereIn('status', [BookingStatus::Confirmed, BookingStatus::Pending])
+                ->count(),
+        ];
     }
 
     public function isSubscriptionLocked(): bool
@@ -200,11 +373,17 @@ final class CurrentTenant
 
     public function latestPendingInvoice(): ?\App\Models\SubscriptionInvoice
     {
+        if ($this->latestPendingInvoiceResolved) {
+            return $this->latestPendingInvoice;
+        }
+
+        $this->latestPendingInvoiceResolved = true;
+
         if ($this->tenant === null) {
             return null;
         }
 
-        return \App\Models\SubscriptionInvoice::query()
+        return $this->latestPendingInvoice = \App\Models\SubscriptionInvoice::query()
             ->withoutGlobalScope('tenant')
             ->where('tenant_id', $this->tenant->id)
             ->where('status', 'pending')

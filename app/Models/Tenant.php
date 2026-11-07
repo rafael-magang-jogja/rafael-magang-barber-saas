@@ -18,6 +18,25 @@ final class Tenant extends Model
 {
     use SoftDeletes;
 
+    private ?Subscription $memoActiveSubscription = null;
+
+    private bool $memoActiveSubscriptionLoaded = false;
+
+    /**
+     * @var array<int, int>|null
+     */
+    private ?array $memoAllowedBranchIds = null;
+
+    private ?bool $memoCanAddBranch = null;
+
+    private ?bool $memoCanAddStaff = null;
+
+    private ?string $memoFaviconUrl = null;
+
+    private ?string $memoSvgFaviconUrl = null;
+
+    private bool $memoSvgFaviconResolved = false;
+
     protected $fillable = [
         'name',
         'slug',
@@ -27,6 +46,9 @@ final class Tenant extends Model
         'phone',
         'email',
         'address',
+        'payout_bank_name',
+        'payout_account_number',
+        'payout_account_holder',
         'timezone',
         'status',
         'trial_ends_at',
@@ -59,29 +81,54 @@ final class Tenant extends Model
      * URL berkas Favicon (ICO / PNG) khusus untuk tenant ini.
      * Mengikuti prioritas:
      * 1. Berkas custom favicon yang diunggah owner (khusus paket Business).
-     * 2. Favicon hasil generate logo + warna brand tenant (paket Pro & Business).
+     * 2. Favicon hasil generate logo resmi platform + warna brand tenant (Starter, Pro, & Business).
      * 3. Fallback ke platform favicon global.
      */
     public function faviconUrl(): string
     {
-        // 1. Jika ada custom favicon file yang diunggah (Paket Business)
-        $customPath = $this->settings['favicon_path'] ?? null;
-        if (! empty($customPath) && Storage::disk('public')->exists((string) $customPath)) {
-            $mtime = Storage::disk('public')->lastModified((string) $customPath);
-
-            return Storage::disk('public')->url((string) $customPath) . '?v=' . $mtime;
+        if ($this->memoFaviconUrl !== null) {
+            return $this->memoFaviconUrl;
         }
 
-        // 2. Jika ada favicon khusus tenant yang digenerate (Pro / Business)
-        $tenantIcoPath = public_path(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.ico");
+        // 1. Jika ada custom favicon file yang diunggah (Paket Business)
+        $customPath = $this->settings['favicon_path'] ?? null;
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $publicDisk */
+        $publicDisk = Storage::disk('public');
+        if (! empty($customPath) && $publicDisk->exists((string) $customPath)) {
+            $mtime = $publicDisk->lastModified((string) $customPath);
+
+            return $this->memoFaviconUrl = $publicDisk->url((string) $customPath) . '?v=' . $mtime;
+        }
+
+        // 2. Favicon otomatis untuk Starter & Pro (mengikuti icon official platform + warna background tenant)
+        $iconName = PlatformConfig::logoIcon();
+        $brandColor = $this->brand_color ?? PlatformConfig::themeColor();
+        $cleanColor = strtoupper(ltrim($brandColor, '#'));
+
+        $dynamicIcoName = "favicon_{$iconName}_{$cleanColor}.ico";
+        $tenantIcoPath = public_path(FaviconService::TENANTS_DIR . "/{$this->id}/{$dynamicIcoName}");
+
+        if (! file_exists($tenantIcoPath)) {
+            try {
+                FaviconService::generateForTenant($this);
+            } catch (\Throwable) {}
+        }
+
         if (file_exists($tenantIcoPath)) {
             $mtime = filemtime($tenantIcoPath) ?: 1;
 
-            return asset(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.ico") . '?v=' . $mtime;
+            return $this->memoFaviconUrl = asset(FaviconService::TENANTS_DIR . "/{$this->id}/{$dynamicIcoName}") . '?v=' . $mtime;
+        }
+
+        $tenantStaticIco = public_path(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.ico");
+        if (file_exists($tenantStaticIco)) {
+            $mtime = filemtime($tenantStaticIco) ?: 1;
+
+            return $this->memoFaviconUrl = asset(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.ico") . '?v=' . $mtime;
         }
 
         // 3. Fallback ke platform favicon global
-        return PlatformConfig::faviconUrl();
+        return $this->memoFaviconUrl = PlatformConfig::faviconUrl();
     }
 
     /**
@@ -89,21 +136,53 @@ final class Tenant extends Model
      */
     public function svgFaviconUrl(): ?string
     {
-        $customPath = $this->settings['favicon_path'] ?? null;
-        if (! empty($customPath) && str_ends_with(strtolower((string) $customPath), '.svg') && Storage::disk('public')->exists((string) $customPath)) {
-            $mtime = Storage::disk('public')->lastModified((string) $customPath);
-
-            return Storage::disk('public')->url((string) $customPath) . '?v=' . $mtime;
+        if ($this->memoSvgFaviconResolved) {
+            return $this->memoSvgFaviconUrl;
         }
 
-        $tenantSvgPath = public_path(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.svg");
+        $this->memoSvgFaviconResolved = true;
+
+        $customPath = $this->settings['favicon_path'] ?? null;
+        if (! empty($customPath)) {
+            /** @var \Illuminate\Filesystem\FilesystemAdapter $publicDisk */
+            $publicDisk = Storage::disk('public');
+            if (str_ends_with(strtolower((string) $customPath), '.svg') && $publicDisk->exists((string) $customPath)) {
+                $mtime = $publicDisk->lastModified((string) $customPath);
+
+                return $this->memoSvgFaviconUrl = $publicDisk->url((string) $customPath) . '?v=' . $mtime;
+            }
+
+            // Jika kustom file berupa PNG/ICO, JANGAN emit link SVG agar browser tidak meng-override file kustom!
+            return $this->memoSvgFaviconUrl = null;
+        }
+
+        $iconName = PlatformConfig::logoIcon();
+        $brandColor = $this->brand_color ?? PlatformConfig::themeColor();
+        $cleanColor = strtoupper(ltrim($brandColor, '#'));
+
+        $dynamicSvgName = "favicon_{$iconName}_{$cleanColor}.svg";
+        $tenantSvgPath = public_path(FaviconService::TENANTS_DIR . "/{$this->id}/{$dynamicSvgName}");
+
+        if (! file_exists($tenantSvgPath)) {
+            try {
+                FaviconService::generateForTenant($this);
+            } catch (\Throwable) {}
+        }
+
         if (file_exists($tenantSvgPath)) {
             $mtime = filemtime($tenantSvgPath) ?: 1;
 
-            return asset(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.svg") . '?v=' . $mtime;
+            return $this->memoSvgFaviconUrl = asset(FaviconService::TENANTS_DIR . "/{$this->id}/{$dynamicSvgName}") . '?v=' . $mtime;
         }
 
-        return PlatformConfig::hasSvgFavicon() ? PlatformConfig::svgFaviconUrl() : null;
+        $tenantStaticSvg = public_path(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.svg");
+        if (file_exists($tenantStaticSvg)) {
+            $mtime = filemtime($tenantStaticSvg) ?: 1;
+
+            return $this->memoSvgFaviconUrl = asset(FaviconService::TENANTS_DIR . "/{$this->id}/favicon.svg") . '?v=' . $mtime;
+        }
+
+        return $this->memoSvgFaviconUrl = PlatformConfig::hasSvgFavicon() ? PlatformConfig::svgFaviconUrl() : null;
     }
 
     /**
@@ -149,14 +228,48 @@ final class Tenant extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function payouts(): HasMany
+    {
+        return $this->hasMany(TenantPayout::class);
+    }
+
+    public function flushMemo(): void
+    {
+        $this->memoActiveSubscription = null;
+        $this->memoActiveSubscriptionLoaded = false;
+        $this->memoAllowedBranchIds = null;
+        $this->memoCanAddBranch = null;
+        $this->memoCanAddStaff = null;
+        $this->memoFaviconUrl = null;
+        $this->memoSvgFaviconUrl = null;
+        $this->memoSvgFaviconResolved = false;
+    }
+
+    public function refresh(): static
+    {
+        $this->flushMemo();
+
+        return parent::refresh();
+    }
+
     public function activeSubscription(): ?Subscription
     {
-        return $this->subscriptions()
+        if ($this->memoActiveSubscriptionLoaded) {
+            return $this->memoActiveSubscription;
+        }
+
+        $this->memoActiveSubscriptionLoaded = true;
+
+        $this->memoActiveSubscription = $this->subscriptions()
             ->withoutGlobalScope('tenant')
-            ->with(['plan.features'])
+            ->with(['plan'])
             ->orderByRaw("CASE WHEN status IN ('active', 'trialing') THEN 0 ELSE 1 END")
             ->latest('id')
             ->first();
+
+        $this->memoActiveSubscription?->setRelation('tenant', $this);
+
+        return $this->memoActiveSubscription;
     }
 
     public function isSubscriptionLocked(): bool
@@ -201,7 +314,11 @@ final class Tenant extends Model
 
     public function canAddBranch(): bool
     {
-        return $this->branches()->count() < $this->maxBranches();
+        if ($this->memoCanAddBranch !== null) {
+            return $this->memoCanAddBranch;
+        }
+
+        return $this->memoCanAddBranch = $this->branches()->count() < $this->maxBranches();
     }
 
     /**
@@ -209,9 +326,13 @@ final class Tenant extends Model
      */
     public function allowedBranchIds(): array
     {
+        if ($this->memoAllowedBranchIds !== null) {
+            return $this->memoAllowedBranchIds;
+        }
+
         $max = $this->maxBranches();
 
-        return $this->branches()
+        return $this->memoAllowedBranchIds = $this->branches()
             ->orderBy('is_active', 'desc')
             ->orderBy('id', 'asc')
             ->limit($max)
@@ -229,63 +350,97 @@ final class Tenant extends Model
 
     public function canAddStaff(): bool
     {
-        $limit = $this->maxStaff();
-        if ($limit === null) {
-            return true;
+        if ($this->memoCanAddStaff !== null) {
+            return $this->memoCanAddStaff;
         }
 
-        return $this->staffMemberships()->count() < $limit;
+        $limit = $this->maxStaff();
+        if ($limit === null) {
+            return $this->memoCanAddStaff = true;
+        }
+
+        return $this->memoCanAddStaff = $this->staffMemberships()->count() < $limit;
     }
 
     public function hasFeature(string $featureKey): bool
     {
+        if ($this->isSubscriptionLocked()) {
+            return false;
+        }
+
         $code = $this->planCode();
 
         return match ($featureKey) {
             'analytics_pro' => in_array($code, ['pro', 'business'], true),
-            'commission_auto' => in_array($code, ['pro', 'business'], true),
+            'commission_auto' => true,
             'slip_gaji' => $code === 'business',
-            'whatsapp_notification' => in_array($code, ['pro', 'business'], true),
+            'whatsapp_notification' => false,
+            'whatsapp_invoice' => true,
             'brand_color' => in_array($code, ['pro', 'business'], true),
             'custom_logo' => in_array($code, ['pro', 'business'], true),
             'white_label' => $code === 'business',
-            'subdomain' => $code === 'business',
             'custom_favicon' => $code === 'business',
             default => false,
         };
     }
 
     /**
-     * URL Portal Pelanggan publik untuk tenant ini.
-     * Menggunakan custom subdomain / domain bila diaktifkan pada paket Business,
-     * atau default path /b/{slug}.
+     * URL Portal Pelanggan publik untuk tenant ini (/b/{slug}).
+     *
+     * @param  array<string, mixed>  $extraQuery
      */
-    public function customerPortalUrl(?string $branchCode = null): string
+    public function customerPortalUrl(?string $branchCode = null, array $extraQuery = []): string
     {
-        if ($this->hasFeature('subdomain')) {
-            $customDomain = $this->settings['custom_domain'] ?? null;
-            $customSubdomain = $this->settings['custom_subdomain'] ?? null;
+        $query = array_filter(array_merge(
+            $branchCode ? ['branch' => $branchCode] : [],
+            $extraQuery,
+        ), fn ($v) => $v !== null && $v !== '');
 
-            if (! empty($customDomain)) {
-                $base = str_starts_with($customDomain, 'http') ? $customDomain : 'https://' . $customDomain;
-                return $branchCode ? "{$base}?branch={$branchCode}" : $base;
-            }
-
-            if (! empty($customSubdomain)) {
-                $appUrl = config('app.url') ?? 'http://localhost';
-                $rootDomain = parse_url($appUrl, PHP_URL_HOST) ?? 'barberos.id';
-                $scheme = parse_url($appUrl, PHP_URL_SCHEME) ?? 'https';
-                $port = parse_url($appUrl, PHP_URL_PORT);
-                $portSuffix = $port ? ":{$port}" : '';
-                $base = "{$scheme}://{$customSubdomain}.{$rootDomain}{$portSuffix}";
-                return $branchCode ? "{$base}?branch={$branchCode}" : $base;
+        $appUrl = config('app.url') ?? 'http://localhost';
+        $rootDomain = parse_url($appUrl, PHP_URL_HOST) ?? 'barberos.id';
+        if ($rootDomain === '127.0.0.1') {
+            $rootDomain = 'localhost';
+        }
+        $scheme = parse_url($appUrl, PHP_URL_SCHEME) ?? 'https';
+        $port = parse_url($appUrl, PHP_URL_PORT);
+        if (! $port && ! app()->runningInConsole() && request()->getPort()) {
+            $reqPort = (int) request()->getPort();
+            if (! in_array($reqPort, [80, 443], true)) {
+                $port = $reqPort;
             }
         }
+        $portSuffix = $port ? ":{$port}" : '';
+        $queryString = ! empty($query) ? '?' . http_build_query($query) : '';
 
-        return route('customer.portal', array_filter([
-            'tenant' => $this->slug,
-            'branch' => $branchCode,
-        ]));
+        return "{$scheme}://{$rootDomain}{$portSuffix}/b/{$this->slug}{$queryString}";
+    }
+
+    /**
+     * URL halaman Login pelanggan untuk tenant ini.
+     */
+    public function loginUrl(): string
+    {
+        return rtrim($this->customerPortalUrl(), '/') . '/login';
+    }
+
+    /**
+     * URL halaman Register pelanggan untuk tenant ini.
+     */
+    public function registerUrl(): string
+    {
+        return rtrim($this->customerPortalUrl(), '/') . '/register';
+    }
+
+    /**
+     * URL Layanan Layar TV Antrean publik untuk tenant ini.
+     * Menggunakan format subdomain / domain bila diaktifkan pada paket Business,
+     * atau default route /b/{slug}/tv/{branchCode}.
+     */
+    public function tvDisplayUrl(string $branchCode): string
+    {
+        $portalUrl = rtrim($this->customerPortalUrl(), '/');
+
+        return "{$portalUrl}/tv/{$branchCode}";
     }
 
     /**
@@ -301,19 +456,20 @@ final class Tenant extends Model
                 Storage::disk('public')->delete($this->logo_path);
             }
 
-            // Kembalikan logo, warna brand/background, white-label, dan subdomain ke default
+            // Kembalikan logo, warna brand/background, dan white-label ke default
             $this->logo_path = null;
             $this->brand_color = '#f59e0b'; // Default tema Starter
 
             FaviconService::clearTenantFavicon($this);
 
             $settings['white_label'] = false;
-            $settings['custom_subdomain'] = null;
-            $settings['custom_domain'] = null;
             $settings['favicon_path'] = null;
             $this->settings = $settings;
 
             $this->save();
+
+            // Re-generate favicon otomatis Starter (ikon official platform + warna Starter)
+            FaviconService::generateForTenant($this);
         } elseif ($newPlanCode === 'pro') {
             // Pro boleh kustom logo & warna brand, namun custom favicon file eksklusif Business
             // (Pada Pro, favicon di-generate otomatis dari logo + warna brand)
@@ -325,8 +481,6 @@ final class Tenant extends Model
             }
 
             $settings['white_label'] = false;
-            $settings['custom_subdomain'] = null;
-            $settings['custom_domain'] = null;
             $this->settings = $settings;
 
             $this->save();

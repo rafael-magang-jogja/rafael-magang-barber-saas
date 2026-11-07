@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bottleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#18181b"/>
+      <stop offset="35%" stop-color="#27272a"/>
+      <stop offset="70%" stop-color="#3f3f46"/>
+      <stop offset="100%" stop-color="#18181b"/>
+    </linearGradient>
+    <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="50%" stop-color="#18181b"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <linearGradient id="accentRed" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#e11d48"/>
+      <stop offset="100%" stop-color="#fb7185"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shadow -->
+  <ellipse cx="100" cy="176" rx="42" ry="10" fill="#000000" opacity="0.45"/>
+
+  <!-- Bottle Body -->
+  <rect x="68" y="74" width="64" height="96" rx="10" fill="url(#bottleGrad)" stroke="#3f3f46" stroke-width="1.5"/>
+  <rect x="71" y="76" width="58" height="92" rx="8" fill="none" stroke="#52525b" stroke-width="0.8" opacity="0.3"/>
+
+  <!-- Red Accent Band -->
+  <rect x="68" y="80" width="64" height="6" fill="url(#accentRed)"/>
+
+  <!-- Bottle Label -->
+  <rect x="72" y="96" width="56" height="66" rx="6" fill="#09090b" stroke="#38bdf8" stroke-width="0.8" stroke-opacity="0.5"/>
+  <text x="100" y="112" text-anchor="middle" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-size="7.5" font-weight="900" letter-spacing="1">BARBEROS</text>
+  <text x="100" y="125" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="8.5" font-weight="800">TEXTURE</text>
+  <text x="100" y="136" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="7.5" font-weight="700">POWDER</text>
+  <text x="100" y="152" text-anchor="middle" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-size="6" font-weight="600" letter-spacing="0.5">EXTRA VOLUME</text>
+
+  <!-- Bottle Neck -->
+  <rect x="84" y="60" width="32" height="15" rx="3" fill="#18181b" stroke="#3f3f46" stroke-width="1"/>
+
+  <!-- Nozzle Cap / Perforated Top -->
+  <rect x="80" y="44" width="40" height="18" rx="5" fill="url(#capGrad)" stroke="#27272a" stroke-width="1.2"/>
+  <!-- Dispenser Holes -->
+  <circle cx="94" cy="48" r="1.5" fill="#52525b"/>
+  <circle cx="100" cy="48" r="1.5" fill="#52525b"/>
+  <circle cx="106" cy="48" r="1.5" fill="#52525b"/>
+  <circle cx="97" cy="53" r="1.5" fill="#52525b"/>
+  <circle cx="103" cy="53" r="1.5" fill="#52525b"/>
+
+  <!-- Subtle Texture Dust Effect -->
+  <circle cx="100" cy="34" r="1" fill="#ffffff" opacity="0.7"/>
+  <circle cx="95" cy="30" r="0.8" fill="#ffffff" opacity="0.5"/>
+  <circle cx="105" cy="31" r="1.2" fill="#ffffff" opacity="0.6"/>
+  <circle cx="98" cy="24" r="0.7" fill="#ffffff" opacity="0.4"/>
+</svg>

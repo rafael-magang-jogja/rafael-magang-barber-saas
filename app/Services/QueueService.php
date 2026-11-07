@@ -5,12 +5,19 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\BookingStatus;
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
 use App\Enums\QueueStatus;
 use App\Enums\Role;
 use App\Enums\WorkStatus;
+use App\Models\Attendance;
 use App\Models\Booking;
 use App\Models\Branch;
+use App\Models\HairColor;
 use App\Models\Membership;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Payment;
 use App\Models\QueueTicket;
 use App\Models\QueueTicketEvent;
 use App\Models\QueueTicketItem;
@@ -21,8 +28,8 @@ use App\Repositories\CustomerRepository;
 use App\Repositories\QueueRepository;
 use Carbon\CarbonImmutable;
 use DomainException;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 final class QueueService
 {
@@ -62,6 +69,7 @@ final class QueueService
         ?string $notes = null,
         ?int $actorUserId = null,
         ?int $hairColorId = null,
+        bool $isCashierInput = false,
     ): QueueTicket {
         return DB::transaction(function () use (
             $branch,
@@ -72,8 +80,19 @@ final class QueueService
             $notes,
             $actorUserId,
             $hairColorId,
+            $isCashierInput,
         ): QueueTicket {
-            $today = CarbonImmutable::now()->toDateString();
+            $now = CarbonImmutable::now();
+            $today = $now->toDateString();
+
+            // Keamanan jam operasional: khusus pemesanan mandiri oleh pelanggan (non-kasir),
+            // pastikan cabang sedang buka dan tidak di luar jam operasional atau jam istirahat.
+            if (! $isCashierInput) {
+                $opCheck = $branch->checkOperationalStatus($now);
+                if (! $opCheck['is_open']) {
+                    throw new DomainException($opCheck['reason'] ?? 'Cabang sedang tutup atau di luar jam operasional.');
+                }
+            }
 
             $services = $serviceIds !== []
                 ? $this->catalogRepository->getActiveServicesByIdsForTenant($branch->tenant_id, $serviceIds)
@@ -127,6 +146,21 @@ final class QueueService
 
             $estimatedDuration = (int) $services->sum('duration_minutes');
 
+            if ($barberMembershipId !== null) {
+                $hasActiveAttendance = Attendance::query()
+                    ->withoutGlobalScope('tenant')
+                    ->where('tenant_id', $branch->tenant_id)
+                    ->where('membership_id', $barberMembershipId)
+                    ->whereDate('date', $today)
+                    ->whereNotNull('check_in_at')
+                    ->whereNull('check_out_at')
+                    ->exists();
+
+                if (! $hasActiveAttendance) {
+                    throw new DomainException('Barber yang dipilih belum hadir / absen masuk atau sudah pulang hari ini.');
+                }
+            }
+
             $ticket = QueueTicket::query()
                 ->withoutGlobalScope('tenant')
                 ->create([
@@ -140,6 +174,7 @@ final class QueueService
                     'sequence' => $nextSeq,
                     'number' => $ticketNumber,
                     'type' => 'walk_in',
+                    'is_cashier_input' => $isCashierInput,
                     'status' => QueueStatus::Waiting,
                     'priority_at' => now(),
                     'estimated_duration_minutes' => $estimatedDuration,
@@ -210,9 +245,9 @@ final class QueueService
                 }
             }
 
-            $today = CarbonImmutable::now()->toDateString();
+            $targetDate = $lockedBooking->scheduled_at ? $lockedBooking->scheduled_at->toDateString() : CarbonImmutable::now()->toDateString();
 
-            $counter = $this->queueRepository->lockOrCreateCounter($lockedBooking->tenant_id, $lockedBooking->branch_id, $today, 'B');
+            $counter = $this->queueRepository->lockOrCreateCounter($lockedBooking->tenant_id, $lockedBooking->branch_id, $targetDate, 'B');
 
             $nextSeq = $counter->last_number + 1;
             $counter->update(['last_number' => $nextSeq]);
@@ -234,10 +269,11 @@ final class QueueService
                     'barber_membership_id' => $lockedBooking->barber_membership_id,
                     'hair_color_id' => $selectedColor?->id ?? $lockedBooking->hair_color_id,
                     'requested_barber_id' => $lockedBooking->barber_membership_id,
-                    'date' => $today,
+                    'date' => $targetDate,
                     'sequence' => $nextSeq,
                     'number' => $ticketNumber,
                     'type' => 'booking',
+                    'is_cashier_input' => false,
                     'status' => QueueStatus::Waiting,
                     'priority_at' => $lockedBooking->scheduled_at ?? now(),
                     'estimated_duration_minutes' => (int) $lockedBooking->items->sum('duration_minutes'),
@@ -294,6 +330,8 @@ final class QueueService
             }
 
             if ($targetStatus === QueueStatus::Called) {
+                $targetDate = $locked->date ? $locked->date->toDateString() : CarbonImmutable::now()->toDateString();
+
                 if ($barberMembershipId === null) {
                     if ($locked->barber_membership_id !== null) {
                         $assignedBarber = Membership::query()
@@ -307,17 +345,25 @@ final class QueueService
                             ->whereDate('date', $locked->date ?? now()->toDateString())
                             ->exists();
 
-                        if ($assignedBarber && $assignedBarber->work_status === WorkStatus::Active && ! $isBusy) {
+                        $hasCheckedIn = Attendance::query()
+                            ->withoutGlobalScope('tenant')
+                            ->where('membership_id', $locked->barber_membership_id)
+                            ->whereDate('date', $targetDate)
+                            ->whereNotNull('check_in_at')
+                            ->whereNull('check_out_at')
+                            ->exists();
+
+                        if ($assignedBarber && $assignedBarber->work_status === WorkStatus::Active && $hasCheckedIn && ! $isBusy) {
                             $barberMembershipId = $assignedBarber->id;
                         } else {
                             $readyBarber = $this->findReadyBarberForBranch(
                                 $locked->tenant_id,
                                 $locked->branch_id,
-                                $locked->date ? $locked->date->toDateString() : null
+                                $targetDate
                             );
 
                             if ($readyBarber === null) {
-                                throw new DomainException('Barber yang dipilih sedang tidak tersedia dan tidak ada staff lain yang ready di cabang ini.');
+                                throw new DomainException('Barber yang dipilih belum absen atau sedang tidak tersedia, dan tidak ada staff lain yang ready di cabang ini.');
                             }
 
                             $barberMembershipId = $readyBarber->id;
@@ -326,15 +372,28 @@ final class QueueService
                         $readyBarber = $this->findReadyBarberForBranch(
                             $locked->tenant_id,
                             $locked->branch_id,
-                            $locked->date ? $locked->date->toDateString() : null
+                            $targetDate
                         );
 
                         if ($readyBarber === null) {
-                            throw new DomainException('Tidak ada staff barber yang sedang ready di cabang ini. Pastikan ada staff yang berstatus Ready dan telah menyelesaikan tugas sebelumnya.');
+                            throw new DomainException('Tidak ada staff barber yang sedang ready dan sudah absen masuk di cabang ini. Pastikan staff sudah scan QR absensi.');
                         }
 
                         $barberMembershipId = $readyBarber->id;
                     }
+                }
+
+                // Validasi bahwa barber yang akan dipanggil wajib sudah absen masuk hari ini
+                $hasCheckedIn = Attendance::query()
+                    ->withoutGlobalScope('tenant')
+                    ->where('membership_id', $barberMembershipId)
+                    ->whereDate('date', $targetDate)
+                    ->whereNotNull('check_in_at')
+                    ->whereNull('check_out_at')
+                    ->exists();
+
+                if (! $hasCheckedIn) {
+                    throw new DomainException('Staff barber belum melakukan absen masuk hari ini. Silakan scan QR absensi cabang terlebih dahulu sebelum mengambil antrean.');
                 }
 
                 $busyTicket = QueueTicket::query()
@@ -349,6 +408,24 @@ final class QueueService
                 }
             }
 
+            if ($targetStatus === QueueStatus::InService) {
+                $activeBarberId = $barberMembershipId ?? $locked->barber_membership_id;
+                if ($activeBarberId !== null) {
+                    $targetDate = $locked->date ? $locked->date->toDateString() : CarbonImmutable::now()->toDateString();
+                    $hasCheckedIn = Attendance::query()
+                        ->withoutGlobalScope('tenant')
+                        ->where('membership_id', $activeBarberId)
+                        ->whereDate('date', $targetDate)
+                        ->whereNotNull('check_in_at')
+                        ->whereNull('check_out_at')
+                        ->exists();
+
+                    if (! $hasCheckedIn) {
+                        throw new DomainException('Staff barber belum melakukan absen masuk hari ini. Silakan scan QR absensi cabang terlebih dahulu sebelum memulai layanan.');
+                    }
+                }
+            }
+
             $oldStatus = $locked->status->value;
             $updates = [
                 'status' => $targetStatus,
@@ -357,6 +434,25 @@ final class QueueService
 
             if ($barberMembershipId !== null) {
                 $updates['barber_membership_id'] = $barberMembershipId;
+
+                // Sinkronkan ke order jika order sudah dibayar/dibuat di muka
+                $existingOrder = \App\Models\Order::query()
+                    ->withoutGlobalScope('tenant')
+                    ->where('queue_ticket_id', $locked->id)
+                    ->first();
+
+                if ($existingOrder !== null && $existingOrder->barber_membership_id === null) {
+                    $existingOrder->update(['barber_membership_id' => $barberMembershipId]);
+                    \App\Models\OrderItem::query()
+                        ->withoutGlobalScope('tenant')
+                        ->where('order_id', $existingOrder->id)
+                        ->whereNull('barber_membership_id')
+                        ->update(['barber_membership_id' => $barberMembershipId]);
+
+                    if ($existingOrder->payment_status === \App\Enums\PaymentStatus::Paid) {
+                        app(CommissionService::class)->recordOrderCommissions($existingOrder);
+                    }
+                }
             }
 
             if ($targetStatus === QueueStatus::Called) {
@@ -372,6 +468,12 @@ final class QueueService
                         ->update(['status' => BookingStatus::Completed]);
                 }
             } elseif ($targetStatus === QueueStatus::Cancelled) {
+                if ($locked->hair_color_id !== null && in_array($locked->status, [QueueStatus::Waiting, QueueStatus::Called], true)) {
+                    HairColor::query()
+                        ->withoutGlobalScope('tenant')
+                        ->whereKey($locked->hair_color_id)
+                        ->increment('stock');
+                }
                 if ($reason !== null && trim($reason) !== '') {
                     $cleanReason = trim($reason);
                     $updates['notes'] = $locked->notes ? $locked->notes . " (Batal: {$cleanReason})" : "Batal: {$cleanReason}";
@@ -383,10 +485,28 @@ final class QueueService
                         $bookingUpdates['cancelled_at'] = now();
                         $bookingUpdates['cancelled_by'] = $actorUserId;
                     }
+                    if ($locked->order !== null && $locked->order->payment_status === \App\Enums\PaymentStatus::Paid) {
+                        $bookingUpdates['refund_status'] = 'pending';
+                        $bookingUpdates['refund_amount'] = $locked->order->paid_total;
+                        $bookingUpdates['refund_requested_at'] = now();
+                    }
                     Booking::query()
                         ->withoutGlobalScope('tenant')
                         ->whereKey($locked->booking_id)
                         ->update($bookingUpdates);
+                }
+
+                if ($locked->order !== null && $locked->order->payment_status === \App\Enums\PaymentStatus::Paid) {
+                    if (empty($locked->refund_status)) {
+                        $updates['refund_status'] = 'pending';
+                        $updates['refund_amount'] = $locked->order->paid_total;
+                        $updates['refund_requested_at'] = now();
+                    }
+                    // Batalkan komisi barber agar tidak tercatat pada tiket yang dibatalkan
+                    \App\Models\CommissionEntry::query()
+                        ->withoutGlobalScope('tenant')
+                        ->whereHas('orderItem', fn ($q) => $q->where('order_id', $locked->order->id))
+                        ->delete();
                 }
             }
 
@@ -474,7 +594,18 @@ final class QueueService
             ->pluck('barber_membership_id')
             ->all();
 
-        $availableBarbers = $barbers->reject(fn (Membership $b) => in_array($b->id, $busyBarberIds, true));
+        $checkedInBarberIds = Attendance::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenantId)
+            ->whereDate('date', $targetDate)
+            ->whereNotNull('check_in_at')
+            ->whereNull('check_out_at')
+            ->pluck('membership_id')
+            ->all();
+
+        $availableBarbers = $barbers
+            ->filter(fn (Membership $b) => in_array($b->id, $checkedInBarberIds, true))
+            ->reject(fn (Membership $b) => in_array($b->id, $busyBarberIds, true));
 
         if ($availableBarbers->isEmpty()) {
             return null;
@@ -716,6 +847,15 @@ final class QueueService
                 throw new DomainException('Hanya antrean yang sedang dipanggil yang dapat dilewati.');
             }
 
+            // Validasi: Antrean baru dapat dilewati setelah minimal 1 menit sejak waktu pemanggilan (toleransi 1 menit)
+            if ($locked->called_at !== null) {
+                $secondsSinceCalled = now()->diffInSeconds($locked->called_at);
+                if ($secondsSinceCalled < 60) {
+                    $remainingSeconds = 60 - $secondsSinceCalled;
+                    throw new DomainException("Antrean baru dapat dilewati setelah 1 menit panggilan. Mohon tunggu {$remainingSeconds} detik lagi.");
+                }
+            }
+
             $currentSkipCount = (int) $locked->skip_count;
             $oldStatus = $locked->status->value;
             $targetDate = (string) ($locked->date ? $locked->date->toDateString() : now()->toDateString());
@@ -850,5 +990,107 @@ final class QueueService
                 'skip_count' => 1,
             ];
         });
+    }
+
+    /**
+     * Cancel expired queue tickets and past unfulfilled bookings.
+     *
+     * @return array{cancelled_tickets: int, cancelled_bookings: int}
+     */
+    public function cancelExpiredQueuesAndBookings(?int $tenantId = null, ?int $branchId = null): array
+    {
+        return $this->queueRepository->cancelExpiredQueuesAndBookings($tenantId, $branchId);
+    }
+
+    /**
+     * Otomatis mendaftarkan booking yang telah disetujui (Confirmed & Lunas) ke antrean hari ini
+     * saat tanggal jadwal (hari H) tiba, sesuai jam prioritas kedatangannya.
+     */
+    public function autoEnrollConfirmedBookingsForToday(?string $date = null): void
+    {
+        $targetDate = $date ?? now()->toDateString();
+        $confirmedBookings = Booking::query()
+            ->withoutGlobalScope('tenant')
+            ->whereDate('scheduled_at', $targetDate)
+            ->where('status', BookingStatus::Confirmed)
+            ->whereDoesntHave('queueTicket')
+            ->with(['items'])
+            ->get();
+
+        foreach ($confirmedBookings as $booking) {
+            try {
+                DB::transaction(function () use ($booking): void {
+                    $ticket = $this->checkInBooking($booking);
+                    $this->createPaidOrderForBookingTicket($booking, $ticket);
+                });
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Auto-enroll booking gagal untuk booking ID {$booking->id}: {$e->getMessage()}");
+            }
+        }
+    }
+
+    /**
+     * Membuat Order Lunas dan Payment Transfer untuk antrean booking yang telah dibayar.
+     */
+    public function createPaidOrderForBookingTicket(Booking $booking, QueueTicket $ticket): Order
+    {
+        $existingOrder = Order::query()->where('queue_ticket_id', $ticket->id)->first();
+        if ($existingOrder !== null) {
+            return $existingOrder;
+        }
+
+        $orderTotal = (int) $ticket->items->sum('price');
+        $order = Order::query()->create([
+            'tenant_id' => $booking->tenant_id,
+            'branch_id' => $booking->branch_id,
+            'queue_ticket_id' => $ticket->id,
+            'customer_profile_id' => $booking->customer_profile_id,
+            'barber_membership_id' => $booking->barber_membership_id,
+            'number' => 'ORD-' . strtoupper(Str::random(10)),
+            'subtotal' => $orderTotal,
+            'discount_total' => 0,
+            'tip_amount' => 0,
+            'grand_total' => $orderTotal,
+            'paid_total' => $orderTotal,
+            'refunded_total' => 0,
+            'payment_status' => PaymentStatus::Paid,
+            'idempotency_key' => (string) Str::uuid(),
+            'paid_at' => $booking->payment_approved_at ?? now(),
+        ]);
+
+        foreach ($ticket->items as $item) {
+            OrderItem::query()->create([
+                'tenant_id' => $booking->tenant_id,
+                'order_id' => $order->id,
+                'service_id' => $item->service_id,
+                'barber_membership_id' => $booking->barber_membership_id,
+                'name' => $item->service_name,
+                'type' => 'service',
+                'qty' => 1,
+                'unit_price' => $item->price,
+                'discount' => 0,
+                'line_total' => $item->price,
+            ]);
+        }
+
+        $paymentMethod = (! empty($booking->xendit_payment_method) && strtolower((string) $booking->xendit_payment_method) === 'qris')
+            ? PaymentMethod::Qris->value
+            : PaymentMethod::Transfer->value;
+
+        $reference = ! empty($booking->xendit_external_id)
+            ? (string) $booking->xendit_external_id
+            : 'TRANSFER-REK-' . $booking->code;
+
+        Payment::query()->create([
+            'tenant_id' => $booking->tenant_id,
+            'order_id' => $order->id,
+            'amount' => $orderTotal,
+            'method' => $paymentMethod,
+            'reference' => $reference,
+            'status' => 'success',
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+
+        return $order;
     }
 }

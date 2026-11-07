@@ -1,9 +1,9 @@
-<x-layouts.app title="Tagihan & Langganan SaaS" subtitle="Verifikasi pembayaran sewa software, riwayat invoice & aktivasi otomatis tenant barbershop" role="superadmin">
+<x-layouts.app title="Tagihan & Langganan SaaS" subtitle="Monitoring pembayaran sewa software, riwayat invoice & aktivasi otomatis via payment gateway" role="superadmin">
     @php
         $statusOptions = [
             ['value' => 'all', 'label' => 'Semua Status', 'sublabel' => null],
-            ['value' => 'pending', 'label' => 'Menunggu Konfirmasi', 'sublabel' => 'Pending'],
-            ['value' => 'paid', 'label' => 'Lunas', 'sublabel' => 'Paid'],
+            ['value' => 'pending', 'label' => 'Menunggu Konfirmasi' . ($pendingCount > 0 ? " ({$pendingCount})" : ''), 'sublabel' => 'Pending'],
+            ['value' => 'paid', 'label' => 'Lunas' . ($paidCount > 0 ? " ({$paidCount})" : ''), 'sublabel' => 'Paid'],
             ['value' => 'cancelled', 'label' => 'Dibatalkan', 'sublabel' => 'Cancelled'],
         ];
 
@@ -14,7 +14,9 @@
         ])->all();
 
         $gatewayOptions = [
-            ['value' => 'manual_transfer', 'label' => 'Transfer Bank', 'sublabel' => 'BCA / Mandiri / BNI / BRI'],
+            ['value' => 'xendit', 'label' => 'Xendit Gateway', 'sublabel' => 'QRIS & Virtual Account Otomatis'],
+            ['value' => 'free_tier', 'label' => 'Paket Gratis (Free Tier)', 'sublabel' => 'Bypass Rp0'],
+            ['value' => 'manual_transfer', 'label' => 'Transfer Bank Manual', 'sublabel' => 'BCA / Mandiri / BNI / BRI'],
             ['value' => 'cash', 'label' => 'Pembayaran Tunai (Cash)', 'sublabel' => 'Offline / Langsung'],
         ];
     @endphp
@@ -49,19 +51,19 @@
             <span class="text-[11px] text-zinc-400 font-medium block mt-0.5">Seluruh transaksi lunas</span>
         </div>
 
-        <!-- 3. Menunggu Konfirmasi (Pending) -->
-        <div class="p-4 sm:p-5 rounded-2xl border shadow-2xs transition {{ $pendingCount > 0 ? 'bg-amber-50/60 border-amber-300 ring-2 ring-amber-500/20' : 'bg-white border-zinc-200/80' }}">
+        <!-- 3. Aktivasi Otomatis via Gateway -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-2xs">
             <div class="flex items-center justify-between gap-2">
-                <span class="text-xs font-bold {{ $pendingCount > 0 ? 'text-amber-900' : 'text-zinc-500' }}">Menunggu Konfirmasi</span>
-                <span class="w-7 h-7 rounded-xl {{ $pendingCount > 0 ? 'bg-amber-500 text-zinc-950 animate-bounce' : 'bg-zinc-100 text-zinc-400' }} grid place-items-center shrink-0">
-                    <x-ui.icon name="alert-triangle" class="w-3.5 h-3.5" />
+                <span class="text-xs font-bold text-zinc-500">Aktivasi Langganan</span>
+                <span class="w-7 h-7 rounded-xl bg-emerald-500/10 text-emerald-600 grid place-items-center shrink-0">
+                    <x-ui.icon name="zap" class="w-3.5 h-3.5" />
                 </span>
             </div>
-            <p class="text-lg sm:text-xl font-black {{ $pendingCount > 0 ? 'text-amber-950' : 'text-zinc-900' }} mt-2 tracking-tight">
-                {{ $pendingCount }} Invoice
+            <p class="text-lg sm:text-xl font-black text-zinc-900 mt-2 tracking-tight">
+                100% Otomatis
             </p>
-            <span class="text-[11px] {{ $pendingCount > 0 ? 'text-amber-700 font-bold' : 'text-zinc-400' }} block mt-0.5">
-                {{ $pendingCount > 0 ? 'Perlu tindakan Superadmin' : 'Tidak ada tagihan pending' }}
+            <span class="text-[11px] text-emerald-700 font-bold block mt-0.5">
+                Real-time via Payment Gateway
             </span>
         </div>
 
@@ -153,7 +155,7 @@
     </x-ui.card>
 
     <!-- Tabel & Kartu Daftar Tagihan SaaS -->
-    <div class="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-2xs mb-6">
+    <div class="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-2xs mb-6" data-pagination-container="platform-subscriptions">
         <div class="p-4 sm:p-5 border-b border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/50">
             <div class="flex items-center gap-3">
                 <span class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 grid place-items-center shrink-0">
@@ -200,7 +202,7 @@
                             <th class="py-2.5 px-3">Invoice &amp; Terbit</th>
                             <th class="py-2.5 px-3">Barbershop &amp; Owner</th>
                             <th class="py-2.5 px-3">Jenis &amp; Paket</th>
-                            <th class="py-2.5 px-3">Masa Aktif</th>
+                            <th class="py-2.5 px-3">Periode Masa Aktif</th>
                             <th class="py-2.5 px-3">Nominal</th>
                             <th class="py-2.5 px-3">Metode &amp; Bukti</th>
                             <th class="py-2.5 px-3">Status</th>
@@ -212,11 +214,44 @@
                             @php
                                 $sub = $inv->subscription;
                                 $targetPlan = $inv->targetPlan ?? $sub?->plan;
-                                $endsAt = $sub?->ends_at;
+                                $periodEnd = $inv->period_ends_at;
+                                $periodStart = $inv->period_starts_at;
                                 $dueAt = $inv->due_at;
-                                $isExpired = $endsAt ? $endsAt->isPast() : false;
-                                $daysRemaining = $endsAt && !$isExpired ? (int) ceil(now()->floatDiffInDays($endsAt)) : 0;
+                                $isInvoiceExpired = $periodEnd ? $periodEnd->isPast() : false;
+                                $daysRemaining = $periodEnd && !$isInvoiceExpired ? (int) ceil(now()->floatDiffInDays($periodEnd)) : 0;
                                 $type = $inv->type ?? 'renewal';
+
+                                // Format WhatsApp Kuitansi / Bukti Lunas ke Owner (HANYA UNTUK YANG SUDAH LUNAS)
+                                $waLink = null;
+                                if ($inv->status === 'paid') {
+                                    $ownerPhoneClean = preg_replace('/[^0-9]/', '', (string) ($inv->tenant?->owner?->phone ?? ''));
+                                    if (str_starts_with($ownerPhoneClean, '0')) {
+                                        $ownerPhoneClean = '62' . substr($ownerPhoneClean, 1);
+                                    } elseif (str_starts_with($ownerPhoneClean, '8')) {
+                                        $ownerPhoneClean = '62' . $ownerPhoneClean;
+                                    }
+
+                                    $platformNameVal = \App\Support\Platform\PlatformConfig::name();
+                                    $ownerName = $inv->tenant?->owner?->name ?? 'Owner';
+                                    $tenantName = $inv->tenant?->name ?? 'Barbershop';
+                                    $planName = $targetPlan?->name ?? 'Paket Langganan';
+                                    $typeName = ucfirst($type);
+                                    $invoiceUrl = route('owner.subscription.invoice', $inv->id);
+
+                                    $waMessageText = "Halo Bapak/Ibu {$ownerName} ({$tenantName}),\n\n"
+                                        . "Terima kasih, pembayaran tagihan langganan SaaS Anda telah kami terima dan berstatus *LUNAS*:\n\n"
+                                        . "• *No. Tagihan*: {$inv->number}\n"
+                                        . "• *Paket*: {$planName} ({$typeName})\n"
+                                        . "• *Total Pembayaran*: Rp" . number_format($inv->amount, 0, ',', '.') . "\n"
+                                        . "• *Status*: LUNAS (Terverifikasi)\n"
+                                        . "• *Masa Aktif Layanan*: s/d " . ($periodEnd ? $periodEnd->translatedFormat('d F Y') : '-') . "\n\n"
+                                        . "Anda dapat melihat dan mencetak dokumen faktur / kuitansi resmi melalui link berikut:\n"
+                                        . $invoiceUrl . "\n\n"
+                                        . "Operasional barbershop Anda telah aktif sepenuhnya. Terima kasih atas kerja samanya!\n\n"
+                                        . "Salam hangat,\n*{$platformNameVal}*";
+
+                                    $waLink = !empty($ownerPhoneClean) ? 'https://wa.me/' . $ownerPhoneClean . '?text=' . rawurlencode($waMessageText) : null;
+                                }
                             @endphp
                             <tr class="hover:bg-zinc-50/70 transition duration-150">
                                 <!-- 1. No. Invoice & Tanggal Terbit -->
@@ -238,8 +273,8 @@
                                 <!-- 3. Jenis & Paket Langganan -->
                                 <td class="py-2.5 px-3 align-middle whitespace-nowrap">
                                     <div class="flex items-center gap-1.5 mb-0.5">
-                                        <span class="text-[11px] font-black uppercase tracking-wider {{ $type === 'upgrade' ? 'text-amber-700' : ($type === 'downgrade' ? 'text-purple-700' : 'text-emerald-700') }}">
-                                            {{ ucfirst($type) }}
+                                        <span class="text-xs font-bold {{ $inv->type_text_color }}">
+                                             {{ $inv->type_label }}
                                         </span>
                                         <span class="text-zinc-300 font-bold">&bull;</span>
                                         <span class="font-bold text-zinc-900">{{ $targetPlan?->name ?? 'Paket Kustom' }}</span>
@@ -247,14 +282,18 @@
                                     <span class="text-[11px] text-zinc-400 block">Maks {{ $targetPlan?->max_branches ?? 1 }} Cabang</span>
                                 </td>
 
-                                <!-- 4. Masa Aktif & Tanggal Berakhir -->
+                                <!-- 4. Periode Masa Aktif Khusus Invoice Ini -->
                                 <td class="py-2.5 px-3 align-middle whitespace-nowrap">
-                                    <span class="font-bold text-zinc-900 block">s/d {{ $endsAt?->translatedFormat('d M Y') ?? '-' }}</span>
-                                    @if($isExpired)
+                                    <span class="font-bold text-zinc-900 block">s/d {{ $periodEnd?->translatedFormat('d M Y') ?? '-' }}</span>
+                                    @if($inv->status === 'pending' || $inv->status === 'unpaid')
+                                        <span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 block mt-0.5 whitespace-nowrap">Menunggu Verifikasi</span>
+                                    @elseif($inv->isSuperseded())
+                                        <span class="text-[11px] font-medium text-zinc-400 block">Digantikan</span>
+                                    @elseif($isInvoiceExpired)
                                         <span class="text-[11px] font-bold text-rose-600 block">Kedaluwarsa</span>
-                                    @elseif($endsAt && $daysRemaining <= 3)
+                                    @elseif($periodEnd && $daysRemaining <= 3)
                                         <span class="text-[11px] font-bold text-amber-600 block">Sisa {{ $daysRemaining }} Hari</span>
-                                    @elseif($endsAt)
+                                    @elseif($periodEnd)
                                         <span class="text-[11px] font-medium text-emerald-600 block">Sisa {{ $daysRemaining }} Hari</span>
                                     @endif
                                 </td>
@@ -268,17 +307,40 @@
                                 <td class="py-2.5 px-3 align-middle whitespace-nowrap">
                                     <div class="flex flex-col gap-1">
                                         <span class="text-zinc-700 font-semibold text-[11px]">
-                                            {{ $inv->payment_method === 'transfer' ? 'Transfer ' . ($inv->bank_name ?? 'Bank') : ($inv->payment_method === 'cash' ? 'Tunai (Cash)' : strtoupper(str_replace('_', ' ', $inv->gateway ?: 'MANUAL'))) }}
+                                            @if($inv->gateway === 'xendit')
+                                                <span class="inline-flex items-center gap-1 text-emerald-700 font-black">
+                                                    <x-ui.icon name="zap" class="w-3 h-3 text-emerald-600" />
+                                                    <span>Xendit ({{ $inv->xendit_payment_channel ?? 'Online' }})</span>
+                                                </span>
+                                            @elseif($inv->gateway === 'free_tier')
+                                                <span class="text-zinc-600 font-bold">Gratis (Rp0)</span>
+                                            @elseif($inv->payment_method === 'transfer')
+                                                <span>Transfer {{ $inv->bank_name ?? 'Bank' }}</span>
+                                            @elseif($inv->payment_method === 'cash')
+                                                <span>Tunai (Cash)</span>
+                                            @else
+                                                <span>{{ strtoupper(str_replace('_', ' ', $inv->gateway ?: 'MANUAL')) }}</span>
+                                            @endif
                                         </span>
                                         @if($inv->proof_url)
                                             <button
                                                 type="button"
-                                                onclick="openProofModal('{{ $inv->proof_url }}', '{{ $inv->number }}', '{{ addslashes($inv->tenant?->name ?? 'Tenant') }}', '{{ addslashes($inv->notes ?? '') }}', '{{ $inv->payment_method ?? 'transfer' }}', '{{ $inv->bank_name ?? '-' }}')"
+                                                data-proof-url="{{ $inv->proof_url }}"
+                                                data-number="{{ $inv->number }}"
+                                                data-tenant-name="{{ $inv->tenant?->name ?? 'Tenant' }}"
+                                                data-notes="{{ $inv->notes ?? '' }}"
+                                                data-method="{{ $inv->payment_method ?? 'transfer' }}"
+                                                data-bank="{{ $inv->bank_name ?? '-' }}"
+                                                onclick="openProofModal(this.dataset.proofUrl, this.dataset.number, this.dataset.tenantName, this.dataset.notes, this.dataset.method, this.dataset.bank)"
                                                 class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700 hover:underline cursor-pointer"
                                             >
                                                 <x-ui.icon name="image" class="w-3.5 h-3.5" />
                                                 <span>Lihat Bukti Bayar</span>
                                             </button>
+                                        @elseif($inv->gateway === 'xendit')
+                                            <span class="text-[10px] text-emerald-600 font-medium">Otomatis Terverifikasi</span>
+                                        @elseif($inv->gateway === 'free_tier')
+                                            <span class="text-[10px] text-zinc-400 font-medium">Paket Gratis (Rp0)</span>
                                         @else
                                             <span class="text-[10px] text-zinc-400 italic">Belum ada bukti</span>
                                         @endif
@@ -313,36 +375,43 @@
                                 <!-- 8. Aksi -->
                                 <td class="py-2.5 px-3 text-right align-middle whitespace-nowrap">
                                     <div class="flex items-center justify-end gap-1.5">
-                                        @if($inv->status === 'pending' || $inv->status === 'unpaid')
-                                            <!-- Tombol Konfirmasi Lunas -->
-                                            <button
-                                                type="button"
-                                                onclick="openConfirmPaymentModal('{{ route('platform.subscriptions.confirm', $inv->id) }}', '{{ $inv->number }}', '{{ addslashes($inv->tenant?->name ?? 'Tenant') }}', 'Rp{{ number_format($inv->amount, 0, ',', '.') }}', '{{ $targetPlan?->name ?? 'Paket' }}', '{{ $type }}')"
-                                                class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
-                                                title="Konfirmasi Lunas &amp; Aktifkan"
+                                        @if($inv->status === 'paid' && $waLink)
+                                            <!-- Tombol Kirim Kuitansi / Bukti Lunas via WhatsApp -->
+                                            <a
+                                                href="{{ $waLink }}"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
+                                                title="Kirim Kuitansi &amp; Faktur Lunas ke WhatsApp Owner ({{ $inv->tenant?->owner?->phone ?? '-' }})"
                                             >
-                                                <x-ui.icon name="check" class="w-4 h-4 stroke-[3]" />
-                                            </button>
+                                                <x-ui.icon name="whatsapp" class="w-4 h-4 fill-current" />
+                                            </a>
+                                        @endif
 
+                                        @if($inv->status === 'pending' || $inv->status === 'unpaid')
                                             <!-- Tombol Tolak / Batalkan -->
                                             <button
                                                 type="button"
-                                                onclick="openRejectInvoiceModal('{{ route('platform.subscriptions.cancel', $inv->id) }}', '{{ $inv->number }}', '{{ addslashes($inv->tenant?->name ?? 'Tenant') }}', 'Rp{{ number_format($inv->amount, 0, ',', '.') }}')"
+                                                data-cancel-url="{{ route('platform.subscriptions.cancel', $inv->id) }}"
+                                                data-number="{{ $inv->number }}"
+                                                data-tenant-name="{{ $inv->tenant?->name ?? 'Tenant' }}"
+                                                data-amount="Rp{{ number_format($inv->amount, 0, ',', '.') }}"
+                                                onclick="openRejectInvoiceModal(this.dataset.cancelUrl, this.dataset.number, this.dataset.tenantName, this.dataset.amount)"
                                                 class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
-                                                title="Tolak / Batalkan Tagihan"
+                                                title="Batalkan Tagihan"
                                             >
                                                 <x-ui.icon name="x" class="w-4 h-4 stroke-[3]" />
                                             </button>
-                                        @else
-                                            <!-- Buka Detail Invoice -->
-                                            <a
-                                                href="{{ route('platform.subscriptions.show', $inv->id) }}"
-                                                class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
-                                                title="Buka Dokumen Invoice"
-                                            >
-                                                <x-ui.icon name="file-text" class="w-4 h-4" />
-                                            </a>
                                         @endif
+
+                                        <!-- Buka Detail Invoice -->
+                                        <a
+                                            href="{{ route('platform.subscriptions.show', $inv->id) }}"
+                                            class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
+                                            title="Buka Dokumen Invoice"
+                                        >
+                                            <x-ui.icon name="file-text" class="w-4 h-4" />
+                                        </a>
                                     </div>
                                 </td>
                             </tr>
@@ -357,11 +426,44 @@
                     @php
                         $sub = $inv->subscription;
                         $targetPlan = $inv->targetPlan ?? $sub?->plan;
-                        $endsAt = $sub?->ends_at;
+                        $periodEnd = $inv->period_ends_at;
+                        $periodStart = $inv->period_starts_at;
                         $dueAt = $inv->due_at;
-                        $isExpired = $endsAt ? $endsAt->isPast() : false;
-                        $daysRemaining = $endsAt && !$isExpired ? (int) ceil(now()->floatDiffInDays($endsAt)) : 0;
+                        $isInvoiceExpired = $periodEnd ? $periodEnd->isPast() : false;
+                        $daysRemaining = $periodEnd && !$isInvoiceExpired ? (int) ceil(now()->floatDiffInDays($periodEnd)) : 0;
                         $type = $inv->type ?? 'renewal';
+
+                        // Format WhatsApp Kuitansi / Bukti Lunas ke Owner (HANYA UNTUK YANG SUDAH LUNAS)
+                        $waLink = null;
+                        if ($inv->status === 'paid') {
+                            $ownerPhoneClean = preg_replace('/[^0-9]/', '', (string) ($inv->tenant?->owner?->phone ?? ''));
+                            if (str_starts_with($ownerPhoneClean, '0')) {
+                                $ownerPhoneClean = '62' . substr($ownerPhoneClean, 1);
+                            } elseif (str_starts_with($ownerPhoneClean, '8')) {
+                                $ownerPhoneClean = '62' . $ownerPhoneClean;
+                            }
+
+                            $platformNameVal = \App\Support\Platform\PlatformConfig::name();
+                            $ownerName = $inv->tenant?->owner?->name ?? 'Owner';
+                            $tenantName = $inv->tenant?->name ?? 'Barbershop';
+                            $planName = $targetPlan?->name ?? 'Paket Langganan';
+                            $typeName = ucfirst($type);
+                            $invoiceUrl = route('owner.subscription.invoice', $inv->id);
+
+                            $waMessageText = "Halo Bapak/Ibu {$ownerName} ({$tenantName}),\n\n"
+                                . "Terima kasih, pembayaran tagihan langganan SaaS Anda telah kami terima dan berstatus *LUNAS*:\n\n"
+                                . "• *No. Tagihan*: {$inv->number}\n"
+                                . "• *Paket*: {$planName} ({$typeName})\n"
+                                . "• *Total Pembayaran*: Rp" . number_format($inv->amount, 0, ',', '.') . "\n"
+                                . "• *Status*: LUNAS (Terverifikasi)\n"
+                                . "• *Masa Aktif Layanan*: s/d " . ($periodEnd ? $periodEnd->translatedFormat('d F Y') : '-') . "\n\n"
+                                . "Anda dapat melihat dan mencetak dokumen faktur / kuitansi resmi melalui link berikut:\n"
+                                . $invoiceUrl . "\n\n"
+                                . "Operasional barbershop Anda telah aktif sepenuhnya. Terima kasih atas kerja samanya!\n\n"
+                                . "Salam hangat,\n*{$platformNameVal}*";
+
+                            $waLink = !empty($ownerPhoneClean) ? 'https://wa.me/' . $ownerPhoneClean . '?text=' . rawurlencode($waMessageText) : null;
+                        }
                     @endphp
                     <div class="p-4 sm:p-5 space-y-4 hover:bg-zinc-50/50 transition duration-150">
                         <!-- Row 1: Nomor Invoice & Status & Nominal -->
@@ -371,8 +473,8 @@
                                     <span class="font-mono font-bold text-xs text-zinc-900">
                                         {{ $inv->number }}
                                     </span>
-                                    <span class="text-[11px] font-black uppercase tracking-wider {{ $type === 'upgrade' ? 'text-amber-700' : ($type === 'downgrade' ? 'text-purple-700' : 'text-emerald-700') }}">
-                                        {{ ucfirst($type) }}
+                                    <span class="text-xs font-bold {{ $inv->type_text_color }}">
+                                        {{ $inv->type_label }}
                                     </span>
                                     <span class="text-zinc-300">&bull;</span>
                                     @if($inv->status === 'paid')
@@ -422,39 +524,70 @@
                                     <span class="text-[11px] text-zinc-500">Maks {{ $targetPlan?->max_branches ?? 1 }} Cabang</span>
                                 </div>
                                 <div class="text-xs font-semibold text-zinc-800 pt-0.5">
-                                    {{ $inv->payment_method === 'transfer' ? 'Transfer Bank (' . ($inv->bank_name ?? 'Bank') . ')' : ($inv->payment_method === 'cash' ? 'Tunai (Cash)' : strtoupper(str_replace('_', ' ', $inv->gateway ?: 'MANUAL'))) }}
+                                    @if($inv->gateway === 'xendit')
+                                        <span class="inline-flex items-center gap-1 text-emerald-700 font-bold">
+                                            <x-ui.icon name="zap" class="w-3 h-3 text-emerald-600" />
+                                            <span>Xendit Online ({{ $inv->xendit_payment_channel ?? 'QRIS/VA' }})</span>
+                                        </span>
+                                    @elseif($inv->gateway === 'free_tier')
+                                        <span class="text-zinc-600 font-bold">Gratis (Rp0)</span>
+                                    @elseif($inv->payment_method === 'transfer')
+                                        <span>Transfer Bank ({{ $inv->bank_name ?? 'Bank' }})</span>
+                                    @elseif($inv->payment_method === 'cash')
+                                        <span>Tunai (Cash)</span>
+                                    @else
+                                        <span>{{ strtoupper(str_replace('_', ' ', $inv->gateway ?: 'MANUAL')) }}</span>
+                                    @endif
                                 </div>
                                 @if($inv->proof_url)
                                     <div class="pt-1">
                                         <button
                                             type="button"
-                                            onclick="openProofModal('{{ $inv->proof_url }}', '{{ $inv->number }}', '{{ addslashes($inv->tenant?->name ?? 'Tenant') }}', '{{ addslashes($inv->notes ?? '') }}', '{{ $inv->payment_method ?? 'transfer' }}', '{{ $inv->bank_name ?? '-' }}')"
+                                            data-proof-url="{{ $inv->proof_url }}"
+                                            data-number="{{ $inv->number }}"
+                                            data-tenant-name="{{ $inv->tenant?->name ?? 'Tenant' }}"
+                                            data-notes="{{ $inv->notes ?? '' }}"
+                                            data-method="{{ $inv->payment_method ?? 'transfer' }}"
+                                            data-bank="{{ $inv->bank_name ?? '-' }}"
+                                            onclick="openProofModal(this.dataset.proofUrl, this.dataset.number, this.dataset.tenantName, this.dataset.notes, this.dataset.method, this.dataset.bank)"
                                             class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700 hover:underline cursor-pointer"
                                         >
                                             <x-ui.icon name="image" class="w-3.5 h-3.5" />
                                             <span>Lihat Bukti Bayar</span>
                                         </button>
                                     </div>
+                                @elseif($inv->gateway === 'xendit')
+                                    <div class="pt-1">
+                                        <span class="text-[10px] text-emerald-600 font-medium">Otomatis Terverifikasi</span>
+                                    </div>
+                                @elseif($inv->gateway === 'free_tier')
+                                    <div class="pt-1">
+                                        <span class="text-[10px] text-zinc-400 font-medium">Paket Gratis (Rp0)</span>
+                                    </div>
                                 @endif
                             </div>
 
-                            <!-- Info Masa Aktif & Berakhir -->
+                            <!-- Info Masa Aktif & Berakhir Khusus Tagihan Ini -->
                             <div class="space-y-1">
-                                <span class="text-[10px] text-zinc-400 uppercase font-black tracking-wider block">Masa Aktif Saat Ini</span>
+                                <span class="text-[10px] text-zinc-400 uppercase font-black tracking-wider block">Periode Masa Aktif</span>
                                 <div class="flex items-center gap-1.5">
                                     <x-ui.icon name="clock" class="w-3 h-3 text-zinc-400 shrink-0" />
-                                    @if($endsAt)
-                                        <span class="font-black text-xs text-zinc-900">s/d {{ $endsAt->translatedFormat('d M Y') }}</span>
+                                    @if($periodEnd)
+                                        <span class="font-black text-xs text-zinc-900">s/d {{ $periodEnd->translatedFormat('d M Y') }}</span>
                                     @else
                                         <span class="text-zinc-400 italic text-xs">-</span>
                                     @endif
                                 </div>
                                 <div>
-                                    @if($isExpired)
-                                        <span class="font-bold text-xs text-rose-600 block">Kedaluwarsa (Terkunci)</span>
-                                    @elseif($endsAt && $daysRemaining <= 3)
+                                    @if($inv->status === 'pending' || $inv->status === 'unpaid')
+                                        <span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">Menunggu Verifikasi</span>
+                                    @elseif($inv->isSuperseded())
+                                        <span class="font-medium text-xs text-zinc-400 block">Digantikan</span>
+                                    @elseif($isInvoiceExpired)
+                                        <span class="font-bold text-xs text-rose-600 block">Kedaluwarsa</span>
+                                    @elseif($periodEnd && $daysRemaining <= 3)
                                         <span class="font-bold text-xs text-amber-600 block">Sisa {{ $daysRemaining }} Hari</span>
-                                    @elseif($endsAt)
+                                    @elseif($periodEnd)
                                         <span class="font-medium text-xs text-emerald-600 block">Sisa {{ $daysRemaining }} Hari</span>
                                     @endif
                                 </div>
@@ -480,32 +613,40 @@
                             </div>
 
                             <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                                @if($inv->status === 'paid' && $waLink)
+                                    <a
+                                        href="{{ $waLink }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="w-8 h-8 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
+                                        title="Kirim Kuitansi &amp; Faktur Lunas ke WhatsApp Owner ({{ $inv->tenant?->owner?->phone ?? '-' }})"
+                                    >
+                                        <x-ui.icon name="whatsapp" class="w-4 h-4 fill-current" />
+                                    </a>
+                                @endif
+
                                 @if($inv->status === 'pending' || $inv->status === 'unpaid')
                                     <button
                                         type="button"
-                                        onclick="openConfirmPaymentModal('{{ route('platform.subscriptions.confirm', $inv->id) }}', '{{ $inv->number }}', '{{ addslashes($inv->tenant?->name ?? 'Tenant') }}', 'Rp{{ number_format($inv->amount, 0, ',', '.') }}', '{{ $targetPlan?->name ?? 'Paket' }}', '{{ $type }}')"
-                                        class="w-8 h-8 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
-                                        title="Konfirmasi Lunas &amp; Aktifkan"
-                                    >
-                                        <x-ui.icon name="check" class="w-4 h-4 stroke-[3]" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onclick="openRejectInvoiceModal('{{ route('platform.subscriptions.cancel', $inv->id) }}', '{{ $inv->number }}', '{{ addslashes($inv->tenant?->name ?? 'Tenant') }}', 'Rp{{ number_format($inv->amount, 0, ',', '.') }}')"
+                                        data-cancel-url="{{ route('platform.subscriptions.cancel', $inv->id) }}"
+                                        data-number="{{ $inv->number }}"
+                                        data-tenant-name="{{ $inv->tenant?->name ?? 'Tenant' }}"
+                                        data-amount="Rp{{ number_format($inv->amount, 0, ',', '.') }}"
+                                        onclick="openRejectInvoiceModal(this.dataset.cancelUrl, this.dataset.number, this.dataset.tenantName, this.dataset.amount)"
                                         class="w-8 h-8 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
-                                        title="Tolak / Batalkan Tagihan"
+                                        title="Batalkan Tagihan"
                                     >
                                         <x-ui.icon name="x" class="w-4 h-4 stroke-[3]" />
                                     </button>
-                                @else
-                                    <a
-                                        href="{{ route('platform.subscriptions.show', $inv->id) }}"
-                                        class="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
-                                        title="Buka Dokumen Invoice"
-                                    >
-                                        <x-ui.icon name="file-text" class="w-4 h-4" />
-                                    </a>
                                 @endif
+
+                                <a
+                                    href="{{ route('platform.subscriptions.show', $inv->id) }}"
+                                    class="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white flex items-center justify-center shadow-xs transition cursor-pointer shrink-0"
+                                    title="Buka Dokumen Invoice"
+                                >
+                                    <x-ui.icon name="file-text" class="w-4 h-4" />
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -522,9 +663,6 @@
     </div>
 
     <style>
-        #modal-confirm-payment,
-        #modal-confirm-payment:focus,
-        #modal-confirm-payment:focus-visible,
         #modal-reject-invoice,
         #modal-reject-invoice:focus,
         #modal-reject-invoice:focus-visible,
@@ -536,106 +674,6 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
         }
     </style>
-
-    <!-- Modal Dialog Konfirmasi Pembayaran Lunas (Popup Ringan Native HTML5) -->
-    <dialog id="modal-confirm-payment" class="rounded-2xl p-0 shadow-2xl backdrop:bg-zinc-950/60 backdrop:backdrop-blur-xs w-[calc(100%-2rem)] max-w-md mx-auto my-auto border border-zinc-200 bg-white outline-none focus:outline-none focus-visible:outline-none ring-0">
-        <form id="form-confirm-payment" method="POST" action="">
-            @csrf
-            @method('PATCH')
-
-            <div class="p-5 sm:p-6 space-y-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
-                        <x-ui.icon name="shield-check" class="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div>
-                        <h3 class="font-black text-base text-zinc-900">Konfirmasi Pembayaran Lunas</h3>
-                        <p class="text-xs text-zinc-500 mt-0.5">Aktivasi otomatis operasional barbershop (+30 Hari)</p>
-                    </div>
-                </div>
-
-                <div class="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs space-y-1.5">
-                    <div class="flex justify-between">
-                        <span class="text-zinc-500 font-medium">No. Invoice:</span>
-                        <strong class="font-mono text-zinc-900" id="modal-inv-number">-</strong>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-zinc-500 font-medium">Barbershop:</span>
-                        <strong class="text-zinc-900" id="modal-inv-tenant">-</strong>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-zinc-500 font-medium">Jenis Transaksi:</span>
-                        <span class="font-bold uppercase text-[11px] px-2 py-0.5 rounded-md" id="modal-inv-type">-</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-zinc-500 font-medium">Paket Langganan:</span>
-                        <strong class="text-zinc-900" id="modal-inv-plan">-</strong>
-                    </div>
-                    <div class="flex justify-between pt-1 border-t border-zinc-200/60">
-                        <span class="text-zinc-500 font-medium">Total Nominal:</span>
-                        <strong class="text-emerald-700 font-black text-sm" id="modal-inv-amount">-</strong>
-                    </div>
-                </div>
-
-                <!-- Info Peringatan Pengaktifan Berdasarkan Jenis -->
-                <div id="modal-warning-upgrade" class="p-3 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 leading-relaxed space-y-1 hidden">
-                    <div class="flex items-center gap-1.5 font-bold text-amber-950">
-                        <x-ui.icon name="alert-triangle" class="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Aturan Pergantian Paket (Upgrade / Downgrade):</span>
-                    </div>
-                    <p>Sisa masa aktif paket sebelumnya tidak akan ditumpuk. Masa aktif paket baru akan direset murni 30 hari ke depan terhitung sejak konfirmasi ini.</p>
-                </div>
-
-                <div id="modal-warning-renewal" class="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-[11px] text-emerald-900 leading-relaxed space-y-1 hidden">
-                    <div class="flex items-center gap-1.5 font-bold text-emerald-950">
-                        <x-ui.icon name="check-circle" class="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Aturan Perpanjangan (Renewal):</span>
-                    </div>
-                    <p>Masa aktif barbershop akan bertambah +30 hari kalender diakumulasikan dari masa aktif saat ini.</p>
-                </div>
-
-                <div class="space-y-3">
-                    <div>
-                        <x-ui.select
-                            label="Metode Pembayaran Yang Diterima"
-                            name="gateway"
-                            icon="banknote"
-                            size="md"
-                            value="manual_transfer"
-                            :options="$gatewayOptions"
-                        />
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-zinc-700 mb-1">Catatan / Referensi Mutasi (Opsional)</label>
-                        <input
-                            type="text"
-                            name="gateway_ref"
-                            placeholder="Contoh: Mutasi BCA 29/10 Anton H"
-                            class="w-full text-xs font-semibold py-2 px-3 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-amber-500 placeholder:text-zinc-400"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <div class="p-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-end gap-2.5 rounded-b-2xl">
-                <button
-                    type="button"
-                    onclick="document.getElementById('modal-confirm-payment').close()"
-                    class="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-200/70 transition cursor-pointer"
-                >
-                    Batal
-                </button>
-                <button
-                    type="submit"
-                    class="px-5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
-                >
-                    <x-ui.icon name="check" class="w-4 h-4 stroke-[3]" />
-                    <span>Ya, Konfirmasi Lunas &amp; Aktifkan</span>
-                </button>
-            </div>
-        </form>
-    </dialog>
 
     <!-- Modal Dialog Preview Bukti Pembayaran (Dengan Zoom In / Out & Pan) -->
     <dialog id="modal-proof-preview" class="rounded-2xl p-0 shadow-2xl backdrop:bg-zinc-950/70 backdrop:backdrop-blur-xs w-[calc(100%-2rem)] max-w-3xl mx-auto my-auto border border-zinc-200 bg-white outline-none focus:outline-none focus-visible:outline-none ring-0">
@@ -787,7 +825,7 @@
 
                 <div class="space-y-2">
                     <label for="reject-cancellation-reason" class="block text-xs font-bold text-zinc-800">
-                        Alasan Penolakan Tagihan <span class="text-rose-500">*</span>
+                        Alasan Penolakan Tagihan <span class="text-rose-500 font-bold ml-0.5">*</span>
                     </label>
                     <textarea
                         name="cancellation_reason"
@@ -795,7 +833,7 @@
                         rows="3"
                         required
                         placeholder="Contoh: Bukti transfer buram/tidak terbaca, nominal kurang, atau dana belum masuk..."
-                        class="w-full text-xs rounded-xl border border-zinc-200 bg-white px-3 py-2.5 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition"
+                        class="w-full text-xs rounded-xl border border-zinc-200 bg-white px-3 py-2.5 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/25 transition"
                     ></textarea>
                     <div class="flex flex-wrap gap-1.5 pt-1">
                         <button type="button" onclick="setSuperadminRejectReason('Bukti transfer tidak valid atau foto buram')" class="text-[10px] font-medium px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition cursor-pointer">
@@ -831,38 +869,6 @@
     </dialog>
 
     <script>
-        function openConfirmPaymentModal(actionUrl, invoiceNumber, tenantName, amount, planName, type = 'renewal') {
-            const modal = document.getElementById('modal-confirm-payment');
-            const form = document.getElementById('form-confirm-payment');
-            form.action = actionUrl;
-
-            document.getElementById('modal-inv-number').textContent = invoiceNumber;
-            document.getElementById('modal-inv-tenant').textContent = tenantName;
-            document.getElementById('modal-inv-plan').textContent = planName;
-            document.getElementById('modal-inv-amount').textContent = amount;
-
-            const typeEl = document.getElementById('modal-inv-type');
-            const warnUpgrade = document.getElementById('modal-warning-upgrade');
-            const warnRenewal = document.getElementById('modal-warning-renewal');
-
-            typeEl.textContent = type.toUpperCase();
-            if (type === 'upgrade') {
-                typeEl.className = 'font-bold uppercase text-[11px] text-amber-700';
-                warnUpgrade.classList.remove('hidden');
-                warnRenewal.classList.add('hidden');
-            } else if (type === 'downgrade') {
-                typeEl.className = 'font-bold uppercase text-[11px] text-purple-700';
-                warnUpgrade.classList.remove('hidden');
-                warnRenewal.classList.add('hidden');
-            } else {
-                typeEl.className = 'font-bold uppercase text-[11px] text-emerald-700';
-                warnRenewal.classList.remove('hidden');
-                warnUpgrade.classList.add('hidden');
-            }
-
-            modal.showModal();
-        }
-
         function openRejectInvoiceModal(actionUrl, invoiceNumber, tenantName, amount) {
             const modal = document.getElementById('modal-reject-invoice');
             const form = document.getElementById('form-reject-invoice');

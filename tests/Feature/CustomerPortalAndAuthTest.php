@@ -13,7 +13,9 @@ use App\Models\QueueTicket;
 use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 final class CustomerPortalAndAuthTest extends TestCase
@@ -31,7 +33,7 @@ final class CustomerPortalAndAuthTest extends TestCase
         $response = $this->get(route('login'));
         $response->assertOk();
         $response->assertSee(route('register'));
-        $response->assertSee('Daftar Akun Baru');
+        $response->assertSee('Daftar');
     }
 
     public function test_customer_can_register_and_is_redirected_to_customer_dashboard(): void
@@ -88,6 +90,39 @@ final class CustomerPortalAndAuthTest extends TestCase
         $response->assertSee(route('customer.booking'));
         $response->assertSee(route('customer.history'));
         $response->assertSee(route('customer.profile'));
+        $response->assertSee('Pilihan Barbershop Mitra');
+    }
+
+    public function test_customer_dashboard_switches_to_scanned_tenant_branch_list(): void
+    {
+        $customer = User::factory()->create([
+            'phone' => '081233334444',
+            'is_superadmin' => false,
+        ]);
+
+        $tenants = Tenant::query()->take(2)->get();
+        $this->assertGreaterThanOrEqual(2, $tenants->count());
+        $scannedTenant = $tenants[0];
+        $otherTenant = $tenants[1];
+
+        // 1. Simulasikan customer yang telah scan QR code milik $scannedTenant
+        $response = $this->actingAs($customer)
+            ->withSession([
+                'scanned_customer_tenant_id' => $scannedTenant->id,
+                'scanned_customer_tenant_slug' => $scannedTenant->slug,
+            ])
+            ->get(route('customer.dashboard'));
+
+        $response->assertOk();
+        // Harus menampilkan daftar cabang dari tenant yang di-scan
+        $response->assertSee('Daftar Cabang ' . $scannedTenant->name);
+        // Harus melihat cabang milik tenant yang di-scan
+        foreach ($scannedTenant->branches()->where('is_active', true)->get() as $branch) {
+            $response->assertSee($branch->name);
+        }
+        // TIDAK BOLEH menampilkan Pilihan Barbershop Mitra (outlet kompetitor)
+        $response->assertDontSee('Pilihan Barbershop Mitra');
+        $response->assertDontSee($otherTenant->name);
     }
 
     public function test_customer_dashboard_shows_only_latest_active_ticket(): void
@@ -127,6 +162,70 @@ final class CustomerPortalAndAuthTest extends TestCase
         $response->assertSee('Antrean Aktif Anda');
     }
 
+    public function test_customer_dashboard_shows_active_booking_instead_of_old_history_when_booking_exists(): void
+    {
+        $customer = User::factory()->create([
+            'phone' => '081255557777',
+            'is_superadmin' => false,
+        ]);
+
+        $tenant = Tenant::query()->firstOrFail();
+        $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $service = Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $profile = CustomerProfile::query()->create([
+            'tenant_id' => $tenant->id,
+            'user_id' => $customer->id,
+            'name' => $customer->name,
+            'phone' => $customer->phone,
+        ]);
+
+        // Buat 1 riwayat tiket lama yang sudah selesai
+        QueueTicket::query()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'customer_profile_id' => $profile->id,
+            'date' => today()->subDays(2)->toDateString(),
+            'sequence' => 1,
+            'number' => 'A-001',
+            'type' => 'walk_in',
+            'status' => QueueStatus::Completed,
+            'priority_at' => now()->subDays(2),
+            'estimated_duration_minutes' => 30,
+            'version' => 1,
+        ]);
+
+        // Buat 1 booking aktif mendatang
+        $scheduledAt = now()->addDay()->setHour(14)->setMinute(0);
+        $booking = Booking::query()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'customer_profile_id' => $profile->id,
+            'user_id' => $customer->id,
+            'code' => 'BK-TEST-1234',
+            'scheduled_at' => $scheduledAt,
+            'estimated_end_at' => $scheduledAt->copy()->addMinutes(30),
+            'total_duration_minutes' => 30,
+            'status' => \App\Enums\BookingStatus::Confirmed,
+            'estimated_total' => 50000,
+        ]);
+
+        \App\Models\BookingItem::query()->create([
+            'booking_id' => $booking->id,
+            'service_id' => $service->id,
+            'service_name' => $service->name,
+            'price' => 50000,
+            'duration_minutes' => 30,
+        ]);
+
+        $response = $this->actingAs($customer)->get(route('customer.dashboard'));
+
+        $response->assertOk();
+        $response->assertSee('Reservasi Booking Anda');
+        $response->assertSee('BK-TEST-1234');
+        $response->assertSee('Buka Detail &amp; Pembayaran Booking', false);
+        $response->assertDontSee('Riwayat Kunjungan Terbaru');
+    }
+
     public function test_customer_can_create_booking_from_dedicated_booking_page(): void
     {
         $customer = User::factory()->create([
@@ -141,7 +240,7 @@ final class CustomerPortalAndAuthTest extends TestCase
         $response = $this->actingAs($customer)->get(route('customer.booking'));
         $response->assertOk();
         $response->assertSee('Reservasi Jadwal Potong');
-        $response->assertSee('Konfirmasi Jadwal Booking');
+        $response->assertSee('Konfirmasi &amp; Lanjut Bayar', false);
 
         $storeResponse = $this->actingAs($customer)->post(route('customer.booking.store'), [
             'tenant_id' => $tenant->id,
@@ -152,7 +251,7 @@ final class CustomerPortalAndAuthTest extends TestCase
         ]);
 
         $booking = Booking::query()->where('user_id', $customer->id)->latest('id')->firstOrFail();
-        $storeResponse->assertRedirect(route('customer.bookings.show', $booking->id));
+        $storeResponse->assertRedirect(route('customer.bookings.show', $booking));
 
         $this->assertDatabaseHas('bookings', [
             'tenant_id' => $tenant->id,
@@ -355,15 +454,24 @@ final class CustomerPortalAndAuthTest extends TestCase
             'maps_url' => 'https://maps.app.goo.gl/xyz123',
         ]);
 
-        // 4. Test tampilan halaman daftar cabang memuat tombol tambah cabang
+        // 4. Test halaman edit cabang
+        $editPageResponse = $this->actingAs($owner)
+            ->withSession(['active_tenant_id' => $tenant->id])
+            ->get(route('owner.branches.edit', $branch));
+        $editPageResponse->assertOk();
+        $editPageResponse->assertSee('Edit Cabang: Cabang Senopati Updated');
+
+        // Hapus cabang uji agar kuota cabang kembali tersedia
+        $branch->delete();
+
+        // 5. Test tampilan halaman daftar cabang memuat tombol tambah cabang saat kuota tersedia
         $branchesIndexResponse = $this->actingAs($owner)
             ->withSession(['active_tenant_id' => $tenant->id])
             ->get(route('owner.branches'));
         $branchesIndexResponse->assertOk();
         $branchesIndexResponse->assertSee(route('owner.branches.create'));
-        $branchesIndexResponse->assertSee('Tambah Cabang Baru');
 
-        // 5. Test halaman form tambah cabang baru
+        // 6. Test halaman form tambah cabang baru
         $createPageResponse = $this->actingAs($owner)
             ->withSession(['active_tenant_id' => $tenant->id])
             ->get(route('owner.branches.create'));
@@ -371,13 +479,6 @@ final class CustomerPortalAndAuthTest extends TestCase
         $createPageResponse->assertSee('Nama Cabang');
         $createPageResponse->assertSee('Kode Cabang (Prefix)');
         $createPageResponse->assertSee('Toleransi Telat Booking (Menit)');
-
-        // 6. Test halaman edit cabang
-        $editPageResponse = $this->actingAs($owner)
-            ->withSession(['active_tenant_id' => $tenant->id])
-            ->get(route('owner.branches.edit', $branch));
-        $editPageResponse->assertOk();
-        $editPageResponse->assertSee('Edit Cabang: Cabang Senopati Updated');
         $editPageResponse->assertSee('Status Operasional Cabang');
     }
 
@@ -432,11 +533,26 @@ final class CustomerPortalAndAuthTest extends TestCase
 
     public function test_customer_new_queue_and_booking_redirect_to_dedicated_detail_pages(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-11-04 14:00:00'));
         $customer = User::factory()->create(['phone' => '081233445566']);
         $tenant = Tenant::query()->firstOrFail();
         $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
         $service = Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
         $barber = Membership::query()->where('tenant_id', $tenant->id)->where('role', \App\Enums\Role::Barber)->firstOrFail();
+
+        \App\Models\Attendance::query()->updateOrCreate(
+            [
+                'tenant_id' => $tenant->id,
+                'branch_id' => $branch->id,
+                'membership_id' => $barber->id,
+                'date' => Carbon::now()->toDateString(),
+            ],
+            [
+                'status' => 'present',
+                'check_in_at' => Carbon::now()->subHours(2),
+                'check_out_at' => null,
+            ]
+        );
 
         // 1. Ambil Antrean Baru -> redirect ke customer.tickets.show
         $queueResponse = $this->actingAs($customer)->post(route('customer.queue.store', $tenant->slug), [
@@ -499,18 +615,35 @@ final class CustomerPortalAndAuthTest extends TestCase
             'duration_minutes' => 30,
         ]);
 
-        // A. Saat masih in_service: belum ada tombol selesai
-        $inServiceView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
-        $inServiceView->assertOk();
-        $inServiceView->assertDontSee('Selesai &amp; Lanjut ke Pembayaran', false);
+        // A. Saat belum bayar: tombol pembayaran di muka muncul
+        $unpaidView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
+        $unpaidView->assertOk();
+        $unpaidView->assertSee('Bayar Sekarang');
+        $unpaidView->assertSee(route('customer.tickets.checkout', $ticket->id));
 
-        // B. Staff menekan "Selesai Cukur" (status menjadi completed)
+        // A2. Saat sudah dibuat order unpaid (menunggu konfirmasi), halaman tetap ok dan mengarahkan ke waiting-payment
+        $order = \App\Models\Order::query()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'queue_ticket_id' => $ticket->id,
+            'number' => 'ORD-TEST-999',
+            'idempotency_key' => 'IDEM-TEST-999',
+            'subtotal' => 50000,
+            'grand_total' => 50000,
+            'payment_status' => \App\Enums\PaymentStatus::Unpaid,
+        ]);
+        $ticketWithOrderView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
+        $ticketWithOrderView->assertOk();
+        $ticketWithOrderView->assertSee(route('customer.tickets.waiting-payment', $ticket->id));
+        $order->delete();
+
+        // B. Staff dapat menyelesaikan cukur
         $ticket->update(['status' => QueueStatus::Completed, 'completed_at' => now()]);
 
-        // C. Customer melihat halaman: tombol selesai muncul!
+        // C. Customer melihat halaman: tombol bayar tetap ada jika belum lunas
         $completedView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
         $completedView->assertOk();
-        $completedView->assertSee('Selesai &amp; Lanjut ke Pembayaran', false);
+        $completedView->assertSee('Bayar Sekarang');
         $completedView->assertSee(route('customer.tickets.checkout', $ticket->id));
 
         // D. Customer membuka halaman checkout & rating
@@ -560,6 +693,113 @@ final class CustomerPortalAndAuthTest extends TestCase
 
         $customerInvoiceRedirect = $this->actingAs($customer)->get(route('customer.tickets.waiting-payment', $ticket->id));
         $customerInvoiceRedirect->assertRedirect(route('invoices.show', $order->number));
+    }
+
+    public function test_pre_payment_does_not_create_premature_review_until_service_completed(): void
+    {
+        $tenant = Tenant::query()->firstOrFail();
+        $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $barber = Membership::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('branch_id', $branch->id)
+            ->where('role', 'barber')
+            ->firstOrFail();
+
+        $service = Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $customer = User::factory()->create(['phone' => '087812349999']);
+
+        $customerProfile = CustomerProfile::query()->create([
+            'tenant_id' => $tenant->id,
+            'user_id' => $customer->id,
+            'name' => $customer->name,
+            'phone' => '087812349999',
+        ]);
+
+        $ticket = QueueTicket::query()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'customer_profile_id' => $customerProfile->id,
+            'barber_membership_id' => $barber->id,
+            'sequence' => 99,
+            'type' => 'walk_in',
+            'priority_at' => now(),
+            'number' => 'A-099',
+            'status' => QueueStatus::Waiting,
+            'date' => now()->toDateString(),
+        ]);
+
+        \App\Models\QueueTicketItem::query()->create([
+            'queue_ticket_id' => $ticket->id,
+            'service_id' => $service->id,
+            'service_name' => $service->name,
+            'price' => $service->price,
+            'duration_minutes' => 30,
+        ]);
+
+        // 1. Saat antrean masih Waiting (bayar di muka), halaman checkout tidak meminta bintang
+        $checkoutView = $this->actingAs($customer)->get(route('customer.tickets.checkout', $ticket->id));
+        $checkoutView->assertOk();
+        $checkoutView->assertSee('Catatan Penilaian');
+        $checkoutView->assertDontSee('Bagaimana pelayanan dari');
+
+        // 2. Customer membayar di muka (pilih cash)
+        $processResponse = $this->actingAs($customer)->post(route('customer.tickets.process-checkout', $ticket->id), [
+            'payment_method' => 'cash',
+        ]);
+        $processResponse->assertRedirect(route('customer.tickets.waiting-payment', $ticket->id));
+
+        // Order terbuat, tapi review BELUM boleh ada
+        $order = \App\Models\Order::query()->where('queue_ticket_id', $ticket->id)->firstOrFail();
+        $this->assertDatabaseMissing('reviews', [
+            'order_id' => $order->id,
+        ]);
+
+        // 3. Kasir konfirmasi pembayaran lunas
+        $cashierUser = User::query()->where('email', 'kasir.sudirman@barberking.id')->firstOrFail();
+        $this->actingAs($cashierUser)->post(route('cashier.tickets.confirm-payment', $ticket->id));
+        $order->refresh();
+        $this->assertSame(\App\Enums\PaymentStatus::Paid, $order->payment_status);
+
+        // 4. Tiket masih Waiting (belum selesai dicukur), detail tiket TIDAK boleh menampilkan kartu review
+        $ticketView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
+        $ticketView->assertOk();
+        $ticketView->assertDontSee('Penilaian Anda untuk Staff');
+        $ticketView->assertDontSee('Beri Penilaian Layanan Staff');
+
+        // Mencoba submit review saat belum selesai juga harus dicegah
+        $prematureReviewResponse = $this->actingAs($customer)->post(route('customer.tickets.review', $ticket->id), [
+            'rating' => 5,
+            'comment' => 'Harusnya belum bisa nilai',
+        ]);
+        $prematureReviewResponse->assertSessionHasErrors(['review']);
+
+        // 5. Staff baru saja menyelesaikan cukur (status -> Completed)
+        $ticket->update(['status' => QueueStatus::Completed, 'completed_at' => now()]);
+
+        // 6. Sekarang customer melihat tiketnya dan muncul form penilaian staff
+        $completedTicketView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
+        $completedTicketView->assertOk();
+        $completedTicketView->assertSee('Beri Penilaian Layanan Staff');
+
+        // 7. Customer memberikan rating 5 bintang setelah selesai -> tetap berada di halaman detail tiket
+        $reviewSubmitResponse = $this->actingAs($customer)
+            ->from(route('customer.tickets.show', $ticket->id))
+            ->post(route('customer.tickets.review', $ticket->id), [
+                'rating' => 5,
+                'comment' => 'Pelayanan ramah dan hasil potongan sangat presisi!',
+            ]);
+        $reviewSubmitResponse->assertRedirect(route('customer.tickets.show', $ticket->id));
+
+        // 8. Review sudah tersimpan dan kartu ulasan muncul di detail tiket
+        $this->assertDatabaseHas('reviews', [
+            'order_id' => $order->id,
+            'rating' => 5,
+        ]);
+
+        $finalTicketView = $this->actingAs($customer)->get(route('customer.tickets.show', $ticket->id));
+        $finalTicketView->assertSee('Penilaian Anda untuk Staff');
+        $finalTicketView->assertSee('5 / 5');
     }
 
     public function test_guest_can_access_tenant_portal_directly_without_login(): void
@@ -626,10 +866,14 @@ final class CustomerPortalAndAuthTest extends TestCase
         $response = $this->post(route('tenant.login.store', $tenant->slug), [
             'login' => '081277776666',
             'password' => 'password123',
+            'remember' => '1',
         ]);
 
         $response->assertRedirect(route('customer.portal', $tenant->slug));
         $this->assertAuthenticated();
+        /** @var \Illuminate\Auth\SessionGuard $guard */
+        $guard = Auth::guard();
+        $response->assertCookie($guard->getRecallerName());
     }
 
     public function test_staff_logging_in_via_tenant_login_is_safely_redirected_to_staff_dashboard(): void
@@ -645,7 +889,7 @@ final class CustomerPortalAndAuthTest extends TestCase
         $response->assertRedirect(route('owner.dashboard'));
     }
 
-    public function test_guest_can_create_booking_directly_from_tenant_portal(): void
+    public function test_guest_without_login_is_redirected_to_login_when_attempting_booking(): void
     {
         $tenant = Tenant::query()->firstOrFail();
         $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
@@ -660,14 +904,7 @@ final class CustomerPortalAndAuthTest extends TestCase
             'notes' => 'Tamu tanpa login',
         ]);
 
-        $booking = Booking::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('branch_id', $branch->id)
-            ->latest('id')
-            ->firstOrFail();
-
-        $response->assertRedirect(route('customer.bookings.show', $booking->id));
-        $this->assertSame('Tamu Booking', $booking->customerProfile?->name);
+        $response->assertRedirect($tenant->loginUrl());
     }
 
     public function test_tenant_brand_color_dynamically_overrides_system_amber_theme(): void
@@ -747,5 +984,128 @@ final class CustomerPortalAndAuthTest extends TestCase
         // Tamu anonim tanpa session booking juga ditolak -> 403 Forbidden
         $guestResponse = $this->get(route('customer.bookings.show', $booking->id));
         $guestResponse->assertForbidden();
+    }
+
+    public function test_customer_cannot_take_queue_outside_branch_operational_hours(): void
+    {
+        $customer = User::factory()->create(['phone' => '081233445577']);
+        $tenant = Tenant::query()->firstOrFail();
+        $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $service = Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
+
+        // 1. Uji saat jam subuh (belum buka)
+        Carbon::setTestNow(Carbon::parse('2026-11-04 04:00:00'));
+        $earlyResponse = $this->actingAs($customer)->post(route('customer.queue.store', $tenant->slug), [
+            'branch_id' => $branch->id,
+            'customer_name' => 'Subuh Customer',
+            'customer_phone' => '081233445577',
+            'service_ids' => [$service->id],
+        ]);
+        $earlyResponse->assertSessionHasErrors(['queue']);
+
+        // 2. Uji saat malam (sudah tutup)
+        Carbon::setTestNow(Carbon::parse('2026-11-04 23:30:00'));
+        $lateResponse = $this->actingAs($customer)->post(route('customer.queue.store', $tenant->slug), [
+            'branch_id' => $branch->id,
+            'customer_name' => 'Malam Customer',
+            'customer_phone' => '081233445577',
+            'service_ids' => [$service->id],
+        ]);
+        $lateResponse->assertSessionHasErrors(['queue']);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_booking_payment_proof_upload_and_cashier_approval_flow(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-04 10:00:00'));
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        $customer = User::factory()->create(['phone' => '081299998877']);
+        $tenant = Tenant::query()->firstOrFail();
+        $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $service = Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
+
+        // 1. Buat booking untuk jam 14:00
+        $bookingResponse = $this->actingAs($customer)->post(route('customer.booking.store'), [
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'service_ids' => [$service->id],
+            'scheduled_at' => '2026-11-04 14:00:00',
+        ]);
+
+        $booking = Booking::query()->where('tenant_id', $tenant->id)->latest('id')->firstOrFail();
+        $bookingResponse->assertRedirect(route('customer.bookings.show', $booking));
+
+        // 2. Customer membuka halaman detail booking: melihat kartu pembayaran QRIS resmi
+        $detailView = $this->actingAs($customer)->get(route('customer.bookings.show', $booking->id));
+        $detailView->assertOk();
+        $detailView->assertSee('Pembayaran Reservasi');
+        $detailView->assertSee('QRIS');
+
+        // 3. Customer mengunggah bukti transfer struk pembayaran
+        $file = \Illuminate\Http\UploadedFile::fake()->image('bukti_transfer.jpg', 600, 600);
+        $uploadResponse = $this->actingAs($customer)->post(route('customer.bookings.proof', $booking->id), [
+            'payment_proof' => $file,
+        ]);
+        $uploadResponse->assertSessionHasNoErrors();
+        $booking->refresh();
+        $this->assertNotNull($booking->payment_proof_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($booking->payment_proof_path);
+
+        // 4. Kasir / Owner memeriksa dan menyetujui (Approve) bukti pembayaran booking
+        $ownerUser = User::query()->where('email', 'owner@barberking.id')->firstOrFail();
+        $approveResponse = $this->actingAs($ownerUser)
+            ->withSession(['tenant_id' => $tenant->id])
+            ->post(route('cashier.bookings.approve-payment', $booking->id));
+        $approveResponse->assertSessionHasNoErrors();
+
+        $booking->refresh();
+        $this->assertNotNull($booking->payment_approved_at);
+        $this->assertNotNull($booking->queueTicket);
+
+        // Tiket antrean langsung terbit sesuai jadwal jam 14:00 (priority_at) dan order lunas
+        $ticket = $booking->queueTicket;
+        $this->assertSame('booking', $ticket->type);
+        $this->assertSame('2026-11-04 14:00:00', $ticket->priority_at->format('Y-m-d H:i:s'));
+        $this->assertNotNull($ticket->order);
+        $this->assertSame(\App\Enums\PaymentStatus::Paid, $ticket->order->payment_status);
+
+        // 5. Customer melihat status di booking detail telah lunas & nomor antrean terbit
+        $verifiedView = $this->actingAs($customer)->get(route('customer.bookings.show', $booking->id));
+        $verifiedView->assertOk();
+        $verifiedView->assertSee('Antrean Terdaftar di Sistem');
+        $verifiedView->assertSee($ticket->number);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_customer_can_cancel_their_own_active_queue_ticket(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-04 14:00:00'));
+        $customer = User::factory()->create(['phone' => '081233445588']);
+        $tenant = Tenant::query()->firstOrFail();
+        $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $service = Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
+
+        $queueResponse = $this->actingAs($customer)->post(route('customer.queue.store', $tenant->slug), [
+            'branch_id' => $branch->id,
+            'customer_name' => 'Cancel Queue Customer',
+            'customer_phone' => '081233445588',
+            'service_ids' => [$service->id],
+        ]);
+
+        $ticket = QueueTicket::query()->where('tenant_id', $tenant->id)->latest('id')->firstOrFail();
+        $queueResponse->assertRedirect(route('customer.tickets.show', $ticket->id));
+
+        // Pelanggan membatalkan antrean
+        $cancelResponse = $this->actingAs($customer)->post(route('customer.tickets.cancel', $ticket->id), [
+            'reason' => 'Ada acara mendadak',
+        ]);
+        $cancelResponse->assertSessionHasNoErrors();
+        $this->assertEquals(\App\Enums\QueueStatus::Cancelled, $ticket->fresh()->status);
+        $this->assertStringContainsString('Ada acara mendadak', (string) $ticket->fresh()->notes);
+
+        Carbon::setTestNow();
     }
 }

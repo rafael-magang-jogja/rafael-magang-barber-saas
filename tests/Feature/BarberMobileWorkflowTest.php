@@ -23,6 +23,26 @@ final class BarberMobileWorkflowTest extends TestCase
     {
         parent::setUp();
         $this->seed(DatabaseSeeder::class);
+
+        $barberUser = User::query()->where('email', 'andi@barberking.id')->first();
+        if ($barberUser) {
+            $membership = Membership::query()->where('user_id', $barberUser->id)->first();
+            if ($membership) {
+                \App\Models\Attendance::query()->updateOrCreate(
+                    [
+                        'membership_id' => $membership->id,
+                        'date' => now()->toDateString(),
+                    ],
+                    [
+                        'tenant_id' => $membership->tenant_id,
+                        'branch_id' => $membership->branch_id,
+                        'status' => 'present',
+                        'check_in_at' => now()->subHours(2),
+                        'check_out_at' => null,
+                    ]
+                );
+            }
+        }
     }
 
     public function test_barber_dashboard_renders_mobile_layout_with_ready_status_and_stats(): void
@@ -169,7 +189,40 @@ final class BarberMobileWorkflowTest extends TestCase
             'version' => 1,
         ]);
 
-        // Start service
+        $service = \App\Models\Service::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        \App\Models\QueueTicketItem::query()->create([
+            'queue_ticket_id' => $ticket->id,
+            'service_id' => $service->id,
+            'service_name' => $service->name,
+            'price' => $service->price,
+            'duration_minutes' => 30,
+        ]);
+
+        // A. Percobaan mulai cukur saat belum bayar: Ditolak sistem
+        $rejectedStart = $this->actingAs($barberUser)->post(route('cashier.tickets.transition', $ticket), [
+            'status' => QueueStatus::InService->value,
+        ]);
+        $rejectedStart->assertSessionHas('error');
+        $ticket->refresh();
+        $this->assertSame(QueueStatus::Called, $ticket->status);
+
+        // B. Pelanggan melunasi pembayaran di muka (saat antre)
+        \App\Models\Order::query()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'queue_ticket_id' => $ticket->id,
+            'customer_profile_id' => $customer->id,
+            'barber_membership_id' => $barberMembership->id,
+            'number' => 'ORD-TEST-053',
+            'status' => \App\Enums\OrderStatus::Completed,
+            'payment_status' => \App\Enums\PaymentStatus::Paid,
+            'subtotal' => $service->price,
+            'total' => $service->price,
+            'paid_amount' => $service->price,
+            'paid_at' => now(),
+        ]);
+
+        // C. Barber berhasil mulai cukur setelah pembayaran lunas
         $startResponse = $this->actingAs($barberUser)->post(route('cashier.tickets.transition', $ticket), [
             'status' => QueueStatus::InService->value,
         ]);
@@ -271,7 +324,7 @@ final class BarberMobileWorkflowTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Penghasilan &amp; Komisi', false);
-        $response->assertSee('Total Komisi');
+        $response->assertSee('Komisi Layanan');
         $response->assertSee('Riwayat Komisi Layanan');
         // Default seeded tenant is Pro
         $response->assertSee('Grafik Pendapatan');
@@ -292,7 +345,7 @@ final class BarberMobileWorkflowTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Penghasilan &amp; Komisi', false);
-        $response->assertSee('Total Komisi');
+        $response->assertSee('Komisi Layanan');
         $response->assertDontSee('Grafik Pendapatan');
     }
 
@@ -332,6 +385,7 @@ final class BarberMobileWorkflowTest extends TestCase
         $barberMembership = Membership::query()->where('user_id', $barberUser->id)->firstOrFail();
         $tenant = Tenant::query()->firstOrFail();
         $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $customer = CustomerProfile::query()->where('tenant_id', $tenant->id)->firstOrFail();
 
         // Bersihkan active tickets sebelumnya
         QueueTicket::query()
@@ -342,12 +396,14 @@ final class BarberMobileWorkflowTest extends TestCase
         $ticket = QueueTicket::query()->create([
             'tenant_id' => $tenant->id,
             'branch_id' => $branch->id,
+            'customer_profile_id' => $customer->id,
             'date' => now()->toDateString(),
             'number' => 'A-088',
             'sequence' => 88,
             'type' => 'walkin',
             'status' => QueueStatus::Called,
             'barber_membership_id' => $barberMembership->id,
+            'priority_at' => now()->subMinutes(5),
             'called_at' => now()->subMinutes(2),
             'version' => 1,
         ]);
@@ -369,6 +425,7 @@ final class BarberMobileWorkflowTest extends TestCase
         $barberMembership = Membership::query()->where('user_id', $barberUser->id)->firstOrFail();
         $tenant = Tenant::query()->firstOrFail();
         $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $customer = CustomerProfile::query()->where('tenant_id', $tenant->id)->firstOrFail();
 
         QueueTicket::query()
             ->where('branch_id', $branch->id)
@@ -380,8 +437,9 @@ final class BarberMobileWorkflowTest extends TestCase
         $ticketA = QueueTicket::query()->create([
             'tenant_id' => $tenant->id,
             'branch_id' => $branch->id,
+            'customer_profile_id' => $customer->id,
             'date' => now()->toDateString(),
-            'number' => 'A-010',
+            'number' => 'A-091',
             'sequence' => 10,
             'type' => 'walkin',
             'status' => QueueStatus::Called,
@@ -396,8 +454,9 @@ final class BarberMobileWorkflowTest extends TestCase
         $ticketB = QueueTicket::query()->create([
             'tenant_id' => $tenant->id,
             'branch_id' => $branch->id,
+            'customer_profile_id' => $customer->id,
             'date' => now()->toDateString(),
-            'number' => 'A-011',
+            'number' => 'A-092',
             'sequence' => 1,
             'type' => 'walkin',
             'status' => QueueStatus::Waiting,
@@ -429,6 +488,7 @@ final class BarberMobileWorkflowTest extends TestCase
         $barberMembership = Membership::query()->where('user_id', $barberUser->id)->firstOrFail();
         $tenant = Tenant::query()->firstOrFail();
         $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
+        $customer = CustomerProfile::query()->where('tenant_id', $tenant->id)->firstOrFail();
 
         QueueTicket::query()
             ->where('branch_id', $branch->id)
@@ -440,12 +500,14 @@ final class BarberMobileWorkflowTest extends TestCase
         $ticket = QueueTicket::query()->create([
             'tenant_id' => $tenant->id,
             'branch_id' => $branch->id,
+            'customer_profile_id' => $customer->id,
             'date' => now()->toDateString(),
-            'number' => 'A-020',
+            'number' => 'A-093',
             'sequence' => 20,
             'type' => 'walkin',
             'status' => QueueStatus::Called,
             'barber_membership_id' => $barberMembership->id,
+            'priority_at' => now()->subMinutes(5),
             'called_at' => now()->subMinute(),
             'skip_count' => 1,
             'version' => 1,
@@ -462,5 +524,32 @@ final class BarberMobileWorkflowTest extends TestCase
         $this->assertSame(QueueStatus::Cancelled, $ticket->status);
         $this->assertSame(2, $ticket->skip_count);
         $this->assertStringContainsString('Dibatalkan otomatis: 2x tidak hadir', (string) $ticket->notes);
+    }
+
+    public function test_barber_earnings_does_not_deduct_salary_on_alpha(): void
+    {
+        $barberUser = User::query()->where('email', 'andi@barberking.id')->firstOrFail();
+        $membership = Membership::query()->where('user_id', $barberUser->id)->firstOrFail();
+
+        // Catat 1 hari absent (alpha) di bulan ini
+        \App\Models\Attendance::query()->updateOrCreate(
+            [
+                'tenant_id' => $membership->tenant_id,
+                'branch_id' => $membership->branch_id,
+                'membership_id' => $membership->id,
+                'date' => now()->startOfMonth()->toDateString(),
+            ],
+            [
+                'status' => 'absent',
+            ]
+        );
+
+        $response = $this->actingAs($barberUser)->get(route('barber.earnings', ['period' => 'this_month']));
+
+        $response->assertOk();
+        $response->assertSee('Total Estimasi Pendapatan');
+        $response->assertDontSee('Potongan Alpha (Absen):');
+        $this->assertEquals(1, $response->viewData('alphaDays'));
+        $this->assertEquals(0, $response->viewData('alphaDeduction'));
     }
 }

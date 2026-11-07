@@ -30,6 +30,27 @@ final class Booking extends Model
         'status',
         'source',
         'notes',
+        'xendit_invoice_id',
+        'xendit_external_id',
+        'xendit_payment_url',
+        'xendit_payment_method',
+        'xendit_payment_channel',
+        'xendit_paid_at',
+        'xendit_expired_at',
+        'payment_proof_path',
+        'payment_proof_uploaded_at',
+        'payment_approved_at',
+        'payment_approved_by',
+        'payment_rejected_reason',
+        'refund_status',
+        'refund_amount',
+        'refund_bank_name',
+        'refund_account_number',
+        'refund_account_name',
+        'refund_notes',
+        'refund_requested_at',
+        'refunded_at',
+        'refunded_by',
         'cancelled_at',
         'cancel_reason',
         'cancelled_by',
@@ -43,8 +64,42 @@ final class Booking extends Model
             'total_duration_minutes' => 'integer',
             'estimated_total' => 'integer',
             'status' => BookingStatus::class,
+            'xendit_paid_at' => 'datetime',
+            'xendit_expired_at' => 'datetime',
+            'payment_proof_uploaded_at' => 'datetime',
+            'payment_approved_at' => 'datetime',
+            'refund_amount' => 'integer',
+            'refund_requested_at' => 'datetime',
+            'refunded_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'code';
+    }
+
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        $field = $field ?? $this->getRouteKeyName();
+
+        return $query->where(function ($q) use ($field, $value): void {
+            $q->where($field, $value);
+            if (is_numeric($value)) {
+                $q->orWhere('id', (int) $value);
+            }
+        });
+    }
+
+    public function paymentApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'payment_approved_by');
+    }
+
+    public function refundedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'refunded_by');
     }
 
     public function branch(): BelongsTo
@@ -75,5 +130,10 @@ final class Booking extends Model
     public function queueTicket(): HasOne
     {
         return $this->hasOne(QueueTicket::class);
+    }
+
+    public function payoutItem(): HasOne
+    {
+        return $this->hasOne(TenantPayoutItem::class);
     }
 }

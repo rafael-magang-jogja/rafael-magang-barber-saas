@@ -31,7 +31,6 @@ use App\Models\Review;
 use App\Models\SalaryScheme;
 use App\Support\Platform\FaviconService;
 use App\Models\Service;
-use App\Models\Subscription;
 use App\Models\SubscriptionInvoice;
 use App\Models\Tenant;
 use App\Models\User;
@@ -41,6 +40,8 @@ use App\Repositories\OrderRepository;
 use App\Repositories\StaffRepository;
 use App\Services\CheckoutService;
 use App\Services\OwnerManagementService;
+use App\Services\SubscriptionActivationService;
+use App\Services\XenditPaymentService;
 use App\Support\Tenancy\CurrentTenant;
 use DomainException;
 use Illuminate\Http\JsonResponse;
@@ -62,6 +63,8 @@ final class OwnerManagementController extends Controller
         private readonly StaffRepository $staffRepository,
         private readonly CatalogRepository $catalogRepository,
         private readonly OrderRepository $orderRepository,
+        private readonly SubscriptionActivationService $subscriptionActivationService,
+        private readonly XenditPaymentService $xenditPaymentService,
     ) {}
 
     public function branches(Request $request): View|RedirectResponse
@@ -331,7 +334,6 @@ final class OwnerManagementController extends Controller
             'orders' => $this->orderRepository->getOrdersForReport($branchId, $barberId, $paymentStatus, $dateFrom, $dateTo),
             'branches' => $this->branchRepository->getAllBranches(),
             'barbers' => $this->staffRepository->getActiveBarbers(withRelations: true),
-            'auditLogs' => $this->orderRepository->getRecentAuditLogs(50),
             'analytics' => $this->ownerManagementService->getOperationalAnalytics($branchId, $barberId),
             'currentPeriod' => $period,
             'dateFrom' => $dateFrom,
@@ -418,7 +420,7 @@ final class OwnerManagementController extends Controller
             ];
         }
 
-        $excelService = app(\App\Services\ExcelExportService.php ?? \App\Services\ExcelExportService::class);
+        $excelService = app(\App\Services\ExcelExportService::class);
 
         return $excelService->downloadXlsx(
             filename: 'laporan-keuangan-' . now()->format('Ymd-His') . '.xlsx',
@@ -594,7 +596,7 @@ final class OwnerManagementController extends Controller
             'refundedCount' => $refundedCount,
             'branches' => $this->branchRepository->getAllBranches(),
             'barbers' => $this->staffRepository->getActiveBarbers(withRelations: true),
-            'analytics' => $hasAnalyticsPro ? $this->ownerManagementService->getFinancialAnalytics($branchId, $barberId) : null,
+            'analytics' => $hasAnalyticsPro ? $this->ownerManagementService->getFinancialAnalytics($branchId, $barberId, $startDate, $endDate) : null,
             'hasAnalyticsPro' => $hasAnalyticsPro,
             'period' => $period,
             'dateFrom' => $dateFrom,
@@ -641,9 +643,19 @@ final class OwnerManagementController extends Controller
             ->get();
         $branches = $this->branchRepository->getActiveBranches();
 
-        $selectedPayroll = $request->filled('payroll_id')
-            ? $payrolls->firstWhere('id', $request->integer('payroll_id'))
-            : $payrolls->first();
+        if ($request->filled('payroll_id')) {
+            session(['owner_selected_payroll_id' => $request->integer('payroll_id')]);
+        }
+
+        $targetPayrollId = $request->integer('payroll_id') ?: session('owner_selected_payroll_id');
+        $selectedPayroll = $targetPayrollId ? $payrolls->firstWhere('id', $targetPayrollId) : null;
+
+        if (! $selectedPayroll) {
+            $selectedPayroll = $payrolls->first();
+            if ($selectedPayroll) {
+                session(['owner_selected_payroll_id' => $selectedPayroll->id]);
+            }
+        }
 
         return view('owner.payroll', [
             'payrolls' => $payrolls,
@@ -684,6 +696,8 @@ final class OwnerManagementController extends Controller
             : ($branchId !== null
                 ? 'Payroll cabang berhasil dihitung dan diperbarui.'
                 : 'Draf Payroll berhasil dihitung dan dibuat otomatis untuk seluruh karyawan.');
+
+        session(['owner_selected_payroll_id' => $payroll->id]);
 
         return redirect()->route('owner.payroll', ['payroll_id' => $payroll->id])
             ->with('status', $msg);
@@ -782,20 +796,32 @@ final class OwnerManagementController extends Controller
     {
         $tenantId = (int) app(CurrentTenant::class)->id();
 
-        $validated = $request->validate([
+        $isBarber = $membership->role === \App\Enums\Role::Barber || (is_object($membership->role) && $membership->role->value === 'barber') || $membership->role === 'barber';
+
+        $rules = [
             'salary_scheme_id' => [
                 'required',
                 'integer',
                 Rule::exists('salary_schemes', 'id')->where('tenant_id', $tenantId),
             ],
-            'salary_mode' => ['required', 'in:standard,custom'],
-            'custom_base_salary' => ['nullable', 'numeric', 'min:0', 'required_if:salary_mode,custom'],
             'notes' => ['nullable', 'string', 'max:255'],
-        ]);
+        ];
+
+        if (! $isBarber) {
+            $rules['salary_mode'] = ['required', 'in:standard,custom'];
+            $rules['custom_base_salary'] = ['nullable', 'numeric', 'min:0', 'required_if:salary_mode,custom'];
+        }
+
+        $validated = $request->validate($rules);
+
+        $customBase = null;
+        if (! $isBarber && ($validated['salary_mode'] ?? '') === 'custom') {
+            $customBase = (int) ($validated['custom_base_salary'] ?? 0);
+        }
 
         $membership->update([
             'salary_scheme_id' => (int) $validated['salary_scheme_id'],
-            'custom_base_salary' => $validated['salary_mode'] === 'custom' ? (int) $validated['custom_base_salary'] : null,
+            'custom_base_salary' => $customBase,
         ]);
 
         // Bersihkan aturan komisi khusus individu (persentase bagi hasil kini murni mengikuti pengaturan skema jabatan di menu rules)
@@ -853,7 +879,7 @@ final class OwnerManagementController extends Controller
         $tenantId = (int) app(CurrentTenant::class)->id();
 
         $bonusTiers = [];
-        if ($validated['type'] === 'base_plus_commission' && !empty($request->input('bonus_tiers'))) {
+        if (in_array($validated['type'], ['base_plus_commission', 'commission_only'], true) && !empty($request->input('bonus_tiers'))) {
             foreach ($request->input('bonus_tiers') as $tier) {
                 $min = (int) ($tier['min_services'] ?? 0);
                 $bonus = (int) preg_replace('/[^\d]/', '', (string) ($tier['bonus'] ?? '0'));
@@ -873,8 +899,16 @@ final class OwnerManagementController extends Controller
         $commPercentage = null;
         if ($validated['type'] === 'commission_only') {
             $baseSalary = 0;
-            $commPercentage = max(1, min(100, (int) $request->input('commission_percentage', 30)));
-            $targetBonusRules = ['commission_percentage' => $commPercentage];
+            $commModel = $request->input('commission_model', 'per_service');
+            if ($commModel === 'percentage' || (!empty($request->input('commission_percentage')) && $commModel !== 'per_service')) {
+                $commPercentage = max(1, min(100, (int) $request->input('commission_percentage', 30)));
+                $targetBonusRules = !empty($bonusTiers)
+                    ? ['commission_percentage' => $commPercentage, 'tiers' => $bonusTiers]
+                    : ['commission_percentage' => $commPercentage];
+            } else {
+                $commPercentage = null;
+                $targetBonusRules = !empty($bonusTiers) ? $bonusTiers : null;
+            }
         } elseif ($validated['type'] === 'base_plus_commission') {
             $baseSalary = $rawBaseSalary;
             $targetBonusRules = !empty($bonusTiers) ? $bonusTiers : null;
@@ -888,7 +922,7 @@ final class OwnerManagementController extends Controller
             'name' => $validated['name'],
             'type' => $validated['type'],
             'base_salary' => $baseSalary,
-            'alpha_penalty_nominal' => $alphaPenalty,
+            'alpha_penalty_nominal' => 0,
             'period' => 'monthly',
             'target_bonus_rules' => $targetBonusRules,
             'is_active' => true,
@@ -918,7 +952,7 @@ final class OwnerManagementController extends Controller
         ]);
 
         $bonusTiers = [];
-        if ($validated['type'] === 'base_plus_commission' && !empty($request->input('bonus_tiers'))) {
+        if (in_array($validated['type'], ['base_plus_commission', 'commission_only'], true) && !empty($request->input('bonus_tiers'))) {
             foreach ($request->input('bonus_tiers') as $tier) {
                 $min = (int) ($tier['min_services'] ?? 0);
                 $bonus = (int) preg_replace('/[^\d]/', '', (string) ($tier['bonus'] ?? '0'));
@@ -938,8 +972,16 @@ final class OwnerManagementController extends Controller
         $commPercentage = null;
         if ($validated['type'] === 'commission_only') {
             $baseSalary = 0;
-            $commPercentage = max(1, min(100, (int) $request->input('commission_percentage', 30)));
-            $targetBonusRules = ['commission_percentage' => $commPercentage];
+            $commModel = $request->input('commission_model', 'per_service');
+            if ($commModel === 'percentage' || (!empty($request->input('commission_percentage')) && $commModel !== 'per_service')) {
+                $commPercentage = max(1, min(100, (int) $request->input('commission_percentage', 30)));
+                $targetBonusRules = !empty($bonusTiers)
+                    ? ['commission_percentage' => $commPercentage, 'tiers' => $bonusTiers]
+                    : ['commission_percentage' => $commPercentage];
+            } else {
+                $commPercentage = null;
+                $targetBonusRules = !empty($bonusTiers) ? $bonusTiers : null;
+            }
         } elseif ($validated['type'] === 'base_plus_commission') {
             $baseSalary = $rawBaseSalary;
             $targetBonusRules = !empty($bonusTiers) ? $bonusTiers : null;
@@ -952,7 +994,7 @@ final class OwnerManagementController extends Controller
             'name' => $validated['name'],
             'type' => $validated['type'],
             'base_salary' => $baseSalary,
-            'alpha_penalty_nominal' => $alphaPenalty,
+            'alpha_penalty_nominal' => 0,
             'target_bonus_rules' => $targetBonusRules,
         ];
 
@@ -1165,15 +1207,15 @@ final class OwnerManagementController extends Controller
 
         // Statistik Time Off
         $today = now()->format('Y-m-d');
-        $currentMonth = (int) now()->month;
-        $currentYear = (int) now()->year;
+        $startOfMonth = now()->startOfMonth()->toDateString();
+        $endOfMonth = now()->endOfMonth()->toDateString();
 
         $stats = BarberTimeOff::query()
             ->selectRaw("
                 COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count,
-                COUNT(CASE WHEN status = 'approved' AND MONTH(date_from) = ? AND YEAR(date_from) = ? THEN 1 END) as approved_month_count,
+                COUNT(CASE WHEN status = 'approved' AND date_from >= ? AND date_from <= ? THEN 1 END) as approved_month_count,
                 COUNT(CASE WHEN status = 'approved' AND date_from <= ? AND date_to >= ? THEN 1 END) as today_off_barbers_count
-            ", [$currentMonth, $currentYear, $today, $today])
+            ", [$startOfMonth, $endOfMonth, $today, $today])
             ->first();
 
         $pendingCount = (int) ($stats->pending_count ?? 0);
@@ -1242,6 +1284,252 @@ final class OwnerManagementController extends Controller
         return back()->with('status', 'Pengajuan libur / izin barber telah ditolak.');
     }
 
+    public function attendanceScanner(Request $request): View
+    {
+        $branches = $this->branchRepository->getAllBranches();
+        $selectedBranchId = $request->filled('branch_id')
+            ? $request->integer('branch_id')
+            : ($branches->first()?->id ?? null);
+        $selectedBranch = $branches->firstWhere('id', $selectedBranchId) ?? $branches->first();
+
+        $today = now()->format('Y-m-d');
+        $tenantId = app(CurrentTenant::class)->id();
+
+        $todayAttendances = Attendance::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenantId)
+            ->whereDate('date', $today)
+            ->when($selectedBranch !== null, fn ($q) => $q->where('branch_id', $selectedBranch->id))
+            ->with(['membership.user', 'branch'])
+            ->latest('updated_at')
+            ->get();
+
+        return view('owner.attendance-scanner', [
+            'branches' => $branches,
+            'selectedBranch' => $selectedBranch,
+            'selectedBranchId' => $selectedBranchId,
+            'todayAttendances' => $todayAttendances,
+        ]);
+    }
+
+    public function processAttendanceScan(Request $request): JsonResponse
+    {
+        $tenant = app(CurrentTenant::class)->get();
+        if ($tenant === null) {
+            return response()->json(['success' => false, 'message' => 'Sesi tenant tidak valid.'], 403);
+        }
+
+        $code = (string) $request->input('code', '');
+        if (empty($code)) {
+            return response()->json(['success' => false, 'message' => 'Data QR code kosong.'], 422);
+        }
+
+        // Dekode data QR (mendukung JSON terstruktur maupun string payload)
+        $payload = null;
+        if (str_starts_with(trim($code), '{')) {
+            try {
+                $payload = json_decode($code, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\Throwable) {
+                $payload = null;
+            }
+        }
+
+        $membershipId = null;
+        $token = null;
+        $date = null;
+
+        if (is_array($payload) && ($payload['type'] ?? '') === 'staff_attendance') {
+            $membershipId = (int) ($payload['membership_id'] ?? 0);
+            $token = (string) ($payload['token'] ?? '');
+            $date = (string) ($payload['date'] ?? now()->toDateString());
+        } elseif (preg_match('/^STAFF:(\d+):([a-zA-Z0-9]+)/', $code, $matches)) {
+            $membershipId = (int) $matches[1];
+            $token = $matches[2];
+        }
+
+        if (empty($membershipId) || empty($token)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format QR code tidak valid atau bukan QR absensi staf resmi.',
+            ], 422);
+        }
+
+        $membership = Membership::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $membershipId)
+            ->where('is_active', true)
+            ->with(['user', 'branch'])
+            ->first();
+
+        if ($membership === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data staf tidak ditemukan atau sudah tidak aktif di barbershop ini.',
+            ], 404);
+        }
+
+        // Verifikasi keaslian token QR staf
+        if (! $membership->verifyAttendanceQrToken($token, $date)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kode QR absensi sudah kedaluwarsa atau tidak valid. Minta staf refresh layar HP.',
+            ], 422);
+        }
+
+        // Tentukan cabang
+        $branchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+        $branch = ($branchId ? Branch::query()->where('tenant_id', $tenant->id)->find($branchId) : null)
+            ?? $membership->branch
+            ?? Branch::query()->where('tenant_id', $tenant->id)->first();
+
+        if ($branch === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cabang outlet belum ditentukan.',
+            ], 422);
+        }
+
+        $today = now()->format('Y-m-d');
+        $now = now();
+
+        $attendance = Attendance::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('membership_id', $membership->id)
+            ->whereDate('date', $today)
+            ->first();
+
+        $staffName = $membership->display_name ?? $membership->user?->name ?? 'Staf';
+        $roleLabel = match ($membership->role?->value) {
+            'barber' => 'Staff Barber',
+            'admin', 'cashier' => 'Kasir / Admin',
+            default => 'Karyawan',
+        };
+
+        // 1. Kondisi: Sudah Absen Masuk dan Sudah Absen Pulang
+        if ($attendance !== null && $attendance->check_in_at !== null && $attendance->check_out_at !== null) {
+            return response()->json([
+                'success' => true,
+                'already_completed' => true,
+                'action' => 'completed',
+                'message' => "Staf {$staffName} sudah menyelesaikan absensi hari ini (Masuk: {$attendance->check_in_at->format('H:i')}, Pulang: {$attendance->check_out_at->format('H:i')}).",
+                'staff' => [
+                    'id' => $membership->id,
+                    'name' => $staffName,
+                    'role_label' => $roleLabel,
+                    'branch' => $branch->name,
+                ],
+                'attendance' => [
+                    'date' => $now->locale('id')->isoFormat('D MMMM Y'),
+                    'status_label' => $attendance->status_label,
+                    'check_in_at' => $attendance->check_in_at->format('H:i') . ' WIB',
+                    'check_out_at' => $attendance->check_out_at->format('H:i') . ' WIB',
+                    'late_minutes' => $attendance->late_minutes ?? 0,
+                ],
+            ]);
+        }
+
+        // 2. Kondisi: Sudah Absen Masuk tapi Belum Absen Pulang -> Catat Check-Out
+        if ($attendance !== null && $attendance->check_in_at !== null) {
+            $attendance->update([
+                'check_out_at' => $now,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'action' => 'check_out',
+                'message' => "Absen PULANG berhasil dicatat untuk {$staffName} pada pukul {$now->format('H:i')} WIB.",
+                'staff' => [
+                    'id' => $membership->id,
+                    'name' => $staffName,
+                    'role_label' => $roleLabel,
+                    'branch' => $branch->name,
+                ],
+                'attendance' => [
+                    'date' => $now->locale('id')->isoFormat('D MMMM Y'),
+                    'status_label' => $attendance->status_label,
+                    'check_in_at' => $attendance->check_in_at->format('H:i') . ' WIB',
+                    'check_out_at' => $now->format('H:i') . ' WIB',
+                    'late_minutes' => $attendance->late_minutes ?? 0,
+                ],
+            ]);
+        }
+
+        // 3. Kondisi: Belum Absen Masuk -> Catat Check-In
+        $dayNum = $now->dayOfWeek; // 0=Minggu, 1=Senin, ...
+        $sched = BarberSchedule::query()
+            ->withoutGlobalScope('tenant')
+            ->where('membership_id', $membership->id)
+            ->where('day_of_week', $dayNum)
+            ->first();
+
+        $openingHours = $branch->opening_hours[$dayNum] ?? null;
+        $shiftStartStr = '09:00';
+        if ($sched !== null && $sched->start_time) {
+            $shiftStartStr = substr((string) $sched->start_time, 0, 5);
+        } elseif ($openingHours !== null && ! empty($openingHours['open'])) {
+            $shiftStartStr = $openingHours['open'];
+        }
+
+        $scheduledStart = \Carbon\Carbon::parse("{$today} {$shiftStartStr}:00");
+        $toleranceMinutes = $branch->late_tolerance_minutes ?? 15;
+        $lateMinutes = 0;
+
+        if ($now->greaterThan($scheduledStart)) {
+            $diffMinutes = (int) $scheduledStart->diffInMinutes($now, false);
+            if ($diffMinutes > $toleranceMinutes) {
+                $lateMinutes = $diffMinutes;
+            }
+        }
+
+        $status = $lateMinutes > 0 ? 'late' : 'present';
+
+        if ($attendance !== null) {
+            $attendance->update([
+                'branch_id' => $branch->id,
+                'check_in_at' => $now,
+                'status' => $status,
+                'late_minutes' => $lateMinutes,
+            ]);
+        } else {
+            $attendance = Attendance::query()
+                ->withoutGlobalScope('tenant')
+                ->create([
+                    'tenant_id' => $tenant->id,
+                    'branch_id' => $branch->id,
+                    'membership_id' => $membership->id,
+                    'date' => $today,
+                    'check_in_at' => $now,
+                    'status' => $status,
+                    'late_minutes' => $lateMinutes,
+                ]);
+        }
+
+        $statusDesc = $lateMinutes > 0 ? "Terlambat {$lateMinutes} menit" : "Tepat Waktu";
+        $msg = "Absen MASUK berhasil dicatat untuk {$staffName} pada pukul {$now->format('H:i')} WIB ({$statusDesc}).";
+
+        return response()->json([
+            'success' => true,
+            'action' => 'check_in',
+            'message' => $msg,
+            'staff' => [
+                'id' => $membership->id,
+                'name' => $staffName,
+                'role_label' => $roleLabel,
+                'branch' => $branch->name,
+            ],
+            'attendance' => [
+                'date' => $now->locale('id')->isoFormat('D MMMM Y'),
+                'status' => $status,
+                'status_label' => $attendance->status_label,
+                'check_in_at' => $now->format('H:i') . ' WIB',
+                'check_out_at' => null,
+                'late_minutes' => $lateMinutes,
+            ],
+        ]);
+    }
+
     public function attendances(Request $request): View
     {
         $period = $request->input('period', 'today');
@@ -1265,16 +1553,19 @@ final class OwnerManagementController extends Controller
             default => now()->endOfDay()->toDateString(),
         };
 
+        $tenantId = app(\App\Support\Tenancy\CurrentTenant::class)->get()?->id;
+        $this->ownerManagementService->autoCloseDailyAttendances($tenantId, $dateFrom, $dateTo);
+
         $attendancesQuery = Attendance::query()
             ->with(['membership.user', 'branch'])
             ->whereBetween('date', [$dateFrom, $dateTo])
             ->when($branchId !== null && $branchId > 0, fn ($q) => $q->where('branch_id', $branchId))
             ->when($barberId !== null && $barberId > 0, fn ($q) => $q->where('membership_id', $barberId))
-            ->when($status !== 'all' && in_array($status, ['present', 'late', 'leave', 'absent'], true), fn ($q) => $q->where('status', $status))
+            ->when($status !== 'all' && in_array($status, ['present', 'late', 'leave', 'absent', 'sick', 'holiday'], true), fn ($q) => $q->where('status', $status))
             ->latest('date')
             ->latest('check_in_at');
 
-        $attendances = (clone $attendancesQuery)->paginate(20)->withQueryString();
+        $attendances = (clone $attendancesQuery)->paginate(10)->withQueryString();
 
         // Statistik kehadiran untuk rentang waktu yang difilter
         $statsBase = Attendance::query()
@@ -1287,7 +1578,7 @@ final class OwnerManagementController extends Controller
                 COUNT(*) as total_records,
                 COUNT(CASE WHEN status = 'present' THEN 1 END) as present_count,
                 COUNT(CASE WHEN status = 'late' THEN 1 END) as late_count,
-                COUNT(CASE WHEN status IN ('leave', 'absent') THEN 1 END) as leave_count,
+                COUNT(CASE WHEN status IN ('leave', 'absent', 'sick', 'holiday') THEN 1 END) as leave_count,
                 COALESCE(SUM(late_minutes), 0) as total_late_minutes
             ")
             ->first();
@@ -1341,7 +1632,7 @@ final class OwnerManagementController extends Controller
             'date' => ['required', 'date'],
             'check_in_time' => ['nullable', 'date_format:H:i'],
             'check_out_time' => ['nullable', 'date_format:H:i'],
-            'status' => ['required', 'string', 'in:present,late,leave,absent'],
+            'status' => ['required', 'string', 'in:present,late,sick,leave,holiday,absent'],
             'late_minutes' => ['nullable', 'integer', 'min:0'],
         ]);
 
@@ -1355,7 +1646,7 @@ final class OwnerManagementController extends Controller
         $validated = $request->validate([
             'check_in_time' => ['nullable', 'date_format:H:i'],
             'check_out_time' => ['nullable', 'date_format:H:i'],
-            'status' => ['required', 'string', 'in:present,late,leave,absent'],
+            'status' => ['required', 'string', 'in:present,late,sick,leave,holiday,absent'],
             'late_minutes' => ['nullable', 'integer', 'min:0'],
             'branch_id' => ['nullable', 'integer'],
         ]);
@@ -1546,7 +1837,12 @@ final class OwnerManagementController extends Controller
             'remove_logo' => ['nullable', 'boolean'],
             'favicon' => ['nullable', 'file', 'mimes:ico,png,svg,jpg,jpeg,webp', 'max:2048'],
             'remove_favicon' => ['nullable', 'boolean'],
+            'bank_name' => ['nullable', 'string', 'max:50'],
+            'bank_account_number' => ['nullable', 'string', 'max:50'],
+            'bank_account_holder' => ['nullable', 'string', 'max:100'],
             'qris_account' => ['nullable', 'string', 'max:100'],
+            'qris_image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'remove_qris_image' => ['nullable', 'boolean'],
             'booking_advance_days' => ['nullable', 'integer', 'min:1', 'max:30'],
             'default_duration_minutes' => ['nullable', 'integer', 'min:10', 'max:180'],
             'announcement' => ['nullable', 'string', 'max:500'],
@@ -1604,13 +1900,35 @@ final class OwnerManagementController extends Controller
             }
         }
 
-        unset($validated['logo'], $validated['remove_logo'], $validated['favicon'], $validated['remove_favicon']);
+        // Gambar QRIS Barbershop
+        if ($request->boolean('remove_qris_image')) {
+            $oldQris = $tenant->settings['qris_image_path'] ?? null;
+            if (! empty($oldQris) && Storage::disk('public')->exists($oldQris)) {
+                Storage::disk('public')->delete($oldQris);
+            }
+            $validated['qris_image_path'] = null;
+        } elseif ($request->hasFile('qris_image')) {
+            $oldQris = $tenant->settings['qris_image_path'] ?? null;
+            if (! empty($oldQris) && Storage::disk('public')->exists($oldQris)) {
+                Storage::disk('public')->delete($oldQris);
+            }
+            $validated['qris_image_path'] = $request->file('qris_image')->store('qris', 'public');
+        }
+
+        unset(
+            $validated['logo'],
+            $validated['remove_logo'],
+            $validated['favicon'],
+            $validated['remove_favicon'],
+            $validated['qris_image'],
+            $validated['remove_qris_image']
+        );
 
         $updatedTenant = $this->ownerManagementService->updateTenantSettings($tenant, $validated);
 
-        // Jika paket Pro atau Business (dan tidak upload file favicon kustom manual),
-        // otomatis buatkan favicon tenant dari logo + warna brand yang dipilih
-        if ($updatedTenant->hasFeature('brand_color') && ! $hasCustomFaviconFile && empty($updatedTenant->settings['favicon_path'])) {
+        // Otomatis generate favicon tenant dengan ikon resmi platform + warna brand barbershop
+        // jika tenant tidak mengunggah file favicon kustom tersendiri
+        if (! $hasCustomFaviconFile && empty($updatedTenant->settings['favicon_path'])) {
             FaviconService::generateForTenant($updatedTenant);
         }
 
@@ -1701,11 +2019,27 @@ final class OwnerManagementController extends Controller
 
         $existingSub = $tenant->activeSubscription() ?? $tenant->subscriptions()->withoutGlobalScope('tenant')->with('plan')->latest('id')->first();
 
-        // Tentukan Tipe: renewal, upgrade, downgrade
+        // Tentukan Tipe: activation, renewal, upgrade, downgrade
+        $hasPaidHistory = SubscriptionInvoice::query()
+            ->withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('status', 'paid')
+            ->exists();
+
         $currentPlanId = $existingSub?->plan_id;
         $currentPrice = $existingSub?->plan?->price_monthly ?? $existingSub?->price ?? 0;
 
-        if ($currentPlanId !== null && $currentPlanId === $targetPlan->id) {
+        // Penanganan Paket Gratis (Rp0): Bypass payment gateway, aktifkan seketika
+        if ($targetPlan->price_monthly <= 0) {
+            $this->subscriptionActivationService->activateFreePlan($tenant, $targetPlan, $request->user());
+
+            return redirect()->route('owner.subscription')
+                ->with('status', "Paket {$targetPlan->name} (Gratis) berhasil diaktifkan seketika untuk barbershop Anda.");
+        }
+
+        if (! $hasPaidHistory) {
+            $type = 'activation';
+        } elseif ($currentPlanId !== null && $currentPlanId === $targetPlan->id) {
             $type = 'renewal';
         } elseif ($targetPlan->price_monthly > $currentPrice) {
             $type = 'upgrade';
@@ -1732,6 +2066,11 @@ final class OwnerManagementController extends Controller
             ->latest('id')
             ->first();
 
+        $targetPeriodStart = ($type === 'renewal' && $existingSub && $existingSub->ends_at && $existingSub->ends_at->isFuture())
+            ? $existingSub->ends_at
+            : now();
+        $targetPeriodEnd = $targetPeriodStart->copy()->addDays(30);
+
         if ($pendingInvoice !== null) {
             // Update invoice yang ada ke target plan dan tipe baru
             $pendingInvoice->update([
@@ -1739,12 +2078,15 @@ final class OwnerManagementController extends Controller
                 'target_plan_id' => $targetPlan->id,
                 'amount' => $targetPlan->price_monthly,
                 'type' => $type,
+                'period_start' => $targetPeriodStart,
+                'period_end' => $targetPeriodEnd,
                 'status' => 'unpaid', // reset ke unpaid jika ganti paket
+                'gateway' => 'xendit',
                 'due_at' => now()->addDays(2),
             ]);
             $invoice = $pendingInvoice;
         } else {
-            // Terbitkan invoice baru berstatus 'unpaid'
+            // Terbitkan invoice baru berstatus 'unpaid' dengan gateway Xendit
             $invoice = SubscriptionInvoice::query()->withoutGlobalScope('tenant')->create([
                 'tenant_id' => $tenant->id,
                 'subscription_id' => $existingSub?->id,
@@ -1752,23 +2094,35 @@ final class OwnerManagementController extends Controller
                 'type' => $type,
                 'number' => 'INV-SUB-' . now()->format('Ymd') . '-' . strtoupper(Str::random(4)),
                 'amount' => $targetPlan->price_monthly,
+                'period_start' => $targetPeriodStart,
+                'period_end' => $targetPeriodEnd,
                 'status' => 'unpaid',
                 'due_at' => now()->addDays(2),
                 'paid_at' => null,
-                'gateway' => 'manual_transfer',
+                'gateway' => 'xendit',
+            ]);
+        }
+
+        // Generate invoice Xendit secara otomatis
+        try {
+            $this->xenditPaymentService->getOrCreateSubscriptionInvoice($invoice);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Generate Xendit subscription invoice failed: '.$e->getMessage(), [
+                'invoice_id' => $invoice->id,
             ]);
         }
 
         $typeName = match ($type) {
+            'activation', 'initial' => 'aktivasi',
             'renewal' => 'perpanjangan',
             'upgrade' => 'upgrade',
             'downgrade' => 'downgrade',
         };
 
-        return redirect()->route('owner.subscription.invoice', $invoice->id)->with('status', "Tagihan {$typeName} ke paket {$targetPlan->name} ({$invoice->number}) berhasil dibuat. Silakan selesaikan form pembayaran di bawah.");
+        return redirect()->route('owner.subscription.invoice', $invoice->id)->with('status', "Tagihan {$typeName} paket {$targetPlan->name} ({$invoice->number}) berhasil dibuat. Silakan selesaikan pembayaran instan di bawah.");
     }
 
-    public function showSubscriptionInvoice(int $id): View
+    public function showSubscriptionInvoice(Request $request, int $id): View|RedirectResponse|JsonResponse
     {
         /** @var Tenant $tenant */
         $tenant = app(CurrentTenant::class)->get();
@@ -1779,6 +2133,45 @@ final class OwnerManagementController extends Controller
             ->where('tenant_id', $tenant->id)
             ->with(['targetPlan', 'subscription.plan'])
             ->findOrFail($id);
+
+        // Fitur Simulasi Pembayaran Lokal / Dev Test
+        if ($request->boolean('mock_xendit_pay') && $invoice->status !== 'paid') {
+            $this->subscriptionActivationService->activateFromInvoice(
+                invoice: $invoice,
+                payload: [
+                    'gateway' => 'xendit_simulator',
+                    'gateway_ref' => 'SIMULATED-ONLINE-PAID',
+                    'payment_method' => 'QRIS',
+                    'payment_channel' => 'SIMULATOR',
+                    'paid_at' => now(),
+                ],
+                actor: $request->user(),
+                defaultGateway: 'xendit_simulator',
+                defaultGatewayRef: 'SIMULATED-ONLINE-PAID'
+            );
+
+            return redirect()->route('owner.subscription.invoice', $invoice->id)
+                ->with('status', 'Simulasi pembayaran berhasil! Langganan barbershop Anda telah aktif seketika.');
+        }
+
+        // Endpoint Cek Status Pembayaran (untuk polling otomatis frontend)
+        if ($request->wantsJson() || $request->boolean('check_status')) {
+            return response()->json([
+                'status' => $invoice->status,
+                'is_paid' => $invoice->status === 'paid',
+                'paid_at' => $invoice->paid_at?->translatedFormat('d M Y, H:i'),
+            ]);
+        }
+
+        // Pastikan invoice Xendit siap jika masih unpaid dan berbayar
+        if ($invoice->status === 'unpaid' && ! $invoice->isFree()) {
+            try {
+                $this->xenditPaymentService->getOrCreateSubscriptionInvoice($invoice);
+                $invoice->refresh();
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Generate Xendit on showSubscriptionInvoice failed: '.$e->getMessage());
+            }
+        }
 
         $bankAccounts = SubscriptionInvoice::platformBankAccounts();
 

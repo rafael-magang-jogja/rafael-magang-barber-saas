@@ -3,16 +3,11 @@
     :barber-membership="$barberMembership"
 >
     <!-- Header Ringkasan Penghasilan & Cabang -->
-    <div class="flex items-center justify-between">
-        <div>
-            <h1 class="text-base font-black text-zinc-900 tracking-tight">Penghasilan &amp; Komisi</h1>
-            <p class="text-[11px] text-zinc-400">
-                {{ $tenant?->name ?? 'Barbershop' }} &bull; {{ $branch?->name ?? 'Cabang' }}
-            </p>
-        </div>
-        <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
-            Fitur {{ strtoupper($planCode) }}
-        </span>
+    <div>
+        <h1 class="text-base font-black text-zinc-900 tracking-tight">Penghasilan &amp; Komisi</h1>
+        <p class="text-[11px] text-zinc-400">
+            {{ $tenant?->name ?? 'Barbershop' }} &bull; {{ $branch?->name ?? 'Cabang' }}
+        </p>
     </div>
 
     <!-- FILTER PERIODE WAKTU (MENGGUNAKAN DESIGN DROPDOWN RESMI SYSTEM) -->
@@ -112,95 +107,96 @@
     @php
         $hasBaseSalary = ($baseSalary ?? 0) > 0;
         $isMonthlyPeriod = in_array($selectedPeriod, ['this_month', 'last_month'], true);
-        $periodTip = $periodTip ?? 0;
+
         $totalDisplayAmount = ($hasBaseSalary && $isMonthlyPeriod) 
-            ? ($periodCommission + $periodTip + $baseSalary) 
-            : ($periodCommission + $periodTip);
+            ? max(0, $periodCommission + $baseSalary) 
+            : max(0, $periodCommission);
     @endphp
 
     <!-- 1. KARTU HERO TOTAL PENDAPATAN / KOMISI PERIODE TERPILIH -->
-    <div class="p-4 sm:p-5 rounded-3xl bg-zinc-950 text-white border border-zinc-800 shadow-md relative overflow-hidden space-y-3.5">
+    <div class="p-5 sm:p-6 rounded-3xl bg-zinc-950 text-white border border-zinc-800 shadow-md relative overflow-hidden space-y-4">
         <!-- Background accent subtle glow -->
-        <div class="absolute -right-8 -top-8 w-36 h-36 rounded-full bg-amber-500/10 blur-2xl pointer-events-none"></div>
+        <div class="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-amber-500/10 blur-3xl pointer-events-none"></div>
 
-        <div class="flex items-center justify-between relative z-10">
-            <span class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                <x-ui.icon name="wallet" class="w-3.5 h-3.5 text-amber-400" />
-                @if($hasBaseSalary && $isMonthlyPeriod)
-                    <span>Total Estimasi Pendapatan ({{ $periodLabel }})</span>
-                @elseif($hasBaseSalary)
-                    <span>Total Komisi Pangkas ({{ $periodLabel }})</span>
-                @else
-                    <span>Total Komisi ({{ $periodLabel }})</span>
-                @endif
-            </span>
-            <span class="text-[10px] font-semibold text-zinc-400">
-                {{ $periodCompleted }} pangkas
-            </span>
+        <!-- Baris Judul & Badge Pangkas -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 relative z-10">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <x-ui.icon name="wallet" class="w-4 h-4 text-amber-400" />
+                    <span>{{ $isMonthlyPeriod ? 'Total Estimasi Pendapatan' : 'Total Komisi Pangkas' }}</span>
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-zinc-800/90 text-amber-400 border border-zinc-700/80 shadow-2xs">
+                    {{ $periodLabel }}
+                </span>
+            </div>
+
+            <div class="flex items-center self-start sm:self-center">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 shadow-2xs">
+                    <x-ui.icon name="scissors" class="w-3.5 h-3.5 text-amber-400" />
+                    <span><strong class="text-white font-mono">{{ $periodCompleted }}</strong> pangkas</span>
+                </span>
+            </div>
         </div>
 
-        <div class="relative z-10">
-            <p class="text-3xl sm:text-4xl font-black text-white tracking-tight num">
-                Rp{{ number_format($totalDisplayAmount, 0, ',', '.') }}
-            </p>
-            <p class="text-[11px] text-zinc-400 mt-1">
+        <!-- Nominal Utama & Keterangan -->
+        <div class="relative z-10 space-y-1">
+            <div class="flex items-baseline gap-3 flex-wrap">
+                <p class="text-3xl sm:text-4xl font-black text-white tracking-tight num">
+                    Rp{{ number_format($totalDisplayAmount, 0, ',', '.') }}
+                </p>
+            </div>
+            <p class="text-xs text-zinc-400 leading-relaxed">
                 @if($hasBaseSalary && $isMonthlyPeriod)
-                    Estimasi gabungan gaji pokok bulanan, perolehan komisi, dan tip pelanggan pada periode {{ strtolower($periodLabel) }}.
+                    Estimasi gabungan gaji pokok bulanan dan perolehan komisi pada {{ strtolower($periodLabel) }}.
                 @else
-                    Total perolehan komisi dan tip pelanggan pada periode {{ strtolower($periodLabel) }}.
+                    Total perolehan komisi pangkas pada periode {{ strtolower($periodLabel) }}.
                 @endif
             </p>
         </div>
 
         @if($hasBaseSalary)
-            <!-- Rincian Komponen Gaji Pokok, Komisi & Tip jika Memiliki Gaji Pokok -->
-            <div class="pt-3 border-t border-zinc-800/80 space-y-2 text-xs relative z-10">
+            <!-- Rincian Komponen Gaji Pokok & Komisi -->
+            <div class="pt-3.5 border-t border-zinc-800/80 space-y-2.5 text-xs relative z-10">
+                <!-- Gaji Pokok -->
                 <div class="flex items-center justify-between">
-                    <span class="flex items-center gap-1.5 text-zinc-400">
+                    <span class="flex items-center gap-2 text-zinc-400">
                         <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
                         <span>Gaji Pokok:</span>
                     </span>
-                    <span class="font-extrabold text-amber-400 num">Rp{{ number_format($baseSalary, 0, ',', '.') }} <span class="text-[10px] font-normal text-zinc-400">/ bln</span></span>
+                    <span class="font-extrabold text-amber-400 num">
+                        Rp{{ number_format($baseSalary, 0, ',', '.') }} <span class="text-[10px] font-normal text-zinc-400">/ bln</span>
+                    </span>
                 </div>
+
+                <!-- Komisi Layanan -->
                 <div class="flex items-center justify-between">
-                    <span class="flex items-center gap-1.5 text-zinc-400">
+                    <span class="flex items-center gap-2 text-zinc-400">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-                        <span>Komisi Layanan ({{ $periodLabel }}):</span>
+                        <span>Komisi Layanan:</span>
                     </span>
-                    <span class="font-bold text-emerald-400 num">Rp{{ number_format($periodCommission, 0, ',', '.') }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="flex items-center gap-1.5 text-zinc-400">
-                        <span class="w-2 h-2 rounded-full bg-amber-300 shrink-0"></span>
-                        <span>Tip Pelanggan ({{ $periodLabel }}):</span>
+                    <span class="font-bold text-emerald-400 num">
+                        Rp{{ number_format($periodCommission, 0, ',', '.') }}
                     </span>
-                    <span class="font-bold text-amber-300 num">{{ $periodTip > 0 ? '+Rp' . number_format($periodTip, 0, ',', '.') : 'Rp0' }}</span>
                 </div>
+
                 @if(! $isMonthlyPeriod)
-                    <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-1.5 border-t border-zinc-900">
+                    <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-2 border-t border-zinc-900">
                         <span>Total Komisi Bulan Ini:</span>
                         <span class="font-bold text-zinc-200 num">Rp{{ number_format($commissionThisMonth, 0, ',', '.') }}</span>
                     </div>
                 @endif
             </div>
         @else
-            <!-- Rincian Komponen Komisi & Tip jika Tanpa Gaji Pokok -->
-            <div class="pt-3 border-t border-zinc-800/80 space-y-2 text-xs relative z-10">
+            <!-- Rincian Komponen Komisi jika Tanpa Gaji Pokok -->
+            <div class="pt-3.5 border-t border-zinc-800/80 space-y-2.5 text-xs relative z-10">
                 <div class="flex items-center justify-between">
-                    <span class="flex items-center gap-1.5 text-zinc-400">
+                    <span class="flex items-center gap-2 text-zinc-400">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
                         <span>Komisi Layanan:</span>
                     </span>
                     <span class="font-bold text-emerald-400 num">Rp{{ number_format($periodCommission, 0, ',', '.') }}</span>
                 </div>
-                <div class="flex items-center justify-between">
-                    <span class="flex items-center gap-1.5 text-zinc-400">
-                        <span class="w-2 h-2 rounded-full bg-amber-300 shrink-0"></span>
-                        <span>Tip Pelanggan:</span>
-                    </span>
-                    <span class="font-bold text-amber-300 num">{{ $periodTip > 0 ? '+Rp' . number_format($periodTip, 0, ',', '.') : 'Rp0' }}</span>
-                </div>
-                <div class="pt-1.5 border-t border-zinc-900 flex items-center justify-between text-[11px] text-zinc-400">
+                <div class="pt-2 border-t border-zinc-900 flex items-center justify-between text-[11px] text-zinc-400">
                     <span>Komisi Bulan Ini:</span>
                     <span class="font-bold text-zinc-200 num">Rp{{ number_format($commissionThisMonth, 0, ',', '.') }}</span>
                 </div>
@@ -280,7 +276,7 @@
                             <!-- Bar Batang Grafik -->
                             <div
                                 class="w-full rounded-t-lg transition-all duration-300 {{ $bar['is_peak'] ? 'bg-amber-500 ring-2 ring-amber-400/60 shadow-xs' : ($bar['amount'] > 0 ? 'bg-amber-400/80 hover:bg-amber-500' : 'bg-zinc-100') }} {{ $bar['is_today'] ? 'border-b-2 border-zinc-900' : '' }}"
-                                style="height: {{ $bar['percentage'] }}%;"
+                                @style(['height: ' . $bar['percentage'] . '%'])
                             ></div>
 
                             <!-- Label Hari & Tanggal di Bawah Batang -->
@@ -353,49 +349,6 @@
                 <div class="py-6 text-center text-zinc-400 text-xs space-y-1">
                     <p class="font-semibold text-zinc-500">Tidak ada komisi pada periode ini</p>
                     <p class="text-[11px]">Coba ubah filter periode waktu di atas untuk melihat tanggal lainnya.</p>
-                </div>
-            @endforelse
-        </div>
-    </div>
-
-    <!-- 5. DAFTAR RIWAYAT TIP APRESIASI PELANGGAN (ANONIM - TANPA NAMA PELANGGAN DEMI PRIVASI) -->
-    <div class="p-4 rounded-3xl bg-white border border-zinc-200/90 shadow-2xs space-y-3">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="w-7 h-7 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-                    <x-ui.icon name="star" class="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                </span>
-                <h3 class="font-black text-xs uppercase tracking-wider text-zinc-900">Riwayat Tip Pelanggan</h3>
-            </div>
-            <span class="text-[10px] font-bold text-zinc-400">{{ ($recentTips ?? collect())->count() }} Kali Diterima</span>
-        </div>
-
-        <div class="divide-y divide-zinc-100">
-            @forelse(($recentTips ?? collect()) as $tip)
-                <div class="py-2.5 flex items-center justify-between gap-3 text-xs">
-                    <div class="min-w-0 flex-1">
-                        <p class="font-bold text-zinc-900 flex items-center gap-1.5">
-                            <span>Apresiasi Pelanggan</span>
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200/80">Tip</span>
-                        </p>
-                        <p class="text-[10px] text-zinc-400 num mt-0.5">
-                            {{ $tip->paid_at ? \Illuminate\Support\Carbon::parse($tip->paid_at)->translatedFormat('d M Y, H:i') : '-' }}
-                        </p>
-                    </div>
-
-                    <div class="text-right shrink-0">
-                        <span class="font-black text-amber-600 num block">
-                            +Rp{{ number_format($tip->tip_amount, 0, ',', '.') }}
-                        </span>
-                        <span class="text-[9px] font-semibold text-emerald-600 block">
-                            100% Hak Barber
-                        </span>
-                    </div>
-                </div>
-            @empty
-                <div class="py-6 text-center text-zinc-400 text-xs space-y-1">
-                    <p class="font-semibold text-zinc-500">Belum ada tip pada periode ini</p>
-                    <p class="text-[11px]">Tip sukarela dari pelanggan saat pembayaran di kasir otomatis tercatat transparan di sini.</p>
                 </div>
             @endforelse
         </div>

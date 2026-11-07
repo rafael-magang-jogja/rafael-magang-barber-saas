@@ -38,8 +38,8 @@ final class SuperadminPlatformFeaturesTest extends TestCase
         $this->actingAs($this->owner)->get(route('platform.dashboard'))->assertForbidden();
         $this->actingAs($this->owner)->get(route('platform.plans'))->assertForbidden();
         $this->actingAs($this->owner)->get(route('platform.transactions'))->assertForbidden();
-        $this->actingAs($this->owner)->get(route('platform.complaints'))->assertForbidden();
         $this->actingAs($this->owner)->get(route('platform.reports'))->assertForbidden();
+        $this->actingAs($this->owner)->get(route('platform.promotions'))->assertForbidden();
         $this->actingAs($this->owner)->get(route('platform.settings'))->assertForbidden();
     }
 
@@ -47,10 +47,77 @@ final class SuperadminPlatformFeaturesTest extends TestCase
     {
         $this->actingAs($this->superadmin)->get(route('platform.dashboard'))->assertOk()->assertSee('Platform Superadmin');
         $this->actingAs($this->superadmin)->get(route('platform.plans'))->assertOk()->assertSee('Katalog Paket Langganan SaaS');
-        $this->actingAs($this->superadmin)->get(route('platform.transactions'))->assertOk()->assertSee('Total GMV (Lunas)');
-        $this->actingAs($this->superadmin)->get(route('platform.complaints'))->assertOk()->assertSee('Rata-rata Rating');
+        $this->actingAs($this->superadmin)->get(route('platform.transactions'))->assertOk()->assertSee('Omzet GMV');
         $this->actingAs($this->superadmin)->get(route('platform.reports'))->assertOk()->assertSee('Laporan Pertumbuhan Bisnis SaaS');
+        $this->actingAs($this->superadmin)->get(route('platform.promotions'))->assertOk()->assertSee('Katalog Iklan & Promosi Produk');
         $this->actingAs($this->superadmin)->get(route('platform.settings'))->assertOk()->assertSee('Identitas Platform SaaS');
+    }
+
+    public function test_superadmin_can_update_promotions(): void
+    {
+        $response = $this->actingAs($this->superadmin)->post(route('platform.promotions.update'), [
+            'promoted_products_slide_seconds' => 7,
+            'promoted_products_whatsapp' => '089912345678',
+            'promoted_products' => [
+                [
+                    'id' => 'prod-test-1',
+                    'name' => 'Pomade Premium Wangi Kopi',
+                    'tagline' => 'Aroma Kopi Mewah Tahan Seharian',
+                    'price' => 'Rp80.000',
+                    'original_price' => 'Rp100.000',
+                    'price_color' => 'text-amber-400',
+                    'is_active' => '1',
+                    'stock_status' => 'habis',
+                    'desc' => 'Pomade berkualitas aroma kopi mantap.',
+                    'features' => "Wangi kopi segar\nTahan 12 jam\nWaterbased",
+                ],
+            ],
+        ]);
+
+        $response->assertRedirect(route('platform.promotions'));
+        $response->assertSessionHas('status');
+
+        $this->actingAs($this->superadmin)
+            ->get(route('platform.promotions'))
+            ->assertOk()
+            ->assertSee('Pomade Premium Wangi Kopi')
+            ->assertSee('Rp80.000')
+            ->assertSee('Stok Habis');
+    }
+
+    public function test_superadmin_promotion_rejects_invalid_file_format_or_large_size(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        // File format PDF (tidak diizinkan, hanya PNG/JPG/JPEG/WEBP/SVG)
+        $invalidFile = \Illuminate\Http\UploadedFile::fake()->create('document.pdf', 500, 'application/pdf');
+
+        $response = $this->actingAs($this->superadmin)->post(route('platform.promotions.update'), [
+            'promoted_products' => [
+                [
+                    'name' => 'Pomade Test',
+                    'price' => 'Rp50.000',
+                    'image_files' => [$invalidFile],
+                ],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors(['promoted_products.0.image_files.0']);
+
+        // File gambar melebihi 2MB (> 2048 KB)
+        $oversizedFile = \Illuminate\Http\UploadedFile::fake()->create('huge_banner.png', 3000, 'image/png');
+
+        $responseOversized = $this->actingAs($this->superadmin)->post(route('platform.promotions.update'), [
+            'promoted_products' => [
+                [
+                    'name' => 'Pomade Test',
+                    'price' => 'Rp50.000',
+                    'image_files' => [$oversizedFile],
+                ],
+            ],
+        ]);
+
+        $responseOversized->assertSessionHasErrors(['promoted_products.0.image_files.0']);
     }
 
     public function test_superadmin_can_create_new_tenant(): void
@@ -208,15 +275,15 @@ final class SuperadminPlatformFeaturesTest extends TestCase
 
     public function test_superadmin_can_export_transactions_and_reports_csv(): void
     {
-        $this->actingAs($this->superadmin)
-            ->get(route('platform.transactions.export'))
-            ->assertOk()
-            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $transactionsExport = $this->actingAs($this->superadmin)
+            ->get(route('platform.transactions.export'));
+        $transactionsExport->assertOk();
+        $this->assertStringContainsString('spreadsheetml', (string) $transactionsExport->headers->get('content-type'));
 
-        $this->actingAs($this->superadmin)
-            ->get(route('platform.reports.export'))
-            ->assertOk()
-            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $reportsExport = $this->actingAs($this->superadmin)
+            ->get(route('platform.reports.export'));
+        $reportsExport->assertOk();
+        $this->assertStringContainsString('spreadsheetml', (string) $reportsExport->headers->get('content-type'));
     }
 
     public function test_superadmin_can_update_platform_settings(): void
@@ -239,5 +306,76 @@ final class SuperadminPlatformFeaturesTest extends TestCase
             ->assertSee('BarberOS Enterprise Hub')
             ->assertSee('help@barberos.id')
             ->assertSee('21');
+    }
+
+    public function test_superadmin_sees_pending_subscription_payment_confirmation_notification(): void
+    {
+        $tenant = Tenant::query()->firstOrFail();
+        $proPlan = Plan::query()->where('code', 'pro')->firstOrFail();
+        $subscription = \App\Models\Subscription::query()->withoutGlobalScope('tenant')->where('tenant_id', $tenant->id)->firstOrFail();
+
+        // 1. Buat tagihan langganan dengan status pending (mengajukan konfirmasi)
+        \App\Models\SubscriptionInvoice::query()->withoutGlobalScope('tenant')->create([
+            'tenant_id' => $tenant->id,
+            'subscription_id' => $subscription->id,
+            'target_plan_id' => $proPlan->id,
+            'number' => 'INV-SUB-TEST-001',
+            'amount' => 199000,
+            'status' => 'pending',
+            'gateway' => 'manual_transfer',
+            'payment_method' => 'bank_transfer',
+            'proof_path' => 'proofs/test_transfer.jpg',
+            'due_at' => now()->addDays(2),
+        ]);
+
+        // 2. Akses halaman Tagihan & Konfirmasi
+        $response = $this->actingAs($this->superadmin)->get(route('platform.subscriptions'));
+        $response->assertOk();
+        $response->assertSee('Perlu tindakan Superadmin');
+        $response->assertSee('Menunggu Konfirmasi (1)');
+
+        // 3. Akses halaman Dashboard Superadmin
+        $dashResponse = $this->actingAs($this->superadmin)->get(route('platform.dashboard'));
+        $dashResponse->assertOk();
+        $dashResponse->assertSee('1 Pengajuan Konfirmasi Pembayaran Langganan');
+    }
+
+    public function test_superadmin_theme_color_and_favicon_are_strictly_isolated_from_tenants(): void
+    {
+        $tenant = Tenant::query()->firstOrFail();
+        $tenant->update([
+            'brand_color' => '#8A2BE2',
+            'settings' => array_merge($tenant->settings ?? [], [
+                'favicon_path' => 'favicons/custom_tenant_favicon.png',
+            ]),
+        ]);
+
+        $platformColor = \App\Support\Platform\PlatformConfig::themeColor();
+        $platformFavicon = \App\Support\Platform\PlatformConfig::faviconUrl();
+
+        // Simulasikan session yang sebelumnya pernah mengunjungi customer tenant
+        $response = $this->actingAs($this->superadmin)
+            ->withSession([
+                'active_tenant_id' => $tenant->id,
+                'active_customer_tenant_id' => $tenant->id,
+            ])
+            ->get(route('platform.dashboard'));
+
+        $response->assertOk();
+        // Superadmin harus menggunakan tema platform resmi, bukan warna tenant
+        $response->assertSee('--tenant-brand: ' . $platformColor, false);
+        $response->assertDontSee('--tenant-brand: #8A2BE2', false);
+        // Favicon harus official platform favicon, bukan milik tenant
+        $response->assertSee('href="' . \App\Support\Platform\PlatformConfig::faviconUrl() . '"', false);
+        $response->assertDontSee('custom_tenant_favicon.png');
+
+        // Bahkan saat membuka halaman detail tenant /platform/tenants/{tenant}
+        $detailResponse = $this->actingAs($this->superadmin)
+            ->get(route('platform.tenants.show', $tenant));
+
+        $detailResponse->assertOk();
+        $detailResponse->assertSee('--tenant-brand: ' . $platformColor, false);
+        $detailResponse->assertSee('href="' . \App\Support\Platform\PlatformConfig::faviconUrl() . '"', false);
+        $detailResponse->assertDontSee('href="' . $tenant->faviconUrl() . '"', false);
     }
 }

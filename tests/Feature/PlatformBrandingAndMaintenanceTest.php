@@ -10,7 +10,7 @@ use App\Support\Platform\FaviconService;
 use App\Support\Platform\PlatformConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -104,7 +104,7 @@ final class PlatformBrandingAndMaintenanceTest extends TestCase
         $this->assertTrue(PlatformConfig::isMaintenance());
 
         // 2. User biasa mencoba login -> harus ditolak dengan error pemeliharaan
-        auth()->logout();
+        Auth::logout();
         $loginResponse = $this->post(route('login.store'), [
             'login' => 'owner@barberking.id',
             'password' => 'password',
@@ -123,7 +123,7 @@ final class PlatformBrandingAndMaintenanceTest extends TestCase
         $this->assertAuthenticatedAs($this->superadmin);
 
         // 4. Halaman login menampilkan banner mode pemeliharaan
-        auth()->logout();
+        Auth::logout();
         $this->get(route('login'))
             ->assertOk()
             ->assertSee('Platform Sedang Dalam Pemeliharaan')
@@ -155,7 +155,8 @@ final class PlatformBrandingAndMaintenanceTest extends TestCase
         // Favicon tenant ter-generate otomatis di direktori khusus tenant
         $this->assertFileExists(public_path(FaviconService::TENANTS_DIR . "/{$tenant->id}/favicon.ico"));
         $this->assertFileExists(public_path(FaviconService::TENANTS_DIR . "/{$tenant->id}/favicon.svg"));
-        $this->assertStringContainsString("favicons/tenants/{$tenant->id}/favicon.ico", $tenant->faviconUrl());
+        $this->assertStringContainsString("favicons/tenants/{$tenant->id}/favicon_", $tenant->faviconUrl());
+        $this->assertStringContainsString("8B5CF6.ico", $tenant->faviconUrl());
     }
 
     public function test_tenant_business_can_upload_custom_favicon_for_subdomain(): void
@@ -168,7 +169,8 @@ final class PlatformBrandingAndMaintenanceTest extends TestCase
         \App\Models\Subscription::query()->withoutGlobalScope('tenant')->create([
             'tenant_id' => $tenant->id,
             'plan_id' => $businessPlan->id,
-            'status' => \App\Enums\SubscriptionStatus::ACTIVE,
+            'price' => $businessPlan->price ?? 499000,
+            'status' => \App\Enums\SubscriptionStatus::Active,
             'starts_at' => now(),
             'renews_at' => now()->addMonth(),
         ]);
@@ -190,5 +192,97 @@ final class PlatformBrandingAndMaintenanceTest extends TestCase
 
         $this->assertNotNull($tenant->settings['favicon_path'] ?? null);
         $this->assertFileExists(public_path(FaviconService::TENANTS_DIR . "/{$tenant->id}/favicon.ico"));
+    }
+
+    public function test_superadmin_preserving_custom_favicon_when_updating_other_settings(): void
+    {
+        Storage::fake('public');
+        $fakeFavicon = UploadedFile::fake()->create('custom_favicon.ico', 32, 'image/x-icon');
+
+        // 1. Upload custom favicon
+        $this->actingAs($this->superadmin)->post(route('platform.settings.update'), [
+            'platform_name' => 'BarberOS Platform',
+            'platform_theme_color' => '#D97706',
+            'logo_type' => 'icon',
+            'logo_icon' => 'scissors',
+            'default_trial_days' => 14,
+            'favicon' => $fakeFavicon,
+        ]);
+
+        PlatformConfig::clearCache();
+        $this->assertNotNull(PlatformConfig::get('favicon_path'));
+        $savedPath = PlatformConfig::get('favicon_path');
+
+        // 2. Update general settings TANPA upload favicon lagi
+        $this->actingAs($this->superadmin)->post(route('platform.settings.update'), [
+            'platform_name' => 'BarberOS Platform Updated',
+            'platform_theme_color' => '#D97706',
+            'logo_type' => 'icon',
+            'logo_icon' => 'scissors',
+            'default_trial_days' => 20,
+        ]);
+
+        PlatformConfig::clearCache();
+        // Favicon kustom TIDAK boleh hilang/kembali ke default!
+        $this->assertSame($savedPath, PlatformConfig::get('favicon_path'));
+    }
+
+    public function test_active_logged_in_user_is_restricted_when_maintenance_is_turned_on(): void
+    {
+        // 1. Owner sedang login
+        $this->actingAs($this->owner);
+
+        // 2. Platform maintenance diaktifkan
+        \App\Models\Setting::query()->withoutGlobalScope('tenant')->updateOrCreate(
+            ['tenant_id' => null, 'key' => 'is_maintenance'],
+            ['value' => true]
+        );
+        PlatformConfig::clearCache();
+
+        // 3. Owner mencoba akses dashboard -> harus langsung diredirect ke login dengan pesan maintenance
+        $response = $this->get(route('owner.dashboard'));
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHasErrors('login');
+        $this->assertGuest();
+    }
+
+    public function test_tenant_starter_also_uses_official_icon_with_tenant_brand_color(): void
+    {
+        $tenant = Tenant::query()->firstOrFail();
+
+        // Switch to Starter
+        $starterPlan = \App\Models\Plan::query()->where('code', 'starter')->firstOrFail();
+        $tenant->update(['brand_color' => '#3B82F6']); // Biru custom brand
+        \App\Models\Subscription::query()->withoutGlobalScope('tenant')->create([
+            'tenant_id' => $tenant->id,
+            'plan_id' => $starterPlan->id,
+            'price' => $starterPlan->price ?? 0,
+            'status' => \App\Enums\SubscriptionStatus::Active,
+            'starts_at' => now(),
+            'renews_at' => now()->addMonth(),
+        ]);
+
+        $this->assertSame('starter', $tenant->planCode());
+        $this->assertFalse($tenant->hasFeature('brand_color')); // Starter doesn't have brand_color feature toggle
+
+        // Generate favicon for starter tenant
+        FaviconService::generateForTenant($tenant);
+
+        // Favicon harus mengikuti ikon official platform dan latar belakang warna brand milik tenant (#3B82F6)
+        $officialIcon = PlatformConfig::logoIcon();
+        $this->assertStringContainsString("favicons/tenants/{$tenant->id}/favicon_{$officialIcon}_3B82F6.ico", $tenant->faviconUrl());
+        $this->assertStringContainsString("favicons/tenants/{$tenant->id}/favicon_{$officialIcon}_3B82F6.svg", $tenant->svgFaviconUrl());
+    }
+
+    public function test_tv_display_page_renders_tenant_favicon(): void
+    {
+        $tenant = Tenant::query()->firstOrFail();
+        $branch = $tenant->branches()->firstOrFail();
+
+        FaviconService::generateForTenant($tenant);
+
+        $response = $this->get(route('display.queue', [$tenant->slug, $branch->code]));
+        $response->assertOk();
+        $response->assertSee($tenant->faviconUrl(), false);
     }
 }

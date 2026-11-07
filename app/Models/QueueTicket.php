@@ -27,10 +27,20 @@ final class QueueTicket extends Model
         'hair_color_id',
         'requested_barber_id',
         'type',
+        'is_cashier_input',
         'status',
         'priority_at',
         'estimated_duration_minutes',
         'notes',
+        'refund_status',
+        'refund_amount',
+        'refund_bank_name',
+        'refund_account_number',
+        'refund_account_name',
+        'refund_notes',
+        'refund_requested_at',
+        'refunded_at',
+        'refunded_by',
         'called_at',
         'started_at',
         'completed_at',
@@ -43,7 +53,11 @@ final class QueueTicket extends Model
         return [
             'date' => 'date',
             'sequence' => 'integer',
+            'is_cashier_input' => 'boolean',
             'status' => QueueStatus::class,
+            'refund_amount' => 'integer',
+            'refund_requested_at' => 'datetime',
+            'refunded_at' => 'datetime',
             'priority_at' => 'datetime',
             'estimated_duration_minutes' => 'integer',
             'called_at' => 'datetime',
@@ -97,5 +111,10 @@ final class QueueTicket extends Model
     public function order(): HasOne
     {
         return $this->hasOne(Order::class);
+    }
+
+    public function refundedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'refunded_by');
     }
 }

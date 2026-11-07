@@ -81,16 +81,16 @@ final class CashierNavBadgeLivewireTest extends TestCase
             ->assertSeeHtml('bg-amber-400');
     }
 
-    public function test_cashier_nav_badge_renders_booking_count_for_today_confirmed_bookings(): void
+    public function test_cashier_nav_badge_renders_booking_dot_for_today_and_future_bookings(): void
     {
         $tenant = Tenant::query()->firstOrFail();
         $branch = Branch::query()->where('tenant_id', $tenant->id)->firstOrFail();
         $customer = CustomerProfile::query()->where('tenant_id', $tenant->id)->firstOrFail();
 
-        // Bersihkan booking hari ini
+        // Bersihkan booking lama
         Booking::query()->where('tenant_id', $tenant->id)->delete();
 
-        // Buat 2 booking terkonfirmasi hari ini
+        // Buat 1 booking terkonfirmasi hari ini dan 1 booking pending di hari mendatang
         Booking::query()->create([
             'tenant_id' => $tenant->id,
             'branch_id' => $branch->id,
@@ -108,10 +108,10 @@ final class CashierNavBadgeLivewireTest extends TestCase
             'branch_id' => $branch->id,
             'customer_profile_id' => $customer->id,
             'code' => 'BK-TEST-002',
-            'scheduled_at' => now()->startOfDay()->addHours(16),
-            'estimated_end_at' => now()->startOfDay()->addHours(17),
+            'scheduled_at' => now()->addDays(2)->startOfDay()->addHours(16),
+            'estimated_end_at' => now()->addDays(2)->startOfDay()->addHours(17),
             'total_duration_minutes' => 60,
-            'status' => BookingStatus::Confirmed,
+            'status' => BookingStatus::Pending,
             'estimated_total' => 75000,
         ]);
 
@@ -131,7 +131,7 @@ final class CashierNavBadgeLivewireTest extends TestCase
         app(\App\Support\Tenancy\CurrentTenant::class)->set($tenant);
 
         Livewire::test(CashierNavBadge::class, ['type' => 'booking', 'context' => 'sidebar'])
-            ->assertSeeHtml('>2</span>')
+            ->assertSeeHtml('data-nav-indicator')
             ->assertSeeHtml('bg-rose-500');
     }
 

@@ -1,16 +1,13 @@
 @php
     $currentTenantCtx = app(\App\Support\Tenancy\CurrentTenant::class);
     $effectiveRole = $currentTenantCtx->role() ?? request()->attributes->get('current_role') ?? (auth()->user()?->isOwner() ? 'owner' : 'cashier');
-    $isOrderPending = $order !== null && $order->payment_status->value === 'pending';
+    $isOrderPending = $order !== null && in_array($order->payment_status->value, ['unpaid', 'pending'], true);
     $existingPayment = $order?->payments->first();
     $existingMethod = $existingPayment?->method->value ?? 'cash';
 @endphp
 
 <x-layouts.app :title="'Kasir POS — Pembayaran Antrean ' . $ticket->number" :subtitle="'Proses checkout dan pembayaran kasir untuk antrean ' . $ticket->number" :role="$effectiveRole">
     <div class="space-y-5 sm:space-y-6 max-w-6xl mx-auto pb-10">
-        <!-- Notifikasi Flash -->
-        <x-ui.flash-alert />
-
         <!-- ============================================================ -->
         <!-- HEADER POS: NAVIGASI & KARTU NOMOR ANTREAN UTAMA             -->
         <!-- ============================================================ -->
@@ -158,13 +155,11 @@
                                         <p class="font-black text-zinc-900 text-xs sm:text-sm truncate">
                                             {{ $item->service_name }}
                                         </p>
-                                        <p class="text-[11px] text-zinc-400 font-medium">
-                                            @if($item->service?->duration_minutes)
-                                                Durasi &plusmn; {{ $item->service->duration_minutes }} menit
-                                            @else
-                                                Layanan Standar Barbershop
-                                            @endif
-                                        </p>
+                                        @if($item->service?->category?->name)
+                                            <p class="text-[11px] text-zinc-400 font-medium">
+                                                {{ $item->service->category->name }}
+                                            </p>
+                                        @endif
                                     </div>
                                 </div>
                                 <span class="font-black text-zinc-950 num text-sm sm:text-base shrink-0">
@@ -240,7 +235,8 @@
                                         name="cash_received"
                                         id="pending_cash_received"
                                         value="{{ number_format($order->grand_total, 0, ',', '.') }}"
-                                        oninput="onPendingCashInput(this, {{ $order->grand_total }})"
+                                        data-grand-total="{{ $order->grand_total }}"
+                                        oninput="onPendingCashInput(this, Number(this.dataset.grandTotal))"
                                         class="w-full pl-11 pr-3 py-3 rounded-2xl border-2 border-zinc-200 text-zinc-950 font-black text-base focus:outline-none focus:border-amber-500 transition num"
                                     />
                                 </div>
@@ -269,7 +265,7 @@
                             class="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-md shadow-emerald-950/20 transition cursor-pointer"
                         >
                             <x-ui.icon name="check" class="w-5 h-5 stroke-[3]" />
-                            <span>Konfirmasi Pembayaran Lunas &amp; Cetak Struk</span>
+                            <span>Konfirmasi Lunas &amp; Cetak Struk</span>
                         </button>
                     </form>
                 @else
@@ -335,10 +331,10 @@
                             </div>
                         </div>
 
-                        <!-- 2. DISKON & TIP (GRID 2 KOLOM RESPONSIF) -->
-                        <div class="grid grid-cols-2 gap-3 pt-1">
+                        <!-- 2. DISKON / POTONGAN -->
+                        <div class="pt-1">
                             <div class="space-y-1.5">
-                                <label class="block text-xs font-bold text-zinc-700">Diskon / Potongan</label>
+                                <label class="block text-xs font-bold text-zinc-700">Diskon / Potongan (Opsional)</label>
                                 <div class="relative">
                                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">Rp</span>
                                     <input
@@ -348,23 +344,6 @@
                                         id="input_discount"
                                         value="0"
                                         oninput="onDiscountInput(this)"
-                                        placeholder="0"
-                                        class="w-full pl-8 pr-2.5 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:border-amber-500 num"
-                                    />
-                                </div>
-                            </div>
-
-                            <div class="space-y-1.5">
-                                <label class="block text-xs font-bold text-zinc-700">Tip Barber (Opsional)</label>
-                                <div class="relative">
-                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">Rp</span>
-                                    <input
-                                        type="text"
-                                        inputmode="numeric"
-                                        name="tip_amount"
-                                        id="input_tip"
-                                        value="0"
-                                        oninput="onTipInput(this)"
                                         placeholder="0"
                                         class="w-full pl-8 pr-2.5 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:border-amber-500 num"
                                     />
@@ -381,10 +360,6 @@
                             <div id="row_discount_display" class="hidden items-center justify-between text-xs text-rose-400">
                                 <span>Potongan Diskon:</span>
                                 <span class="font-bold num" id="val_discount_display">-Rp0</span>
-                            </div>
-                            <div id="row_tip_display" class="hidden items-center justify-between text-xs text-amber-400">
-                                <span>Tip Barber:</span>
-                                <span class="font-bold num" id="val_tip_display">+Rp0</span>
                             </div>
                             <div class="pt-3 border-t border-zinc-800 flex items-center justify-between">
                                 <div>
@@ -494,8 +469,8 @@
     </div>
 
     <!-- SCRIPT KALKULATOR KASIR POS REALTIME & FORMAT RUPIAH RIBUAN -->
-    <script>
-        const initialSubtotal = {{ $subtotal }};
+    <script id="cashier-pos-script" data-subtotal="{{ (int) $subtotal }}">
+        const initialSubtotal = Number(document.getElementById('cashier-pos-script')?.dataset.subtotal || 0);
         let currentGrandTotal = initialSubtotal;
 
         function parseRawNumber(val) {
@@ -523,11 +498,6 @@
             recalculateTotals();
         }
 
-        function onTipInput(el) {
-            handleRupiahInput(el);
-            recalculateTotals();
-        }
-
         function onCashInput(el) {
             handleRupiahInput(el);
             calculateCashChange();
@@ -540,14 +510,12 @@
 
         function recalculateTotals() {
             const discountInput = document.getElementById('input_discount');
-            const tipInput = document.getElementById('input_tip');
 
             let discount = parseRawNumber(discountInput?.value);
-            let tip = parseRawNumber(tipInput?.value);
 
             if (discount > initialSubtotal) discount = initialSubtotal;
 
-            currentGrandTotal = Math.max(0, (initialSubtotal - discount) + tip);
+            currentGrandTotal = Math.max(0, initialSubtotal - discount);
 
             // Update row displays
             const rowDiscount = document.getElementById('row_discount_display');
@@ -560,19 +528,6 @@
                 } else {
                     rowDiscount.classList.add('hidden');
                     rowDiscount.classList.remove('flex');
-                }
-            }
-
-            const rowTip = document.getElementById('row_tip_display');
-            const valTip = document.getElementById('val_tip_display');
-            if (rowTip && valTip) {
-                if (tip > 0) {
-                    rowTip.classList.remove('hidden');
-                    rowTip.classList.add('flex');
-                    valTip.textContent = '+Rp' + formatNumberDisplay(tip);
-                } else {
-                    rowTip.classList.add('hidden');
-                    rowTip.classList.remove('flex');
                 }
             }
 
@@ -734,6 +689,5 @@
                 });
             });
         });
-    </script>
     </script>
 </x-layouts.app>

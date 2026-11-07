@@ -3,29 +3,6 @@
         <form method="POST" action="{{ route('platform.settings.update') }}" enctype="multipart/form-data" class="space-y-6">
             @csrf
 
-            <!-- Header Info & Breadcrumb Bar -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-200">
-                <div>
-                    <h2 class="text-lg font-black text-zinc-900 tracking-tight flex items-center gap-2">
-                        <span>Konfigurasi Global Platform</span>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            Superadmin Master
-                        </span>
-                    </h2>
-                    <p class="text-xs text-zinc-500 mt-0.5">Kelola identitas SaaS, tema warna dasar, logo platform, favicon, pemeliharaan &amp; rekening bank resmi.</p>
-                </div>
-
-                <div class="flex items-center gap-2.5">
-                    <button
-                        type="submit"
-                        class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-zinc-950 font-black text-xs shadow-xs transition cursor-pointer inline-flex items-center gap-2"
-                    >
-                        <x-ui.icon name="check" class="w-4 h-4" />
-                        <span>Simpan Perubahan Konfigurasi</span>
-                    </button>
-                </div>
-            </div>
-
             <!-- Responsive Desktop Grid (Left: 7/12, Right: 5/12) -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
@@ -145,11 +122,11 @@
                                 @foreach($presetColors as $colorPreset)
                                     <button
                                         type="button"
-                                        onclick="selectPresetColor('{{ $colorPreset['hex'] }}')"
+                                        onclick="selectPresetColor(this.dataset.hex)"
                                         class="preset-color-btn flex items-center gap-2.5 p-2 rounded-xl border border-zinc-200 hover:border-zinc-300 bg-white transition cursor-pointer text-left group"
                                         data-hex="{{ $colorPreset['hex'] }}"
                                     >
-                                        <span class="w-6 h-6 rounded-lg shrink-0 shadow-2xs border border-black/10 transition group-hover:scale-105" style="background-color: {{ $colorPreset['hex'] }}"></span>
+                                        <span class="w-6 h-6 rounded-lg shrink-0 shadow-2xs border border-black/10 transition group-hover:scale-105" @style(['background-color: ' . $colorPreset['hex']])></span>
                                         <div class="min-w-0">
                                             <p class="text-[11px] font-bold text-zinc-800 truncate">{{ $colorPreset['name'] }}</p>
                                             <p class="text-[10px] text-zinc-400 font-mono">{{ $colorPreset['hex'] }}</p>
@@ -252,7 +229,7 @@
                                                 value="{{ $iconItem['id'] }}"
                                                 class="sr-only logo-icon-radio"
                                                 {{ $selectedIcon === $iconItem['id'] ? 'checked' : '' }}
-                                                onchange="updateIconPreview('{{ $iconItem['id'] }}')"
+                                                onchange="updateIconPreview(this.value)"
                                             />
                                             <div class="icon-card p-3 rounded-xl border {{ $selectedIcon === $iconItem['id'] ? 'border-amber-500 bg-amber-50/40 ring-2 ring-amber-500/20' : 'border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100/70' }} flex items-center gap-3 transition">
                                                 <div class="w-9 h-9 rounded-lg bg-zinc-900 text-amber-400 flex items-center justify-center shrink-0">
@@ -354,9 +331,20 @@
                             </div>
 
                             <!-- Live Logo & Theme Preview Card -->
+                            @php
+                                $cleanHex = ltrim($currentColor ?: '#f59e0b', '#');
+                                if (strlen($cleanHex) === 3) {
+                                    $cleanHex = $cleanHex[0].$cleanHex[0].$cleanHex[1].$cleanHex[1].$cleanHex[2].$cleanHex[2];
+                                }
+                                $r = hexdec(substr($cleanHex, 0, 2));
+                                $g = hexdec(substr($cleanHex, 2, 2));
+                                $b = hexdec(substr($cleanHex, 4, 2));
+                                $lum = (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
+                                $initialBadgeContrast = $lum > 0.58 ? '#09090b' : '#ffffff';
+                            @endphp
                             <div class="p-3.5 rounded-xl border border-zinc-200 bg-zinc-950 text-white flex items-center justify-between gap-4">
                                 <div class="flex items-center gap-3 min-w-0">
-                                    <div id="live-logo-badge" class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-md font-black transition-all" style="background-color: {{ $currentColor }}; color: #09090b;">
+                                    <div id="live-logo-badge" class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-md font-black transition-all" @style(['background-color: ' . $currentColor, 'color: ' . $initialBadgeContrast])>
                                         <span id="live-icon-render">
                                             <x-ui.icon name="{{ $selectedIcon }}" class="w-5 h-5" />
                                         </span>
@@ -427,6 +415,15 @@
                                             </a>
                                         </div>
                                     </div>
+
+                                    @if(! empty($settings['favicon_path']))
+                                        <div class="pt-2 border-t border-zinc-200/80">
+                                            <label class="inline-flex items-center gap-2 text-[11px] font-bold text-rose-600 hover:text-rose-700 cursor-pointer">
+                                                <input type="checkbox" name="remove_favicon" value="1" class="rounded border-zinc-300 text-rose-600 focus:ring-rose-500">
+                                                <span>Hapus favicon kustom (kembalikan ke icon bawaan)</span>
+                                            </label>
+                                        </div>
+                                    @endif
                                 </div>
 
                                 <!-- Card 2: Modern Favicon Dropzone (Batas 2MB) -->
@@ -474,27 +471,25 @@
                                 </div>
                             </div>
                         </div>
-                        </div>
-
                     </div>
 
                     <!-- Card 3: Rekening Resmi Pembayaran Platform -->
                     <div class="rounded-2xl border border-zinc-200/90 bg-white p-5 sm:p-6 shadow-2xs space-y-4">
-                        <div class="flex items-center justify-between pb-3 border-b border-zinc-100">
-                            <div class="flex items-center gap-2.5">
-                                <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                                     <x-ui.icon name="building-2" class="w-4 h-4" />
                                 </div>
-                                <div>
+                                <div class="min-w-0">
                                     <h3 class="text-sm font-black text-zinc-900 tracking-tight">Rekening Resmi Pembayaran Platform</h3>
-                                    <p class="text-xs text-zinc-500 mt-0.5">Daftar rekening bank tujuan yang ditampilkan pada form tagihan &amp; invoice transfer owner</p>
+                                    <p class="text-xs text-zinc-500 mt-0.5 truncate sm:whitespace-normal">Daftar rekening bank tujuan yang ditampilkan pada form tagihan &amp; invoice transfer owner</p>
                                 </div>
                             </div>
 
                             <button
                                 type="button"
                                 onclick="addBankAccountRow()"
-                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition cursor-pointer shrink-0"
+                                class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white text-xs font-bold transition cursor-pointer shrink-0 shadow-2xs"
                             >
                                 <x-ui.icon name="plus" class="w-3.5 h-3.5" />
                                 <span>Tambah Bank</span>
@@ -503,62 +498,101 @@
 
                         <div class="space-y-3" id="bank-accounts-form-list">
                             @forelse($bankAccounts as $index => $acc)
-                                <div class="bank-row p-3.5 rounded-xl border border-zinc-200 bg-zinc-50/60 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end transition">
-                                    <div class="sm:col-span-3">
-                                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nama Bank <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                                        <input
-                                            type="text"
-                                            name="bank_accounts[{{ $index }}][bank]"
-                                            value="{{ old("bank_accounts.{$index}.bank", $acc['bank']) }}"
-                                            placeholder="Contoh: BCA / Mandiri"
-                                            required
-                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                        />
-                                    </div>
+                                <div class="bank-row p-4 rounded-xl border border-zinc-200/90 bg-zinc-50/70 space-y-3 transition hover:border-zinc-300">
+                                    <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-zinc-200/60">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-6 h-6 rounded-md bg-zinc-900 text-amber-400 font-black text-[10px] grid place-items-center uppercase shrink-0">
+                                                {{ substr($acc['bank'] ?? 'BK', 0, 3) }}
+                                            </span>
+                                            <span class="text-xs font-bold text-zinc-800 bank-card-title">
+                                                {{ $acc['bank'] ?? 'Bank Baru' }} &bull; <span class="font-mono text-zinc-600">{{ $acc['account_number'] ?? '-' }}</span>
+                                            </span>
+                                        </div>
 
-                                    <div class="sm:col-span-4">
-                                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nomor Rekening <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                                        <input
-                                            type="text"
-                                            name="bank_accounts[{{ $index }}][account_number]"
-                                            value="{{ old("bank_accounts.{$index}.account_number", $acc['account_number']) }}"
-                                            placeholder="Contoh: 8830123456"
-                                            required
-                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-mono font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                        />
-                                    </div>
-
-                                    <div class="sm:col-span-4">
-                                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Atas Nama (a.n) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                                        <input
-                                            type="text"
-                                            name="bank_accounts[{{ $index }}][account_name]"
-                                            value="{{ old("bank_accounts.{$index}.account_name", $acc['account_name']) }}"
-                                            placeholder="Contoh: PT Barber King Digital"
-                                            required
-                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                        />
-                                        <input
-                                            type="hidden"
-                                            name="bank_accounts[{{ $index }}][logo_color]"
-                                            value="{{ $acc['logo_color'] ?? 'bg-zinc-800' }}"
-                                        />
-                                    </div>
-
-                                    <div class="sm:col-span-1 flex justify-end">
                                         <button
                                             type="button"
                                             onclick="removeBankAccountRow(this)"
-                                            class="w-8 h-8 rounded-lg bg-white hover:bg-rose-50 text-zinc-400 hover:text-rose-600 border border-zinc-200 flex items-center justify-center transition cursor-pointer"
+                                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200/60 bg-white transition cursor-pointer"
                                             title="Hapus Rekening Ini"
                                         >
-                                            <x-ui.icon name="trash" class="w-4 h-4" />
+                                            <x-ui.icon name="trash" class="w-3.5 h-3.5 text-rose-500" />
+                                            <span>Hapus</span>
                                         </button>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                                        <div class="sm:col-span-3">
+                                            <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nama Bank <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                                            <input
+                                                type="text"
+                                                name="bank_accounts[{{ $index }}][bank]"
+                                                value="{{ old("bank_accounts.{$index}.bank", $acc['bank']) }}"
+                                                placeholder="Contoh: BCA / Mandiri"
+                                                required
+                                                oninput="updateBankTitle(this)"
+                                                class="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                            />
+                                        </div>
+
+                                        <div class="sm:col-span-4">
+                                            <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nomor Rekening <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                                            <input
+                                                type="text"
+                                                name="bank_accounts[{{ $index }}][account_number]"
+                                                value="{{ old("bank_accounts.{$index}.account_number", $acc['account_number']) }}"
+                                                placeholder="Contoh: 8830123456"
+                                                required
+                                                oninput="updateBankTitle(this)"
+                                                class="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-mono font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                            />
+                                        </div>
+
+                                        <div class="sm:col-span-5">
+                                            <label class="block text-[11px] font-bold text-zinc-700 mb-1">Atas Nama (a.n) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                                            <input
+                                                type="text"
+                                                name="bank_accounts[{{ $index }}][account_name]"
+                                                value="{{ old("bank_accounts.{$index}.account_name", $acc['account_name']) }}"
+                                                placeholder="Contoh: PT Barber King Digital"
+                                                required
+                                                class="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-semibold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                            />
+                                            <input
+                                                type="hidden"
+                                                name="bank_accounts[{{ $index }}][logo_color]"
+                                                value="{{ $acc['logo_color'] ?? 'bg-zinc-800' }}"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             @empty
-                                <p class="text-xs text-zinc-400 italic py-2">Belum ada rekening bank yang diatur.</p>
+                                <div id="bank-accounts-empty" class="p-6 rounded-xl border border-dashed border-zinc-200 text-center">
+                                    <p class="text-xs text-zinc-400 italic">Belum ada rekening bank yang diatur. Klik "Tambah Bank" di atas untuk menambahkan rekening resmi.</p>
+                                </div>
                             @endforelse
+                        </div>
+                    </div>
+
+                    <!-- Card 4: Katalog Produk Iklan & Promosi Platform Official -->
+                    <div class="rounded-2xl border border-zinc-200/90 bg-white p-5 sm:p-6 shadow-2xs space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div class="flex items-center gap-3.5 min-w-0">
+                                <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-2xs">
+                                    <x-ui.icon name="tag" class="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div class="min-w-0">
+                                    <h3 class="text-sm font-black text-zinc-900 tracking-tight">Katalog Iklan &amp; Promosi Produk Official</h3>
+                                    <p class="text-xs text-zinc-500 mt-0.5">Kelola banner promosi produk berputar, galeri foto, harga promo, dan tujuan WhatsApp pemesanan pada halaman terpisah.</p>
+                                </div>
+                            </div>
+
+                            <a
+                                href="{{ route('platform.promotions') }}"
+                                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs shadow-xs transition cursor-pointer self-start sm:self-auto shrink-0 active:scale-95"
+                            >
+                                <span>Buka Halaman Promosi</span>
+                                <x-ui.icon name="arrow-right" class="w-3.5 h-3.5" />
+                            </a>
                         </div>
                     </div>
 
@@ -613,34 +647,7 @@
                         </div>
                     </div>
 
-                    <!-- Card 5: Banner Broadcast Pengumuman Global -->
-                    <div class="rounded-2xl border border-zinc-200/90 bg-white p-5 sm:p-6 shadow-2xs space-y-4">
-                        <div class="flex items-center gap-2.5 pb-3 border-b border-zinc-100">
-                            <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <x-ui.icon name="megaphone" class="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 class="text-sm font-black text-zinc-900 tracking-tight">Banner Pengumuman Global</h3>
-                                <p class="text-xs text-zinc-500 mt-0.5">Siarkan pesan ke seluruh dashboard pengguna</p>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold text-zinc-700 mb-1">
-                                Isi Pesan Pengumuman (Opsional)
-                            </label>
-                            <textarea
-                                name="announcement_banner"
-                                rows="3"
-                                maxlength="500"
-                                placeholder="Contoh: Pemeliharaan server dijadwalkan pada hari Minggu pukul 02:00 - 04:00 WIB..."
-                                class="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 bg-zinc-50/50 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
-                            >{{ old('announcement_banner', $settings['announcement_banner']) }}</textarea>
-                            <p class="text-[11px] text-zinc-400 mt-1">Muncul sebagai notifikasi banner di bagian atas seluruh dashboard.</p>
-                        </div>
-                    </div>
-
-                    <!-- Card 6: Kebijakan Masa Uji Coba (Trial) -->
+                    <!-- Card 5: Kebijakan Masa Uji Coba (Trial) -->
                     <div class="rounded-2xl border border-zinc-200/90 bg-white p-5 sm:p-6 shadow-2xs space-y-4">
                         <div class="flex items-center gap-2.5 pb-3 border-b border-zinc-100">
                             <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -672,7 +679,7 @@
                         </div>
                     </div>
 
-                    <!-- Card 7: Aksi Simpan -->
+                    <!-- Card 6: Aksi Simpan -->
                     <div class="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-2xs space-y-3">
                         <div class="flex items-center gap-2 text-amber-900 font-bold text-xs">
                             <x-ui.icon name="info" class="w-4 h-4 text-amber-600 shrink-0" />
@@ -726,7 +733,7 @@
                 const g = parseInt(clean.substring(2, 4), 16);
                 const b = parseInt(clean.substring(4, 6), 16);
                 const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                badge.style.color = lum > 0.65 ? '#09090b' : '#ffffff';
+                badge.style.color = lum > 0.58 ? '#09090b' : '#ffffff';
             }
         }
 
@@ -974,63 +981,110 @@
         // 6. Dynamic Bank Accounts Row Add & Remove
         function addBankAccountRow() {
             const list = document.getElementById('bank-accounts-form-list');
+            const emptyNotice = document.getElementById('bank-accounts-empty');
+            if (emptyNotice) {
+                emptyNotice.remove();
+            }
+
             const newIndex = Date.now();
             const row = document.createElement('div');
-            row.className = 'bank-row p-3.5 rounded-xl border border-zinc-200 bg-zinc-50/60 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end transition';
+            row.className = 'bank-row p-4 rounded-xl border border-zinc-200/90 bg-zinc-50/70 space-y-3 transition hover:border-zinc-300';
             row.innerHTML = `
-                <div class="sm:col-span-3">
-                    <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nama Bank <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                    <input
-                        type="text"
-                        name="bank_accounts[${newIndex}][bank]"
-                        placeholder="Contoh: BCA / Mandiri"
-                        required
-                        class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
-                </div>
-                <div class="sm:col-span-4">
-                    <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nomor Rekening <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                    <input
-                        type="text"
-                        name="bank_accounts[${newIndex}][account_number]"
-                        placeholder="Contoh: 8830123456"
-                        required
-                        class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-mono font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
-                </div>
-                <div class="sm:col-span-4">
-                    <label class="block text-[11px] font-bold text-zinc-700 mb-1">Atas Nama (a.n) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                    <input
-                        type="text"
-                        name="bank_accounts[${newIndex}][account_name]"
-                        placeholder="Contoh: PT Barber King Digital"
-                        required
-                        class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
-                    <input
-                        type="hidden"
-                        name="bank_accounts[${newIndex}][logo_color]"
-                        value="bg-zinc-800"
-                    />
-                </div>
-                <div class="sm:col-span-1 flex justify-end">
+                <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-zinc-200/60">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-md bg-zinc-900 text-amber-400 font-black text-[10px] grid place-items-center uppercase shrink-0">
+                            BK
+                        </span>
+                        <span class="text-xs font-bold text-zinc-800 bank-card-title">
+                            Bank Baru
+                        </span>
+                    </div>
+
                     <button
                         type="button"
                         onclick="removeBankAccountRow(this)"
-                        class="w-8 h-8 rounded-lg bg-white hover:bg-rose-50 text-zinc-400 hover:text-rose-600 border border-zinc-200 flex items-center justify-center transition cursor-pointer"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200/60 bg-white transition cursor-pointer"
                         title="Hapus Rekening Ini"
                     >
-                        <x-ui.icon name="trash" class="w-4 h-4" />
+                        <x-ui.icon name="trash" class="w-3.5 h-3.5 text-rose-500" />
+                        <span>Hapus</span>
                     </button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                    <div class="sm:col-span-3">
+                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nama Bank <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                        <input
+                            type="text"
+                            name="bank_accounts[${newIndex}][bank]"
+                            placeholder="Contoh: BCA / Mandiri"
+                            required
+                            oninput="updateBankTitle(this)"
+                            class="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                    </div>
+                    <div class="sm:col-span-4">
+                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Nomor Rekening <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                        <input
+                            type="text"
+                            name="bank_accounts[${newIndex}][account_number]"
+                            placeholder="Contoh: 8830123456"
+                            required
+                            oninput="updateBankTitle(this)"
+                            class="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-mono font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                    </div>
+                    <div class="sm:col-span-5">
+                        <label class="block text-[11px] font-bold text-zinc-700 mb-1">Atas Nama (a.n) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                        <input
+                            type="text"
+                            name="bank_accounts[${newIndex}][account_name]"
+                            placeholder="Contoh: PT Barber King Digital"
+                            required
+                            class="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 bg-white font-semibold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <input
+                            type="hidden"
+                            name="bank_accounts[${newIndex}][logo_color]"
+                            value="bg-zinc-800"
+                        />
+                    </div>
                 </div>
             `;
             list.appendChild(row);
+        }
+
+        function updateBankTitle(input) {
+            const row = input.closest('.bank-row');
+            if (!row) return;
+            const bankInput = row.querySelector('input[name*="[bank]"]');
+            const accInput = row.querySelector('input[name*="[account_number]"]');
+            const titleSpan = row.querySelector('.bank-card-title');
+            const badgeSpan = row.querySelector('span[class*="text-[10px]"]');
+
+            const bankVal = bankInput ? bankInput.value.trim() : '';
+            const accVal = accInput ? accInput.value.trim() : '';
+
+            if (titleSpan) {
+                titleSpan.innerHTML = (bankVal || 'Bank Baru') + (accVal ? ' &bull; <span class="font-mono text-zinc-600">' + accVal + '</span>' : '');
+            }
+            if (badgeSpan) {
+                badgeSpan.textContent = bankVal ? bankVal.substring(0, 3).toUpperCase() : 'BK';
+            }
         }
 
         function removeBankAccountRow(button) {
             const row = button.closest('.bank-row');
             if (row) {
                 row.remove();
+            }
+            const list = document.getElementById('bank-accounts-form-list');
+            if (list && list.querySelectorAll('.bank-row').length === 0) {
+                list.innerHTML = `
+                    <div id="bank-accounts-empty" class="p-6 rounded-xl border border-dashed border-zinc-200 text-center">
+                        <p class="text-xs text-zinc-400 italic">Belum ada rekening bank yang diatur. Klik "Tambah Bank" di atas untuk menambahkan rekening resmi.</p>
+                    </div>
+                `;
             }
         }
     </script>

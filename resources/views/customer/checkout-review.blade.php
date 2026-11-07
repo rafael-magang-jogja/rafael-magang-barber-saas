@@ -1,4 +1,4 @@
-<x-layouts.customer title="Selesai & Pembayaran" :subtitle="$ticket->tenant?->name" :tenant="$ticket->tenant">
+<x-layouts.customer title="Selesai & Pembayaran" :subtitle="$ticket->tenant?->name ?? 'Rincian Pembayaran'" :tenant="$tenant">
     <div class="space-y-4">
         <!-- Header Info Tiket -->
         <div class="rounded-2xl bg-zinc-950 text-white p-4 shadow-lg border border-zinc-800">
@@ -12,9 +12,11 @@
                 </span>
             </div>
 
-            <h1 class="text-lg font-black tracking-tight mt-3 text-white">Konfirmasi Selesai &amp; Pembayaran</h1>
+            <h1 class="text-lg font-black tracking-tight mt-3 text-white">
+                {{ $ticket->status === \App\Enums\QueueStatus::Completed ? 'Konfirmasi Selesai & Pembayaran' : 'Pembayaran di Muka Antrean' }}
+            </h1>
             <p class="text-xs text-zinc-400 mt-0.5">
-                {{ $branch?->name }} · Layanan potong rambut Anda telah selesai dikerjakan.
+                {{ $branch?->name }} · {{ $ticket->status === \App\Enums\QueueStatus::Completed ? 'Layanan potong rambut Anda telah selesai dikerjakan.' : 'Selesaikan pembayaran terlebih dahulu saat antre sebelum potong rambut dimulai.' }}
             </p>
         </div>
 
@@ -32,7 +34,8 @@
         <form method="POST" action="{{ route('customer.tickets.process-checkout', $ticket->id) }}" class="space-y-4">
             @csrf
 
-            <!-- BAGIAN 1: PENILAIAN KEPADA STAFF -->
+            <!-- BAGIAN 1: PENILAIAN KEPADA STAFF (AKTIF JIKA SUDAH SELESAI DICUKUR) -->
+            @if($ticket->status === \App\Enums\QueueStatus::Completed)
             <x-ui.card>
                 <x-slot:header>
                     <h2 class="font-extrabold text-xs uppercase tracking-wider text-zinc-800 flex items-center gap-2">
@@ -96,6 +99,14 @@
                     </div>
                 </div>
             </x-ui.card>
+            @else
+            <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-300/80 text-xs text-amber-950 flex items-center gap-2.5 shadow-2xs">
+                <x-ui.icon name="star" class="w-4 h-4 text-amber-600 shrink-0" />
+                <span class="leading-relaxed">
+                    <b>Catatan Penilaian:</b> Form penilaian keramahan &amp; hasil cukur barber dapat Anda berikan setelah pangkas rambut Anda selesai dikerjakan.
+                </span>
+            </div>
+            @endif
 
             <!-- BAGIAN 2: RINCIAN BIAYA & TOTAL -->
             <x-ui.card>
@@ -203,7 +214,7 @@
                 <x-ui.button
                     type="submit"
                     size="lg"
-                    class="w-full !bg-amber-500 hover:!bg-amber-400 !text-zinc-950 font-black shadow-xl py-3.5 text-base flex items-center justify-center gap-2"
+                    class="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black shadow-xl py-3.5 text-base flex items-center justify-center gap-2"
                 >
                     <x-ui.icon name="check" class="w-5 h-5" />
                     <span>Lanjut &amp; Tunggu Invoice Kasir</span>
@@ -251,7 +262,9 @@
             }
 
             function updateStars(val) {
-                ratingInput.value = val;
+                if (ratingInput) {
+                    ratingInput.value = val;
+                }
                 if (ratingLabel && labels[val]) {
                     ratingLabel.textContent = labels[val];
                 }
@@ -259,7 +272,7 @@
             }
 
             const starContainer = document.getElementById('star_container');
-            if (starContainer) {
+            if (starContainer && ratingInput) {
                 starContainer.addEventListener('mouseleave', () => {
                     const currentVal = parseInt(ratingInput.value || '5', 10);
                     renderStarsVisual(currentVal);
@@ -276,8 +289,10 @@
                 });
             });
 
-            // Inisialisasi default bintang 5
-            updateStars(parseInt(ratingInput.value || '5', 10));
+            // Inisialisasi default bintang 5 jika form penilaian aktif
+            if (ratingInput) {
+                updateStars(parseInt(ratingInput.value || '5', 10));
+            }
 
             // Logika Kartu Metode Pembayaran
             const paymentRadios = document.querySelectorAll('input[name="payment_method"]');

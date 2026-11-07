@@ -1,15 +1,8 @@
-<x-layouts.app title="Paket Langganan Platform" subtitle="Atur paket sewa, harga bulanan, kuota cabang & fitur SaaS" role="superadmin">
-    <!-- Header Actions (3 Paket Standar Platform) -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <div>
-            <h1 class="text-base sm:text-lg font-black text-zinc-900 tracking-tight flex items-center gap-2">
-                <x-ui.icon name="coins" class="w-5 h-5 text-amber-600" />
-                <span>Katalog Paket Langganan SaaS</span>
-            </h1>
-            <p class="text-xs text-zinc-500 mt-0.5">Atur skema harga sewa bulanan dan kuota outlet untuk barbershop penyewa</p>
-        </div>
-
-        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-100 border border-zinc-200/80 text-zinc-700 text-xs font-bold self-start sm:self-auto shrink-0 shadow-2xs">
+<x-layouts.app title="Katalog Paket Langganan SaaS" subtitle="Atur skema harga sewa bulanan dan kuota outlet untuk barbershop penyewa" role="superadmin">
+    <!-- Action & Status Bar -->
+    <div class="flex items-center justify-between gap-3 mb-6">
+        <span class="text-xs text-zinc-500 hidden sm:inline">Kelola tarif bulanan dan batasan fitur setiap tingkatan paket</span>
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-100 border border-zinc-200/80 text-zinc-700 text-xs font-bold shrink-0 shadow-2xs">
             <x-ui.icon name="shield-check" class="w-4 h-4 text-emerald-600" />
             <span>3 Paket Standar (Starter, Pro, Business)</span>
         </div>
@@ -125,21 +118,6 @@
                             @endif
                         </div>
 
-                        <!-- Notifikasi WhatsApp Pelanggan -->
-                        <div class="flex items-center gap-2">
-                            @if($plan->code === 'starter')
-                                <span class="w-4 h-4 rounded-full bg-rose-50 text-rose-500 border border-rose-200/70 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="x" class="w-2.5 h-2.5" />
-                                </span>
-                                <span class="text-zinc-400 line-through">Notifikasi WhatsApp Pelanggan</span>
-                            @else
-                                <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="check" class="w-2.5 h-2.5" />
-                                </span>
-                                <span>Notifikasi WhatsApp Pelanggan</span>
-                            @endif
-                        </div>
-
                         <!-- Layar TV Display Antrean Live -->
                         <div class="flex items-center gap-2">
                             <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
@@ -163,18 +141,18 @@
                             @endif
                         </div>
 
-                        <!-- White-label & Subdomain Khusus (Eksklusif Business) -->
+                        <!-- White-label Penuh (Eksklusif Business) -->
                         <div class="flex items-center gap-2">
                             @if($plan->code === 'business')
                                 <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                                     <x-ui.icon name="check" class="w-2.5 h-2.5" />
                                 </span>
-                                <span><strong>White-label &amp; Subdomain Khusus</strong></span>
+                                <span><strong>White-label Penuh</strong></span>
                             @else
                                 <span class="w-4 h-4 rounded-full bg-rose-50 text-rose-500 border border-rose-200/70 flex items-center justify-center shrink-0">
                                     <x-ui.icon name="x" class="w-2.5 h-2.5" />
                                 </span>
-                                <span class="text-zinc-400 line-through">White-label &amp; Subdomain Khusus</span>
+                                <span class="text-zinc-400 line-through">White-label Penuh</span>
                             @endif
                         </div>
                     </div>
@@ -201,7 +179,7 @@
                         <span>Edit</span>
                     </a>
 
-                    <form method="POST" action="{{ route('platform.plans.toggle', $plan) }}" onsubmit="return confirm('{{ $plan->is_active ? 'Nonaktifkan paket ' . $plan->name . ' dari pendaftaran langganan baru?' : 'Aktifkan kembali paket ' . $plan->name . '?' }}')">
+                    <form method="POST" action="{{ route('platform.plans.toggle', $plan) }}" data-confirm="{{ $plan->is_active ? 'Nonaktifkan paket ' . $plan->name . ' dari pendaftaran langganan baru?' : 'Aktifkan kembali paket ' . $plan->name . '?' }}" onsubmit="return confirm(this.dataset.confirm)">
                         @csrf
                         @method('PATCH')
                         @if($plan->is_active)

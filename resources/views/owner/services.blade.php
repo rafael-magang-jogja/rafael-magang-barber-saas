@@ -29,26 +29,26 @@
         $hasLowColorStockDot = app(\App\Support\Tenancy\CurrentTenant::class)->hasLowColorStockDot();
     @endphp
 
-    <!-- Navigasi Sub-Halaman Layanan & Warna -->
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div class="inline-flex items-center gap-1.5 bg-white border border-zinc-200/80 p-1.5 rounded-2xl shadow-2xs">
+    <!-- Navigasi Sub-Halaman Layanan & Warna (Khusus Mobile, Disembunyikan di Tablet & Desktop) -->
+    <div class="md:hidden mb-4">
+        <div class="grid grid-cols-2 p-1 bg-white border border-zinc-200/80 rounded-2xl shadow-2xs gap-1">
             <a
                 href="{{ route('owner.services') }}"
-                class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-zinc-950 text-amber-400 shadow-2xs transition"
+                class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black bg-amber-500 text-zinc-950 shadow-2xs transition"
             >
                 <x-ui.icon name="scissors" class="w-3.5 h-3.5" />
-                <span>Daftar Layanan &amp; Harga</span>
+                <span>Layanan</span>
             </a>
             <a
                 href="{{ route('owner.colors') }}"
-                class="relative inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition"
+                class="relative flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition"
             >
                 <x-ui.icon name="sparkles" class="w-3.5 h-3.5 text-amber-600" />
-                <span>Setting Warna &amp; Stok Coloring</span>
+                <span>Stok Warna</span>
                 @if($hasLowColorStockDot)
-                    <span class="relative flex h-2.5 w-2.5 shrink-0" title="Ada warna coloring yang mendekati minimum stok">
+                    <span class="relative flex h-2 w-2 shrink-0 ml-0.5" title="Ada warna coloring yang mendekati minimum stok">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                     </span>
                 @endif
             </a>
@@ -107,13 +107,28 @@
                     :value="$editingService?->type"
                 />
 
-                <x-ui.input
-                    label="Harga (Rp) *"
-                    name="price"
-                    type="number"
-                    :value="$editingService ? $editingService->price : '50000'"
-                    required
-                />
+                <div>
+                    <label for="price" class="block text-xs font-semibold text-zinc-700 mb-1.5">
+                        Harga (Rp) <span class="text-rose-500 font-bold ml-0.5">*</span>
+                    </label>
+                    <div class="relative flex items-center">
+                        <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 select-none">Rp</span>
+                        <input
+                            type="text"
+                            inputmode="numeric"
+                            id="price"
+                            name="price"
+                            value="{{ number_format((int) old('price', $editingService ? $editingService->price : 50000), 0, ',', '.') }}"
+                            required
+                            placeholder="50.000"
+                            autocomplete="off"
+                            class="w-full rounded-xl border border-zinc-200 bg-white pl-10 pr-3.5 py-2.5 text-sm font-black text-zinc-900 num placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 min-h-[44px] transition"
+                        />
+                    </div>
+                    @error('price')
+                        <p class="mt-1 text-xs font-medium text-rose-600">{{ $message }}</p>
+                    @enderror
+                </div>
 
                 <x-ui.input
                     label="Estimasi Durasi (Menit) *"
@@ -152,35 +167,39 @@
         <!-- Daftar Layanan & Harga -->
         <x-ui.card class="lg:col-span-2">
             <x-slot:header>
-                <div class="flex flex-wrap items-center justify-between gap-2 w-full">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
                     <div>
                         <h2 class="font-bold">Daftar Layanan &amp; Harga</h2>
                         <span class="text-xs text-zinc-400">Mengedit layanan tidak akan mengubah riwayat transaksi lama (Snapshot)</span>
                     </div>
-                    <form method="GET" action="{{ route('owner.services') }}" class="flex flex-wrap items-center gap-2">
-                        <x-ui.select
-                            name="category_id"
-                            size="sm"
-                            align="right"
-                            placeholder="Semua Kategori"
-                            icon="scissors"
-                            :options="$categoryOptions"
-                            :value="request('category_id')"
-                            search-placeholder="Cari kategori..."
-                            class="w-44"
-                            auto-submit
-                        />
-                        <x-ui.select
-                            name="type"
-                            size="sm"
-                            align="right"
-                            placeholder="Semua Jenis"
-                            icon="filter"
-                            :options="$typeOptions"
-                            :value="request('type')"
-                            class="w-40"
-                            auto-submit
-                        />
+                    <form method="GET" action="{{ route('owner.services') }}" class="grid grid-cols-2 gap-2 w-full sm:flex sm:items-center sm:w-auto">
+                        <div class="w-full sm:w-44">
+                            <x-ui.select
+                                name="category_id"
+                                size="sm"
+                                align="right"
+                                placeholder="Semua Kategori"
+                                icon="scissors"
+                                :options="$categoryOptions"
+                                :value="request('category_id')"
+                                search-placeholder="Cari kategori..."
+                                class="w-full"
+                                auto-submit
+                            />
+                        </div>
+                        <div class="w-full sm:w-40">
+                            <x-ui.select
+                                name="type"
+                                size="sm"
+                                align="right"
+                                placeholder="Semua Jenis"
+                                icon="filter"
+                                :options="$typeOptions"
+                                :value="request('type')"
+                                class="w-full"
+                                auto-submit
+                            />
+                        </div>
                     </form>
                 </div>
             </x-slot:header>
@@ -200,9 +219,6 @@
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
                                 <p class="font-extrabold text-sm text-zinc-900">{{ $service->name }}</p>
-                                <span class="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 text-[11px] font-bold num">
-                                    {{ $service->duration_minutes }} mnt
-                                </span>
                                 @if($service->category)
                                     <span class="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-800 text-[11px] font-semibold">
                                         {{ $service->category->name }}
@@ -286,4 +302,27 @@
             @endif
         </x-ui.card>
     </div>
+
+    <!-- Script Format Pemisah Ribuan (Titik) Real-time -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const priceInput = document.getElementById('price');
+            if (!priceInput) return;
+
+            function formatRupiahNumber(val) {
+                const clean = String(val).replace(/\D/g, '');
+                if (!clean) return '';
+                return parseInt(clean, 10).toLocaleString('id-ID');
+            }
+
+            priceInput.addEventListener('input', function () {
+                this.value = formatRupiahNumber(this.value);
+            });
+
+            // Pastikan nilai dikirim sebagai angka murni tanpa titik saat submit form
+            priceInput.closest('form')?.addEventListener('submit', function () {
+                priceInput.value = priceInput.value.replace(/\D/g, '') || '0';
+            });
+        });
+    </script>
 </x-layouts.app>

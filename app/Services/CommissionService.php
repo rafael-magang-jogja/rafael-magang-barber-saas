@@ -18,34 +18,7 @@ final class CommissionService
      */
     public function resolveRuleSnapshot(int $tenantId, ?int $serviceId, ?int $categoryId, ?int $barberMembershipId): array
     {
-        // 1. Cek apakah barber menggunakan skema Murni Bagi Hasil (commission_only).
-        // Skema Murni Bagi Hasil TETAP AKTIF di semua paket langganan (termasuk Starter).
-        if ($barberMembershipId !== null) {
-            $barber = \App\Models\Membership::query()
-                ->withoutGlobalScope('tenant')
-                ->with('salaryScheme')
-                ->find($barberMembershipId);
-
-            if ($barber?->salaryScheme && $barber->salaryScheme->type === 'commission_only') {
-                return [
-                    'rule_id' => null,
-                    'type' => 'percentage',
-                    'value' => $barber->salaryScheme->effective_commission_percentage,
-                ];
-            }
-        }
-
-        // 2. Untuk komisi layanan otomatis (pada skema Gaji Pokok + Komisi atau aturan komisi kustom),
-        // fitur ini membutuhkan paket Pro atau Business (commission_auto).
-        $tenant = \App\Models\Tenant::find($tenantId);
-        if ($tenant && ! $tenant->hasFeature('commission_auto')) {
-            return [
-                'rule_id' => null,
-                'type' => 'flat',
-                'value' => 0,
-            ];
-        }
-
+        // 1. Cek aturan komisi per layanan atau kategori (komisi flat per kepala / layanan)
         $rules = CommissionRule::query()
             ->withoutGlobalScope('tenant')
             ->where('tenant_id', $tenantId)
@@ -53,7 +26,7 @@ final class CommissionService
             ->orderByDesc('priority')
             ->get();
 
-        // 3. Cek aturan khusus individu staf terlebih dahulu (prioritas tertinggi)
+        // 2. Cek aturan khusus individu staf terlebih dahulu (jika ada setting khusus per staf)
         if ($barberMembershipId !== null) {
             $memberRule = $rules->first(fn ($r) => $r->membership_id === $barberMembershipId);
             if ($memberRule !== null) {
@@ -65,7 +38,7 @@ final class CommissionService
             }
         }
 
-        // 4. Cek aturan per layanan atau kategori
+        // 3. Cek aturan komisi per layanan atau kategori
         foreach ($rules as $rule) {
             if ($rule->membership_id !== null) {
                 continue;
@@ -86,6 +59,23 @@ final class CommissionService
             ];
         }
 
+        // 4. Jika tidak ada aturan spesifik layanan, cek apakah staf memakai skema persentase bagi hasil eksplisit
+        if ($barberMembershipId !== null) {
+            $barber = \App\Models\Membership::query()
+                ->withoutGlobalScope('tenant')
+                ->with('salaryScheme')
+                ->find($barberMembershipId);
+
+            if ($barber?->salaryScheme && $barber->salaryScheme->type === 'commission_only' && !empty($barber->salaryScheme->commission_percentage)) {
+                return [
+                    'rule_id' => null,
+                    'type' => 'percentage',
+                    'value' => (int) $barber->salaryScheme->commission_percentage,
+                ];
+            }
+        }
+
+        // 5. Standar komisi per layanan: flat Rp5.000 per layanan pangkas
         return [
             'rule_id' => null,
             'type' => 'flat',
@@ -119,29 +109,12 @@ final class CommissionService
      */
     public function recordOrderCommissions(Order $order): void
     {
-        $tenant = $order->tenant ?? \App\Models\Tenant::find($order->tenant_id);
-        $hasCommAuto = $tenant?->hasFeature('commission_auto') ?? false;
-
         $order->loadMissing('items');
 
         foreach ($order->items as $item) {
             /** @var OrderItem $item */
             if ($item->barber_membership_id === null) {
                 continue;
-            }
-
-            // Jika tenant tidak memiliki fitur commission_auto (misal Starter),
-            // hanya catat jika barber menggunakan skema Murni Bagi Hasil (commission_only).
-            // Komisi tambahan untuk staf bergaji pokok dikunci khusus paket Pro & Business.
-            if (! $hasCommAuto) {
-                $barber = \App\Models\Membership::query()
-                    ->withoutGlobalScope('tenant')
-                    ->with('salaryScheme')
-                    ->find($item->barber_membership_id);
-
-                if (! $barber?->salaryScheme || $barber->salaryScheme->type !== 'commission_only') {
-                    continue;
-                }
             }
 
             $amount = $this->calculateAmount($item->line_total, $item->commission_rule_snapshot);

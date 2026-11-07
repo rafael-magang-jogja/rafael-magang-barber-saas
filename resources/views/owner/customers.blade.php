@@ -1,8 +1,4 @@
 <x-layouts.app title="Database & Loyalitas Customer" subtitle="Database riwayat pelanggan dan loyalitas transaksi" role="owner">
-    @php
-        $tenant = app(\App\Support\Tenancy\CurrentTenant::class)->get();
-        $hasWhatsApp = $tenant?->hasFeature('whatsapp_notification') ?? false;
-    @endphp
     <!-- Stat Cards Customer -->
     <div class="stat-cards-grid grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 transition-all duration-500 ease-in-out">
         <x-ui.stat
@@ -54,7 +50,7 @@
     </div>
 
     <!-- Tabel Database Customer CRM -->
-    <x-ui.card>
+    <x-ui.card data-pagination-container="owner-customers">
         <x-slot:header>
             <div class="flex items-center justify-between w-full">
                 <h2 class="font-bold flex items-center gap-2">
@@ -74,7 +70,6 @@
                         <tr class="border-b border-zinc-200/80 bg-zinc-50/80 text-[11px] font-extrabold uppercase tracking-wider text-zinc-500">
                             <th class="py-3 px-4 sm:px-5">Nama Customer</th>
                             <th class="py-3 px-4 sm:px-5">Kontak WhatsApp / HP</th>
-                            <th class="py-3 px-4 sm:px-5 text-center">Kunjungan</th>
                             <th class="py-3 px-4 sm:px-5">Kunjungan Terakhir</th>
                             <th class="py-3 px-4 sm:px-5 text-right">Total Belanja</th>
                         </tr>
@@ -98,30 +93,18 @@
                                 </td>
                                 <td class="py-3.5 px-4 sm:px-5 font-mono">
                                     @if($c->phone)
-                                        @if($hasWhatsApp)
-                                            <a
-                                                href="https://wa.me/{{ $cleanPhone }}"
-                                                target="_blank"
-                                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold transition"
-                                                title="Chat WhatsApp"
-                                            >
-                                                <span>{{ $c->phone }}</span>
-                                                <x-ui.icon name="external-link" class="w-3 h-3 text-emerald-600" />
-                                            </a>
-                                        @else
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-100 text-zinc-700 font-semibold" title="Fitur Chat WhatsApp aktif mulai paket Pro">
-                                                <span>{{ $c->phone }}</span>
-                                                <x-ui.icon name="lock" class="w-3 h-3 text-zinc-400" />
-                                            </span>
-                                        @endif
+                                        <a
+                                            href="https://wa.me/{{ $cleanPhone }}"
+                                            target="_blank"
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold transition"
+                                            title="Chat WhatsApp"
+                                        >
+                                            <span>{{ $c->phone }}</span>
+                                            <x-ui.icon name="external-link" class="w-3 h-3 text-emerald-600" />
+                                        </a>
                                     @else
                                         <span class="text-zinc-400 font-sans">-</span>
                                     @endif
-                                </td>
-                                <td class="py-3.5 px-4 sm:px-5 text-center">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-200/60">
-                                        {{ $c->visit_count }}x
-                                    </span>
                                 </td>
                                 <td class="py-3.5 px-4 sm:px-5 text-zinc-600">
                                     @if($c->last_visit_at)

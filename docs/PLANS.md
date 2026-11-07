@@ -3,6 +3,9 @@
 > Dokumen ini adalah rencana kerja pengembangan platform **Barbershop SaaS** (multi-tenant).
 > Desain UI ada di [`DESIGN.md`](./DESIGN.md), skema database ada di [`DATABASE.md`](./DATABASE.md).
 > Rencana fitur operasional harian (Kasir, Barber, Customer) ada di [`PLAN-KASIR-BARBER-CUSTOMER.md`](./PLAN-KASIR-BARBER-CUSTOMER.md).
+> Rencana integrasi pembayaran gateway Xendit & pencairan escrow Superadmin ada di [`PLAN-XENDIT-ESCROW-BOOKING.md`](./PLAN-XENDIT-ESCROW-BOOKING.md).
+> Rencana integrasi pembayaran langganan SaaS otomatis via Xendit ada di [`PLAN-XENDIT-SUBSCRIPTION-PAYMENT.md`](./PLAN-XENDIT-SUBSCRIPTION-PAYMENT.md).
+> Rencana sistem saldo dompet refund customer & penarikan dana escrow ada di [`PLAN-CUSTOMER-REFUND-WALLET-ESCROW.md`](./PLAN-CUSTOMER-REFUND-WALLET-ESCROW.md).
 
 ---
 

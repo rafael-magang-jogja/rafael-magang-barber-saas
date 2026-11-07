@@ -187,7 +187,7 @@
                                 </div>
                                 <div class="shrink-0 flex items-center gap-2">
                                     @if($ticket->hairColor)
-                                        <span class="w-3 h-3 rounded-full border border-black/20 shrink-0" style="background-color: {{ $ticket->hairColor->hex_code }}" title="Warna: {{ $ticket->hairColor->name }}"></span>
+                                        <span class="w-3 h-3 rounded-full border border-black/20 shrink-0" @style(['background-color: ' . $ticket->hairColor->hex_code]) title="Warna: {{ $ticket->hairColor->name }}"></span>
                                     @endif
                                     <span class="text-zinc-400 text-xs font-bold uppercase tracking-wider">
                                         {{ $ticket->type === 'booking' ? 'Booking' : 'Walk-in' }}

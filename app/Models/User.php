@@ -17,6 +17,7 @@ use Illuminate\Notifications\Notifiable;
     'name',
     'email',
     'phone',
+    'wallet_balance',
     'password',
     'avatar_path',
     'is_superadmin',
@@ -36,6 +37,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'password' => 'hashed',
             'is_superadmin' => 'boolean',
+            'wallet_balance' => 'integer',
         ];
     }
 
@@ -52,5 +54,15 @@ class User extends Authenticatable
     public function customerProfiles(): HasMany
     {
         return $this->hasMany(CustomerProfile::class);
+    }
+
+    public function walletTransactions(): HasMany
+    {
+        return $this->hasMany(CustomerWalletTransaction::class);
+    }
+
+    public function withdrawals(): HasMany
+    {
+        return $this->hasMany(CustomerWithdrawal::class);
     }
 }

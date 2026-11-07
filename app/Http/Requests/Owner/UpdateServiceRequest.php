@@ -15,6 +15,15 @@ final class UpdateServiceRequest extends FormRequest
         return app(CurrentTenant::class)->id() !== null;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('price')) {
+            $this->merge([
+                'price' => (int) preg_replace('/\D/', '', (string) $this->input('price')),
+            ]);
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\PaymentMethod;
-use App\Enums\PaymentStatus;
 use App\Enums\PayrollStatus;
 use App\Enums\WorkStatus;
+use App\Models\Attendance;
 use App\Models\BarberSchedule;
 use App\Models\BarberTimeOff;
 use App\Models\Booking;
@@ -359,6 +359,9 @@ final class OwnerManagementService
                 ]);
             }
 
+            // Sinkronkan auto-checkout dan absensi alpa untuk rentang tanggal payroll ini
+            $this->autoCloseDailyAttendances($tenantId, $periodStart, $periodEnd);
+
             $periodStartDt = \Illuminate\Support\Carbon::parse($periodStart)->startOfDay();
             $periodEndDt = \Illuminate\Support\Carbon::parse($periodEnd)->endOfDay();
             $lastDayOfPeriodMonth = $periodEndDt->copy()->endOfMonth();
@@ -368,13 +371,6 @@ final class OwnerManagementService
             $isFullMonth = ($periodStartDt->day === 1 && $periodEndDt->isSameDay($lastDayOfPeriodMonth) && $periodStartDt->isSameMonth($periodEndDt));
             $isEndingAtLastDayOfMonth = $periodEndDt->isSameDay($lastDayOfPeriodMonth);
             $isPeriodEligibleForBaseSalary = ($isFullMonth || $isEndingAtLastDayOfMonth);
-
-            // 2. Tanggal eksekusi saat ini sudah mendekati akhir bulan (minimal 3 hari sebelum akhir bulan) atau periode bulan lalu
-            $cutoffDay = $lastDayOfPeriodMonth->day - 3; // minimal H-3 akhir bulan (misal tgl 28 untuk bulan 31 hari, tgl 27 untuk 30 hari)
-            $isPastMonth = now()->year > $periodEndDt->year
-                || (now()->year === $periodEndDt->year && now()->month > $periodEndDt->month);
-            $isCurrentMonthEndOfMonth = (now()->isSameMonth($periodEndDt) && now()->isSameYear($periodEndDt) && now()->day >= $cutoffDay);
-            $hasReachedEndOfMonth = ($isPastMonth || $isCurrentMonthEndOfMonth);
 
             $staffMembers = Membership::query()
                 ->withoutGlobalScope('tenant')
@@ -458,39 +454,16 @@ final class OwnerManagementService
 
                 $netServicesCount = max(0, $grossServicesCount - $alreadyPaidServicesCount);
 
-                // 3b. Jumlah Tip Pelanggan untuk Barber
-                $grossTips = (int) Order::query()
-                    ->withoutGlobalScope('tenant')
-                    ->where('tenant_id', $tenantId)
-                    ->where('barber_membership_id', $staff->id)
-                    ->where('payment_status', 'paid')
-                    ->whereBetween('paid_at', [$periodStart . ' 00:00:00', $periodEnd . ' 23:59:59'])
-                    ->sum('tip_amount');
-
-                $alreadyPaidTips = (int) PayrollItem::query()
-                    ->withoutGlobalScope('tenant')
-                    ->where('tenant_id', $tenantId)
-                    ->where('membership_id', $staff->id)
-                    ->where('payment_status', 'paid')
-                    ->when($payroll && $payroll->id, fn ($q) => $q->where('payroll_id', '!=', $payroll->id))
-                    ->whereHas('payroll', function ($q) use ($periodStart, $periodEnd) {
-                        $q->where(function ($sub) use ($periodStart, $periodEnd) {
-                            $sub->whereBetween('period_start', [$periodStart, $periodEnd])
-                                ->orWhereBetween('period_end', [$periodStart, $periodEnd])
-                                ->orWhere(function ($nested) use ($periodStart, $periodEnd) {
-                                    $nested->where('period_start', '<=', $periodStart)
-                                           ->where('period_end', '>=', $periodEnd);
-                                });
-                        });
-                    })
-                    ->sum('tip_total');
-
-                $netTips = max(0, $grossTips - $alreadyPaidTips);
+                // Tip telah ditiadakan
+                $grossTips = 0;
+                $alreadyPaidTips = 0;
+                $netTips = 0;
 
                 $scheme = $staff->salaryScheme;
-                $nominalBaseSalary = (int) $staff->effective_base_salary;
+                $isBarber = $staff->role === \App\Enums\Role::Barber || (is_object($staff->role) && $staff->role->value === 'barber') || $staff->role === 'barber';
+                $nominalBaseSalary = $isBarber ? 0 : (int) $staff->effective_base_salary;
 
-                // 4. Logika Gaji Pokok (Hanya 1x per bulan kalender, hanya di akhir bulan, tgl >= 25)
+                // 4. Logika Gaji Pokok (Hanya untuk Staf Tetap / Kasir, 1x per bulan kalender di akhir bulan)
                 $alreadyPaidBaseSalary = PayrollItem::query()
                     ->withoutGlobalScope('tenant')
                     ->where('tenant_id', $tenantId)
@@ -506,9 +479,9 @@ final class OwnerManagementService
 
                 $baseSalaryDisbursed = 0;
                 $baseSalaryStatus = 'none';
-                $baseSalaryNote = '';
+                $baseSalaryNote = $isBarber ? 'Staff Barber murni komisi per kepala (tanpa gaji pokok).' : '';
 
-                if ($nominalBaseSalary > 0) {
+                if (! $isBarber && $nominalBaseSalary > 0) {
                     if ($alreadyPaidBaseSalary) {
                         $baseSalaryDisbursed = 0;
                         $baseSalaryStatus = 'already_paid';
@@ -516,15 +489,11 @@ final class OwnerManagementService
                     } elseif (! $isPeriodEligibleForBaseSalary) {
                         $baseSalaryDisbursed = 0;
                         $baseSalaryStatus = 'held_period';
-                        $baseSalaryNote = 'Gaji pokok ditahan pada periode mingguan 1-3. Hanya dicairkan pada periode akhir bulan / 1 bulan penuh.';
-                    } elseif (! $hasReachedEndOfMonth) {
-                        $baseSalaryDisbursed = 0;
-                        $baseSalaryStatus = 'held_date';
-                        $baseSalaryNote = "Gaji pokok baru dibuka saat mendekati akhir bulan (minimal H-3 akhir bulan, mulai tanggal {$cutoffDay}).";
+                        $baseSalaryNote = 'Gaji pokok hanya berlaku pada periode bulanan.';
                     } else {
                         $baseSalaryDisbursed = $nominalBaseSalary;
                         $baseSalaryStatus = 'disbursed';
-                        $baseSalaryNote = 'Gaji pokok dicairkan penuh di akhir bulan.';
+                        $baseSalaryNote = 'Gaji pokok bulanan tetap.';
                     }
                 }
 
@@ -573,69 +542,19 @@ final class OwnerManagementService
                         ->first();
                 }
 
-                // 5. Logika Potongan Alpha (Ketidakhadiran tanpa izin yang disetujui Owner)
-                $alphaPenaltyNominal = (int) ($scheme?->alpha_penalty_nominal ?? 0);
+                // 5. Pencatatan Hari Alpha (Potongan denda ditiadakan sesuai kebijakan baru)
                 $alphaDays = 0;
+                $alphaPenaltyNominal = 0;
                 $alphaDeduction = 0;
 
-                // Hitung alpha hanya untuk hari yang sudah lewat atau hari ini
+                // Hitung hari alpha hanya untuk catatan statistik kehadiran
                 $calculationEndDt = $periodEndDt->lt(now()) ? $periodEndDt : now()->endOfDay();
-                if ($periodStartDt->lte($calculationEndDt) && $alphaPenaltyNominal > 0) {
-                    $staffSchedules = BarberSchedule::query()->withoutGlobalScope('tenant')
-                        ->where('membership_id', $staff->id)
-                        ->get()
-                        ->keyBy('day_of_week');
-
-                    $attendancesOnPeriod = Attendance::query()->withoutGlobalScope('tenant')
+                if ($periodStartDt->lte($calculationEndDt)) {
+                    $alphaDays = Attendance::query()->withoutGlobalScope('tenant')
                         ->where('membership_id', $staff->id)
                         ->whereBetween('date', [$periodStartDt->format('Y-m-d'), $calculationEndDt->format('Y-m-d')])
-                        ->get()
-                        ->keyBy(fn ($a) => $a->date->format('Y-m-d'));
-
-                    $approvedTimeOffs = BarberTimeOff::query()->withoutGlobalScope('tenant')
-                        ->where('membership_id', $staff->id)
-                        ->where('status', 'approved')
-                        ->where(function ($q) use ($periodStartDt, $calculationEndDt) {
-                            $q->whereBetween('date_from', [$periodStartDt->format('Y-m-d'), $calculationEndDt->format('Y-m-d')])
-                              ->orWhereBetween('date_to', [$periodStartDt->format('Y-m-d'), $calculationEndDt->format('Y-m-d')])
-                              ->orWhere(function ($nested) use ($periodStartDt, $calculationEndDt) {
-                                  $nested->where('date_from', '<=', $periodStartDt->format('Y-m-d'))
-                                         ->where('date_to', '>=', $calculationEndDt->format('Y-m-d'));
-                              });
-                        })
-                        ->get();
-
-                    for ($currDate = $periodStartDt->copy(); $currDate->lte($calculationEndDt); $currDate->addDay()) {
-                        $currDateStr = $currDate->format('Y-m-d');
-                        $dayOfWeek = $currDate->dayOfWeek;
-
-                        $schedule = $staffSchedules->get($dayOfWeek);
-                        $isScheduledOff = $schedule ? (bool) $schedule->is_off : false;
-                        if ($isScheduledOff) {
-                            continue;
-                        }
-
-                        $att = $attendancesOnPeriod->get($currDateStr);
-                        $hasAttended = $att && ($att->check_in_at !== null || in_array($att->status, ['present', 'late', 'leave', 'sick', 'holiday']));
-                        if ($hasAttended) {
-                            continue;
-                        }
-
-                        $hasApprovedTimeOff = $approvedTimeOffs->contains(function ($to) use ($currDateStr) {
-                            return $to->date_from->format('Y-m-d') <= $currDateStr && $to->date_to->format('Y-m-d') >= $currDateStr;
-                        });
-                        if ($hasApprovedTimeOff) {
-                            continue;
-                        }
-
-                        if ($currDate->isSameDay(now()) && now()->hour < 21) {
-                            continue;
-                        }
-
-                        $alphaDays++;
-                    }
-
-                    $alphaDeduction = $alphaDays * $alphaPenaltyNominal;
+                        ->where('status', 'absent')
+                        ->count();
                 }
 
                 // PENTING: Pertahankan status dan angka jika item staf ini sudah dibayar sebelumnya
@@ -644,7 +563,7 @@ final class OwnerManagementService
                 $paidAt = $isPaid ? ($existingItem->paid_at ?? now()) : ($existingItem?->paid_at);
                 $paymentMethod = $existingItem?->payment_method;
                 $paymentReference = $existingItem?->payment_reference;
-                $deductionTotal = $isPaid ? (int) ($existingItem->deduction_total ?? 0) : $alphaDeduction;
+                $deductionTotal = 0;
 
                 $baseSalary = $isPaid ? (int) $existingItem->base_salary : $baseSalaryDisbursed;
                 $commissions = $isPaid ? (int) $existingItem->commission_total : $netCommissions;
@@ -653,8 +572,8 @@ final class OwnerManagementService
                     $bonusTotal = (int) $existingItem->bonus_total;
                 }
 
-                $tips = $isPaid ? (int) ($existingItem->tip_total ?? 0) : $netTips;
-                $grossTotal = $baseSalary + $commissions + $bonusTotal + $tips;
+                $tips = 0;
+                $grossTotal = $baseSalary + $commissions + $bonusTotal;
                 $netTotal = max(0, $grossTotal - $deductionTotal);
 
                 PayrollItem::query()->withoutGlobalScope('tenant')->updateOrCreate(
@@ -740,24 +659,25 @@ final class OwnerManagementService
         return DB::transaction(function () use ($item, $paymentMethod, $notes): PayrollItem {
             $payroll = $item->payroll;
             if ($payroll) {
+                // 1. Validasi Persetujuan (Approve): Pembayaran hanya bisa dilakukan jika payroll sudah di-approve
+                if (! in_array($payroll->status, [PayrollStatus::Approved, PayrollStatus::Paid], true)) {
+                    throw new \DomainException("Pembayaran gaji belum dapat diproses karena Payroll belum disetujui (Approved). Silakan klik 'Setujui Payroll' terlebih dahulu.");
+                }
+
                 $endOfMonth = $payroll->period_end->copy()->endOfMonth();
-                $cutoffDay = $endOfMonth->day - 3;
+                $cutoffDay = $endOfMonth->day - 7;
                 
                 // Jika periode adalah bulan kemarin yang sudah lewat, pembayaran tetap terbuka
                 $isPastMonth = now()->year > $payroll->period_end->year
                     || (now()->year === $payroll->period_end->year && now()->month > $payroll->period_end->month);
 
-                // Untuk periode bulan berjalan, pembayaran gaji pokok hanya dibuka mulai H-3 akhir bulan
+                // Untuk periode bulan berjalan, seluruh pembayaran dibuka mendekati akhir bulan (H-7 akhir bulan)
                 $isNearEndOfMonth = now()->isSameMonth($payroll->period_end)
                     && now()->isSameYear($payroll->period_end)
                     && now()->day >= $cutoffDay;
 
-                $isFixedStaff = ((int) $item->base_salary > 0)
-                    || ((int) ($item->scheme_snapshot['original_base_salary'] ?? 0) > 0)
-                    || ($item->membership && (int) $item->membership->effective_base_salary > 0);
-
-                if ($isFixedStaff && ! $isPastMonth && ! $isNearEndOfMonth) {
-                    throw new \DomainException("Pembayaran gaji staf tetap terkunci hingga mendekati akhir bulan (minimal H-3 akhir bulan, mulai tanggal {$cutoffDay}).");
+                if (! $isPastMonth && ! $isNearEndOfMonth) {
+                    throw new \DomainException("Pembayaran gaji seluruh karyawan terkunci hingga mendekati akhir bulan (minimal H-7 akhir bulan, mulai tanggal {$cutoffDay}).");
                 }
             }
 
@@ -823,27 +743,26 @@ final class OwnerManagementService
 
     public function markPayrollPaid(Payroll $payroll): Payroll
     {
+        // 1. Validasi Persetujuan (Approve): Pelunasan hanya bisa dilakukan jika payroll sudah di-approve
+        if (! in_array($payroll->status, [PayrollStatus::Approved, PayrollStatus::Paid], true)) {
+            throw new \DomainException("Pelunasan payroll belum dapat diproses karena Payroll belum disetujui (Approved). Silakan klik 'Setujui Payroll' terlebih dahulu.");
+        }
+
         DB::transaction(function () use ($payroll): void {
             $endOfMonth = $payroll->period_end->copy()->endOfMonth();
-            $cutoffDay = $endOfMonth->day - 3;
+            $cutoffDay = $endOfMonth->day - 7;
             
             // Jika periode adalah bulan kemarin yang sudah lewat, pelunasan tetap terbuka
             $isPastMonth = now()->year > $payroll->period_end->year
                 || (now()->year === $payroll->period_end->year && now()->month > $payroll->period_end->month);
 
-            // Untuk periode bulan berjalan, pelunasan gaji pokok hanya dibuka mulai H-3 akhir bulan
+            // Untuk periode bulan berjalan, pelunasan seluruh payroll hanya dibuka mulai H-7 akhir bulan
             $isNearEndOfMonth = now()->isSameMonth($payroll->period_end)
                 && now()->isSameYear($payroll->period_end)
                 && now()->day >= $cutoffDay;
 
-            $hasUnpaidFixedStaff = $payroll->items()->where('payment_status', '!=', 'paid')->get()->contains(function ($item) {
-                return ((int) $item->base_salary > 0)
-                    || ((int) ($item->scheme_snapshot['original_base_salary'] ?? 0) > 0)
-                    || ($item->membership && (int) $item->membership->effective_base_salary > 0);
-            });
-
-            if ($hasUnpaidFixedStaff && ! $isPastMonth && ! $isNearEndOfMonth) {
-                throw new \DomainException("Pelunasan seluruh payroll terkunci karena terdapat staf tetap bergaji pokok yang baru dapat dicairkan mendekati akhir bulan (minimal H-3 akhir bulan, mulai tanggal {$cutoffDay}).");
+            if (! $isPastMonth && ! $isNearEndOfMonth) {
+                throw new \DomainException("Pelunasan seluruh payroll terkunci hingga mendekati akhir bulan (minimal H-7 akhir bulan, mulai tanggal {$cutoffDay}).");
             }
 
             $payroll->update([
@@ -1137,21 +1056,28 @@ final class OwnerManagementService
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             $dateStr = $date->format('Y-m-d');
 
-            Attendance::query()->withoutGlobalScope('tenant')->updateOrCreate(
-                [
-                    'tenant_id' => $timeOff->tenant_id,
-                    'membership_id' => $timeOff->membership_id,
-                    'date' => $dateStr,
-                ],
-                [
-                    'branch_id' => $branchId,
-                    'check_in_at' => "{$dateStr} 09:00:00",
-                    'check_out_at' => "{$dateStr} 21:00:00",
-                    'status' => $timeOff->type,
-                    'late_minutes' => 0,
-                    'photo_path' => $timeOff->attachment_path,
-                ]
-            );
+            $existing = Attendance::query()->withoutGlobalScope('tenant')
+                ->where('membership_id', $timeOff->membership_id)
+                ->whereDate('date', $dateStr)
+                ->first();
+
+            $attendanceData = [
+                'tenant_id' => $timeOff->tenant_id,
+                'branch_id' => $branchId,
+                'check_in_at' => null,
+                'check_out_at' => null,
+                'status' => $timeOff->type,
+                'late_minutes' => 0,
+                'photo_path' => $timeOff->attachment_path,
+            ];
+
+            if ($existing !== null) {
+                $existing->update($attendanceData);
+            } else {
+                $attendanceData['membership_id'] = $timeOff->membership_id;
+                $attendanceData['date'] = $dateStr;
+                Attendance::query()->withoutGlobalScope('tenant')->create($attendanceData);
+            }
         }
     }
 
@@ -1246,6 +1172,172 @@ final class OwnerManagementService
     }
 
     /**
+     * Otomatisasi Absensi Harian:
+     * 1. Jika staf sudah absen masuk tetapi lupa absen pulang, saat shift berakhir / lewat 23:59
+     *    otomatis dicatat checkout (pulang) sesuai jam berakhir shiftnya.
+     * 2. Jika lewat 23:59 staf memiliki jadwal kerja tetapi sama sekali tidak absen (dan tidak izin/cuti/libur),
+     *    otomatis dicatat sebagai Alpa (status = 'absent').
+     * 3. Staf yang terlambat (status = 'late') tetap berstatus terlambat (tidak diubah menjadi alpa).
+     *
+     * @return array{auto_checked_out: int, marked_absent: int}
+     */
+    public function autoCloseDailyAttendances(?int $tenantId = null, ?string $dateFrom = null, ?string $dateTo = null): array
+    {
+        $startDate = $dateFrom ? \Illuminate\Support\Carbon::parse($dateFrom)->startOfDay() : now()->subDays(14)->startOfDay();
+        $endDate = $dateTo ? \Illuminate\Support\Carbon::parse($dateTo)->endOfDay() : now()->endOfDay();
+        $now = now();
+
+        $autoCheckedOutCount = 0;
+        $markedAbsentCount = 0;
+
+        // 1. AUTO CHECK-OUT: Untuk staf yang sudah check-in tapi belum check-out
+        $unclosedAttendances = Attendance::query()
+            ->withoutGlobalScope('tenant')
+            ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+            ->whereNotNull('check_in_at')
+            ->whereNull('check_out_at')
+            ->whereNotIn('status', ['sick', 'leave', 'holiday', 'absent'])
+            ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+            ->with(['branch', 'membership'])
+            ->get();
+
+        foreach ($unclosedAttendances as $attendance) {
+            $attDate = \Illuminate\Support\Carbon::parse($attendance->date);
+            $dayOfWeek = $attDate->dayOfWeek;
+
+            $schedule = BarberSchedule::query()
+                ->withoutGlobalScope('tenant')
+                ->where('membership_id', $attendance->membership_id)
+                ->where('day_of_week', $dayOfWeek)
+                ->first();
+
+            $shiftEndStr = '21:00';
+            if ($schedule && $schedule->end_time) {
+                $shiftEndStr = substr((string) $schedule->end_time, 0, 5);
+            } elseif ($attendance->branch && !empty($attendance->branch->opening_hours[$dayOfWeek]['close'])) {
+                $shiftEndStr = $attendance->branch->opening_hours[$dayOfWeek]['close'];
+            }
+
+            $shiftEndDateTime = \Illuminate\Support\Carbon::parse("{$attDate->format('Y-m-d')} {$shiftEndStr}:00");
+
+            // Jika tanggal sudah lewat (kemarin/sebelumnya) ATAU hari ini sudah melewati jam shift berakhir
+            if ($attDate->lt(now()->startOfDay()) || $now->greaterThanOrEqualTo($shiftEndDateTime)) {
+                $attendance->update([
+                    'check_out_at' => $shiftEndDateTime,
+                ]);
+                $autoCheckedOutCount++;
+            }
+        }
+
+        // 2. MARK ABSENT (ALPA): Untuk hari yang sudah lewat 23:59 (tanggal < hari ini)
+        $pastEnd = $endDate->lt(now()->startOfDay()) ? $endDate : now()->subDay()->endOfDay();
+
+        if ($startDate->lte($pastEnd)) {
+            $staffMemberships = Membership::query()
+                ->withoutGlobalScope('tenant')
+                ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+                ->whereIn('role', [\App\Enums\Role::Barber, \App\Enums\Role::Admin])
+                ->where('is_active', true)
+                ->with(['branch'])
+                ->get();
+
+            $allSchedules = BarberSchedule::query()
+                ->withoutGlobalScope('tenant')
+                ->whereIn('membership_id', $staffMemberships->pluck('id'))
+                ->get()
+                ->groupBy('membership_id');
+
+            for ($cursor = $startDate->copy(); $cursor->lte($pastEnd); $cursor->addDay()) {
+                $dateStr = $cursor->format('Y-m-d');
+                $dayOfWeek = $cursor->dayOfWeek;
+
+                foreach ($staffMemberships as $membership) {
+                    // Abaikan jika staf belum bergabung pada tanggal tersebut
+                    if ($membership->joined_at && \Illuminate\Support\Carbon::parse($membership->joined_at)->gt($cursor)) {
+                        continue;
+                    }
+
+                    // Cek jadwal kerja staf pada hari tersebut
+                    $staffScheds = $allSchedules->get($membership->id, collect());
+                    $sched = $staffScheds->firstWhere('day_of_week', $dayOfWeek);
+                    $isOff = false;
+
+                    if ($sched !== null) {
+                        $isOff = (bool) $sched->is_off;
+                    } else {
+                        $branch = $membership->branch;
+                        $opening = $branch?->opening_hours[$dayOfWeek] ?? null;
+                        if ($opening !== null) {
+                            $isOff = empty($opening['is_open']);
+                        } else {
+                            $isOff = true;
+                        }
+                    }
+
+                    if ($isOff) {
+                        continue; // Hari libur/off, tidak dianggap alpa
+                    }
+
+                    // Cek permohonan izin/cuti/sakit yang disetujui
+                    $hasApprovedTimeOff = BarberTimeOff::query()
+                        ->withoutGlobalScope('tenant')
+                        ->where('membership_id', $membership->id)
+                        ->where('status', 'approved')
+                        ->whereDate('date_from', '<=', $dateStr)
+                        ->whereDate('date_to', '>=', $dateStr)
+                        ->exists();
+
+                    if ($hasApprovedTimeOff) {
+                        continue; // Memiliki izin resmi yang disetujui, tidak dianggap alpa
+                    }
+
+                    // Cek keberadaan record absensi
+                    $att = Attendance::query()
+                        ->withoutGlobalScope('tenant')
+                        ->where('membership_id', $membership->id)
+                        ->whereDate('date', $dateStr)
+                        ->first();
+
+                    if ($att !== null) {
+                        // Jika sudah ada check-in (hadir tepat waktu atau terlambat) atau izin, jangan ubah ke alpa
+                        if ($att->check_in_at !== null || in_array($att->status, ['present', 'late', 'sick', 'leave', 'holiday', 'absent'], true)) {
+                            continue;
+                        }
+
+                        $att->update([
+                            'status' => 'absent',
+                            'late_minutes' => 0,
+                        ]);
+                        $markedAbsentCount++;
+                    } else {
+                        $branchId = $membership->branch_id ?? Branch::query()->withoutGlobalScope('tenant')->where('tenant_id', $membership->tenant_id)->value('id');
+                        if ($branchId) {
+                            Attendance::query()
+                                ->withoutGlobalScope('tenant')
+                                ->create([
+                                    'tenant_id' => $membership->tenant_id,
+                                    'branch_id' => $branchId,
+                                    'membership_id' => $membership->id,
+                                    'date' => $dateStr,
+                                    'check_in_at' => null,
+                                    'check_out_at' => null,
+                                    'status' => 'absent',
+                                    'late_minutes' => 0,
+                                ]);
+                            $markedAbsentCount++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return [
+            'auto_checked_out' => $autoCheckedOutCount,
+            'marked_absent' => $markedAbsentCount,
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $data
      */
     public function updateBranchScheduleSettings(Branch $branch, array $data): Branch
@@ -1300,6 +1392,18 @@ final class OwnerManagementService
         $settings = $tenant->settings ?? [];
         if (isset($data['qris_account'])) {
             $settings['qris_account'] = $data['qris_account'];
+        }
+        if (array_key_exists('bank_name', $data)) {
+            $settings['bank_name'] = $data['bank_name'];
+        }
+        if (array_key_exists('bank_account_number', $data)) {
+            $settings['bank_account_number'] = $data['bank_account_number'];
+        }
+        if (array_key_exists('bank_account_holder', $data)) {
+            $settings['bank_account_holder'] = $data['bank_account_holder'];
+        }
+        if (array_key_exists('qris_image_path', $data)) {
+            $settings['qris_image_path'] = $data['qris_image_path'];
         }
         if (isset($data['booking_advance_days'])) {
             $settings['booking_advance_days'] = (int) $data['booking_advance_days'];
@@ -1764,7 +1868,12 @@ final class OwnerManagementService
      *
      * @return array<string, mixed>
      */
-    public function getFinancialAnalytics(?int $branchId = null, ?int $barberId = null): array
+    public function getFinancialAnalytics(
+        ?int $branchId = null,
+        ?int $barberId = null,
+        ?\DateTimeInterface $startDate = null,
+        ?\DateTimeInterface $endDate = null
+    ): array
     {
         // 1. Tren Omzet 7 Hari Terakhir (Optimized 1x Group By Query)
         $isSqlite = DB::connection()->getDriverName() === 'sqlite';
@@ -1828,59 +1937,40 @@ final class OwnerManagementService
 
         $avgDailyRevenue = (int) round($total7DaysRevenue / 7);
 
-        // 2. Komposisi Metode Pembayaran (QRIS vs Tunai - Query Agregat Database Langsung)
-        $paymentAggregates = Payment::query()
-            ->whereHas('order', function ($q) use ($branchId, $barberId): void {
-                $q->when($branchId !== null && $branchId > 0, fn ($sub) => $sub->where('branch_id', $branchId))
-                    ->when($barberId !== null && $barberId > 0, fn ($sub) => $sub->where('barber_membership_id', $barberId))
-                    ->where('payment_status', 'paid');
-            })
-            ->where('type', 'payment')
-            ->where('status', 'success')
-            ->selectRaw('method, SUM(amount) as total_amount, COUNT(*) as total_count')
-            ->groupBy('method')
-            ->get();
+        // 2. Komposisi Metode Pembayaran (QRIS vs Tunai)
+        // Konsisten 100% dengan metode pembayaran transaksi yang tampil di daftar tabel order
+        $paidOrdersQuery = Order::query()
+            ->when($branchId !== null && $branchId > 0, fn ($q) => $q->where('branch_id', $branchId))
+            ->when($barberId !== null && $barberId > 0, fn ($q) => $q->where('barber_membership_id', $barberId))
+            ->when($startDate !== null, fn ($q) => $q->where('created_at', '>=', $startDate))
+            ->when($endDate !== null, fn ($q) => $q->where('created_at', '<=', $endDate))
+            ->where('payment_status', 'paid')
+            ->with(['payments' => fn ($p) => $p->where('type', '!=', 'refund')->latest('id')]);
 
         $qrisTotal = 0;
         $qrisCount = 0;
         $cashTotal = 0;
         $cashCount = 0;
 
-        foreach ($paymentAggregates as $pa) {
-            $methodVal = $pa->method instanceof PaymentMethod ? $pa->method->value : (string) $pa->method;
-            if ($methodVal === 'cash') {
-                $cashTotal += (int) $pa->total_amount;
-                $cashCount += (int) $pa->total_count;
+        foreach ($paidOrdersQuery->cursor() as $order) {
+            $payment = $order->payments->first();
+            $paymentMethod = $payment?->method;
+            $methodVal = $paymentMethod instanceof PaymentMethod ? $paymentMethod->value : (string) ($paymentMethod ?? '');
+
+            $isCash = str_contains(strtolower($methodVal), 'cash') || strtolower($methodVal) === 'tunai';
+            $amount = (int) ($order->grand_total > 0 ? $order->grand_total : ($order->paid_total ?? 0));
+
+            if ($isCash) {
+                $cashTotal += $amount;
+                $cashCount++;
             } else {
-                $qrisTotal += (int) $pa->total_amount;
-                $qrisCount += (int) $pa->total_count;
+                $qrisTotal += $amount;
+                $qrisCount++;
             }
         }
 
         $totalMethodRevenue = $qrisTotal + $cashTotal;
         $totalMethodCount = $qrisCount + $cashCount;
-
-        // Fallback jika data payment individual belum tercatat
-        if ($totalMethodRevenue === 0) {
-            $fallbackStats = Order::query()
-                ->when($branchId !== null && $branchId > 0, fn ($q) => $q->where('branch_id', $branchId))
-                ->when($barberId !== null && $barberId > 0, fn ($q) => $q->where('barber_membership_id', $barberId))
-                ->where('payment_status', 'paid')
-                ->selectRaw('COALESCE(SUM(grand_total), 0) as total_sum, COUNT(*) as total_cnt')
-                ->first();
-
-            $totalPaidSum = (int) ($fallbackStats?->total_sum ?? 0);
-            $totalPaidCnt = (int) ($fallbackStats?->total_cnt ?? 0);
-
-            if ($totalPaidCnt > 0) {
-                $qrisTotal = (int) round($totalPaidSum * 0.70);
-                $qrisCount = (int) ceil($totalPaidCnt * 0.70);
-                $cashTotal = max(0, $totalPaidSum - $qrisTotal);
-                $cashCount = max(0, $totalPaidCnt - $qrisCount);
-                $totalMethodRevenue = $totalPaidSum;
-                $totalMethodCount = $totalPaidCnt;
-            }
-        }
 
         $qrisPct = $totalMethodRevenue > 0 ? (int) round(($qrisTotal / $totalMethodRevenue) * 100) : 0;
         $cashPct = $totalMethodRevenue > 0 ? (100 - $qrisPct) : 0;

@@ -9,7 +9,11 @@ use App\Http\Controllers\AttendanceScanController;
 use App\Http\Controllers\CustomerPortalController;
 use App\Http\Controllers\OperationalActionController;
 use App\Http\Controllers\OwnerManagementController;
+use App\Http\Controllers\OwnerPayoutController;
+use App\Http\Controllers\PlatformAnnouncementController;
+use App\Http\Controllers\PlatformPayoutController;
 use App\Http\Controllers\PlatformPlanController;
+use App\Http\Controllers\PlatformPromotionController;
 use App\Http\Controllers\PlatformReportController;
 use App\Http\Controllers\PlatformSettingController;
 use App\Http\Controllers\PlatformSubscriptionController;
@@ -66,6 +70,17 @@ Route::middleware('auth')->group(function (): void {
         Route::patch('/subscriptions/{id}/cancel', [PlatformSubscriptionController::class, 'cancelInvoice'])->name('subscriptions.cancel');
         Route::get('/subscriptions/{id}', [PlatformSubscriptionController::class, 'show'])->name('subscriptions.show');
 
+        // Pencairan Dana Escrow Booking ke Owner (Settlement)
+        Route::get('/payouts', [PlatformPayoutController::class, 'index'])->name('payouts');
+        Route::post('/payouts', [PlatformPayoutController::class, 'store'])->name('payouts.store');
+
+        // Persetujuan & Log Penarikan Saldo Customer
+        Route::get('/withdrawals', [PlatformPayoutController::class, 'withdrawals'])->name('withdrawals');
+        Route::post('/withdrawals/{withdrawal}/approve', [PlatformPayoutController::class, 'approveCustomerWithdrawal'])->name('withdrawals.approve');
+        Route::post('/withdrawals/{withdrawal}/reject', [PlatformPayoutController::class, 'rejectCustomerWithdrawal'])->name('withdrawals.reject');
+        Route::post('/payouts/withdrawals/{withdrawal}/approve', [PlatformPayoutController::class, 'approveCustomerWithdrawal'])->name('payouts.withdrawals.approve');
+        Route::post('/payouts/withdrawals/{withdrawal}/reject', [PlatformPayoutController::class, 'rejectCustomerWithdrawal'])->name('payouts.withdrawals.reject');
+
         // Monitoring Transaksi Global Platform
         Route::get('/transactions', [PlatformTransactionController::class, 'index'])->name('transactions');
         Route::get('/transactions/export', [PlatformTransactionController::class, 'exportCsv'])->name('transactions.export');
@@ -74,10 +89,23 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/reports', [PlatformReportController::class, 'index'])->name('reports');
         Route::get('/reports/export', [PlatformReportController::class, 'exportCsv'])->name('reports.export');
 
+        // Siaran & Riwayat Pengumuman Global
+        Route::get('/announcements', [PlatformAnnouncementController::class, 'index'])->name('announcements');
+        Route::post('/announcements', [PlatformAnnouncementController::class, 'store'])->name('announcements.store');
+        Route::patch('/announcements/{announcement}/toggle', [PlatformAnnouncementController::class, 'toggle'])->name('announcements.toggle');
+        Route::delete('/announcements/{announcement}', [PlatformAnnouncementController::class, 'destroy'])->name('announcements.destroy');
+
+        // Katalog Iklan & Promosi Produk Official Platform
+        Route::get('/promotions', [PlatformPromotionController::class, 'index'])->name('promotions');
+        Route::post('/promotions', [PlatformPromotionController::class, 'update'])->name('promotions.update');
+
         // Konfigurasi Global Platform SaaS
         Route::get('/settings', [PlatformSettingController::class, 'index'])->name('settings');
         Route::post('/settings', [PlatformSettingController::class, 'update'])->name('settings.update');
     });
+
+    // Tutup / Dismiss Popup Pengumuman Platform (Owner, Kasir, Barber, Customer)
+    Route::post('/platform-announcements/{announcement}/dismiss', [PlatformAnnouncementController::class, 'dismiss'])->name('platform-announcements.dismiss');
 
     // Owner Management
     Route::middleware(['role:owner', 'subscription.active'])->prefix('owner')->name('owner.')->group(function (): void {
@@ -126,6 +154,10 @@ Route::middleware('auth')->group(function (): void {
         Route::delete('/payroll/schemes/{scheme}', [OwnerManagementController::class, 'destroySalaryScheme'])->name('payroll.destroy-scheme');
         Route::post('/payroll/commission-rules', [OwnerManagementController::class, 'storeServiceCommissionRule'])->name('payroll.store-commission-rule');
 
+        // 0. Scanner Absen Karyawan (Owner Scan QR Staff)
+        Route::get('/attendances/scanner', [OwnerManagementController::class, 'attendanceScanner'])->name('attendances.scanner');
+        Route::post('/attendances/scanner/process', [OwnerManagementController::class, 'processAttendanceScan'])->name('attendances.scanner.process');
+
         // 1. Jadwal Shift Kerja Barber
         Route::get('/schedules', [OwnerManagementController::class, 'schedules'])->name('schedules');
         Route::get('/schedules/{membership}/edit', [OwnerManagementController::class, 'editSchedule'])->name('schedules.edit');
@@ -167,6 +199,10 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/subscription/invoices/{id}', [OwnerManagementController::class, 'showSubscriptionInvoice'])->name('subscription.invoice');
         Route::post('/subscription/invoices/{id}/pay', [OwnerManagementController::class, 'submitPaymentProof'])->name('subscription.submit-payment');
         Route::post('/subscription/invoices/{id}/cancel', [OwnerManagementController::class, 'cancelSubscriptionInvoice'])->name('subscription.cancel-invoice');
+
+        // Saldo Booking Escrow & Rekening Pencairan
+        Route::get('/payouts', [OwnerPayoutController::class, 'index'])->name('payouts');
+        Route::put('/payouts/bank-account', [OwnerPayoutController::class, 'updateBankAccount'])->name('payouts.update-bank-account');
     });
 
     // Admin / Cashier & Operational Actions
@@ -191,6 +227,26 @@ Route::middleware('auth')->group(function (): void {
             ->middleware('role:owner,admin')
             ->name('attendance');
 
+        Route::get('/earnings', [RoleDashboardController::class, 'cashierEarnings'])
+            ->middleware('role:owner,admin')
+            ->name('earnings');
+
+        Route::get('/profile', [RoleDashboardController::class, 'cashierProfile'])
+            ->middleware('role:owner,admin')
+            ->name('profile');
+
+        Route::get('/profile/edit', [RoleDashboardController::class, 'editCashierProfile'])
+            ->middleware('role:owner,admin')
+            ->name('profile.edit');
+
+        Route::put('/profile', [RoleDashboardController::class, 'updateCashierProfile'])
+            ->middleware('role:owner,admin')
+            ->name('profile.update');
+
+        Route::put('/profile/password', [RoleDashboardController::class, 'updateCashierPassword'])
+            ->middleware('role:owner,admin')
+            ->name('profile.password');
+
         Route::post('/time-off', [RoleDashboardController::class, 'requestTimeOff'])
             ->middleware('role:owner,admin')
             ->name('time-off.store');
@@ -202,6 +258,14 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/bookings/{booking}/check-in', [OperationalActionController::class, 'checkInBooking'])
             ->middleware('role:owner,admin')
             ->name('bookings.check-in');
+
+        Route::post('/bookings/{booking}/approve-payment', [OperationalActionController::class, 'approveBookingPayment'])
+            ->middleware('role:owner,admin')
+            ->name('bookings.approve-payment');
+
+        Route::post('/bookings/{booking}/reject-payment', [OperationalActionController::class, 'rejectBookingPayment'])
+            ->middleware('role:owner,admin')
+            ->name('bookings.reject-payment');
 
         Route::post('/bookings/{booking}/cancel', [OperationalActionController::class, 'cancelBooking'])
             ->middleware('role:owner,admin')
@@ -236,6 +300,14 @@ Route::middleware('auth')->group(function (): void {
             ->middleware('role:owner,admin')
             ->name('tickets.confirm-payment');
 
+        Route::post('/tickets/{ticket}/refund', [OperationalActionController::class, 'processTicketRefund'])
+            ->middleware('role:owner,admin')
+            ->name('tickets.refund');
+
+        Route::post('/bookings/{booking}/refund', [OperationalActionController::class, 'processBookingRefund'])
+            ->middleware('role:owner,admin')
+            ->name('bookings.refund');
+
         Route::patch('/chairs/{membership}/work-status', [OperationalActionController::class, 'updateChairWorkStatus'])
             ->middleware('role:owner,admin')
             ->name('chairs.work-status');
@@ -257,17 +329,21 @@ Route::middleware('auth')->group(function (): void {
     // Customer Portal (Personal Dashboard, Booking, History, Profile)
     Route::middleware('role:customer')->prefix('customer')->name('customer.')->group(function (): void {
         Route::get('/', [CustomerPortalController::class, 'dashboard'])->name('dashboard');
+        Route::get('/qr-scan', [CustomerPortalController::class, 'handleQrScan'])->name('qr-scan');
         Route::get('/booking', [CustomerPortalController::class, 'booking'])->name('booking');
+        Route::get('/available-slots', [CustomerPortalController::class, 'getAvailableSlots'])->name('booking.slots');
         Route::post('/booking', [CustomerPortalController::class, 'storeBooking'])->name('booking.store');
         Route::get('/history', [CustomerPortalController::class, 'history'])->name('history');
         Route::get('/profile', [CustomerPortalController::class, 'profile'])->name('profile');
         Route::put('/profile', [CustomerPortalController::class, 'updateProfile'])->name('profile.update');
+        Route::post('/wallet/withdraw', [CustomerPortalController::class, 'requestWithdrawal'])->name('wallet.withdraw');
     });
 });
 
 // Tenant-Scoped Public & Customer Portal (Guest OK & Customer, blocks Staff from customer portal)
 Route::middleware('role:customer')->prefix('b/{tenant}')->group(function (): void {
     Route::get('/', [RoleDashboardController::class, 'customerPortal'])->name('customer.portal');
+    Route::get('/available-slots', [CustomerPortalController::class, 'getAvailableSlots'])->name('customer.tenant-booking.slots');
 
     // Tenant-Branded Auth (Guest only)
     Route::middleware('guest')->group(function (): void {
@@ -292,20 +368,28 @@ Route::middleware('role:customer')->prefix('b/{tenant}')->group(function (): voi
 
 // TV Display Antrean (Publik)
 Route::get('/b/{tenant}/tv/{branchCode}', [RoleDashboardController::class, 'tvDisplay'])->name('display.queue');
+Route::get('/tv/{branchCode}', [RoleDashboardController::class, 'tvDisplaySubdomain'])->name('display.queue.subdomain');
 
 // Customer Ticket Tracking, Booking Detail, Selesai & Penilaian/Pembayaran (Guest & Customer)
 Route::middleware('role:customer')->prefix('customer')->name('customer.')->group(function (): void {
     Route::get('/tickets/{ticket}', [CustomerPortalController::class, 'showTicket'])->name('tickets.show');
+    Route::post('/tickets/{ticket}/cancel', [CustomerPortalController::class, 'cancelTicket'])->name('tickets.cancel');
     Route::get('/bookings/{booking}', [CustomerPortalController::class, 'showBooking'])->name('bookings.show');
+    Route::get('/bookings/{booking}/pay-qris', [CustomerPortalController::class, 'payQris'])->name('bookings.pay-qris');
+    Route::post('/bookings/{booking}/pay-wallet', [CustomerPortalController::class, 'payBookingWithWallet'])->name('bookings.pay-wallet');
+    Route::post('/bookings/{booking}/mock-pay', [CustomerPortalController::class, 'mockPayQris'])->name('bookings.mock-pay');
+    Route::post('/bookings/{booking}/proof', [CustomerPortalController::class, 'uploadPaymentProof'])->name('bookings.proof');
+    Route::post('/bookings/{booking}/cancel', [CustomerPortalController::class, 'cancelBooking'])->name('bookings.cancel');
     Route::get('/tickets/{ticket}/checkout', [CustomerPortalController::class, 'showCheckout'])->name('tickets.checkout');
     Route::post('/tickets/{ticket}/checkout', [CustomerPortalController::class, 'processCheckout'])->name('tickets.process-checkout');
     Route::get('/tickets/{ticket}/waiting-payment', [CustomerPortalController::class, 'waitingPayment'])->name('tickets.waiting-payment');
+    Route::post('/tickets/{ticket}/review', [CustomerPortalController::class, 'submitReview'])->name('tickets.review');
 });
 
-// Absensi Scan QR Code Cabang (Semua Staf & Kasir & Barber)
+// Absensi Scan QR Code Cabang (Semua Staf & Kasir & Barber via Pemindai Kamera In-App)
 Route::middleware(['auth', 'subscription.active'])->prefix('attend')->name('attend.')->group(function (): void {
-    Route::get('/{token}', [AttendanceScanController::class, 'show'])->name('scan');
-    Route::post('/{token}', [AttendanceScanController::class, 'record'])->name('record');
+    Route::get('/{token}', fn () => abort(404))->where('token', '.*');
+    Route::post('/{token}', [AttendanceScanController::class, 'record'])->where('token', '.*')->name('record');
 });
 
 Route::get('/invoices/{orderNumber}', [RoleDashboardController::class, 'showInvoice'])->name('invoices.show');

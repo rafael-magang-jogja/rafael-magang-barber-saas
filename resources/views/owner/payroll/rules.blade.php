@@ -26,6 +26,7 @@
                 'base_salary' => (int) $s->base_salary,
                 'alpha_penalty_nominal' => (int) ($s->alpha_penalty_nominal ?? 0),
                 'commission_percentage' => (int) $s->effective_commission_percentage,
+                'has_percentage_commission' => (bool) $s->has_percentage_commission,
                 'bonus_tiers' => $s->bonus_tiers,
                 'memberships_count' => (int) $s->memberships_count,
             ];
@@ -37,7 +38,7 @@
             'value' => (string) $sc->id,
             'label' => $sc->name,
             'sublabel' => $sc->type === 'commission_only'
-                ? 'Bagi Hasil: ' . $sc->effective_commission_percentage . '%'
+                ? ($sc->has_percentage_commission ? 'Bagi Hasil: ' . $sc->effective_commission_percentage . '%' : 'Komisi Layanan (per Kepala)')
                 : ($sc->type === 'fixed'
                     ? 'Gaji Tetap: Rp' . number_format($sc->base_salary, 0, ',', '.')
                     : 'Gaji Pokok: Rp' . number_format($sc->base_salary, 0, ',', '.') . ' + Komisi'),
@@ -148,15 +149,16 @@
                         $isCommissionOnly = $scheme->type === 'commission_only';
                         $isFixed = $scheme->type === 'fixed';
                         $isBasePlusComm = $scheme->type === 'base_plus_commission';
+                        $hasPercentage = $scheme->has_percentage_commission;
 
                         $typeLabel = match($scheme->type) {
                             'fixed' => 'Gaji Pokok',
-                            'commission_only' => 'Bagi Hasil',
+                            'commission_only' => $hasPercentage ? 'Bagi Hasil' : 'Komisi Layanan',
                             default => 'Pokok + Komisi',
                         };
                         $typeBadgeColor = match($scheme->type) {
                             'fixed' => 'bg-sky-50 text-sky-700 border-sky-200/80',
-                            'commission_only' => 'bg-purple-50 text-purple-700 border-purple-200/80',
+                            'commission_only' => $hasPercentage ? 'bg-purple-50 text-purple-700 border-purple-200/80' : 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
                             default => 'bg-amber-50 text-amber-700 border-amber-200/80',
                         };
 
@@ -176,19 +178,52 @@
 
                             <!-- Nilai Utama Sesuai Tipe Skema -->
                             @if($isCommissionOnly)
-                                <div>
-                                    <p class="text-[11px] font-medium text-zinc-400">Bagi Hasil Komisi</p>
-                                    <div class="flex items-baseline gap-1 mt-0.5">
-                                        <p class="text-2xl font-black text-zinc-950 num">
-                                            {{ $scheme->effective_commission_percentage }}%
+                                @if($hasPercentage)
+                                    <div>
+                                        <p class="text-[11px] font-medium text-zinc-400">Bagi Hasil Komisi</p>
+                                        <div class="flex items-baseline gap-1 mt-0.5">
+                                            <p class="text-2xl font-black text-zinc-950 num">
+                                                {{ $scheme->effective_commission_percentage }}%
+                                            </p>
+                                            <span class="text-xs font-semibold text-zinc-400">omzet pangkas</span>
+                                        </div>
+                                        <p class="text-[11px] text-zinc-500 mt-2 flex items-center gap-1.5">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0"></span>
+                                            <span>Murni bagi hasil omzet (Gaji pokok Rp0)</span>
                                         </p>
-                                        <span class="text-xs font-semibold text-zinc-400">omzet pangkas</span>
                                     </div>
-                                    <p class="text-[11px] text-zinc-500 mt-2 flex items-center gap-1.5">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0"></span>
-                                        <span>Murni komisi layanan (Gaji pokok Rp0)</span>
-                                    </p>
-                                </div>
+                                @else
+                                    <div>
+                                        <p class="text-[11px] font-medium text-zinc-400">Komisi per Layanan</p>
+                                        <div class="flex items-baseline gap-1.5 mt-0.5">
+                                            <p class="text-xl sm:text-2xl font-black text-emerald-700">
+                                                Tarif Layanan
+                                            </p>
+                                            <span class="text-xs font-semibold text-zinc-400">per kepala pangkas</span>
+                                        </div>
+                                        <p class="text-[11px] text-zinc-500 mt-2 flex items-center gap-1.5">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                            <span>Murni komisi layanan (Gaji pokok Rp0)</span>
+                                        </p>
+                                    </div>
+                                @endif
+
+                                <!-- Bonus Target Layanan (jika ada pada commission only) -->
+                                @if(!empty($bonusTiers))
+                                    @php
+                                        $maxBonus = collect($bonusTiers)->max('bonus') ?? 0;
+                                        $tierTooltip = collect($bonusTiers)->map(fn($t) => '≥' . ($t['min_services'] ?? 0) . 'x: +Rp' . number_format($t['bonus'] ?? 0, 0, ',', '.'))->join(', ');
+                                    @endphp
+                                    <div class="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-amber-50/70 border border-amber-200/60 mt-2" title="{{ $tierTooltip }}">
+                                        <span class="text-[11px] font-bold text-amber-800 flex items-center gap-1.5">
+                                            <x-ui.icon name="trending-up" class="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                            <span>Bonus Target ({{ count($bonusTiers) }} Tier)</span>
+                                        </span>
+                                        <span class="text-xs font-extrabold text-emerald-700 num">
+                                            s/d +Rp{{ number_format($maxBonus, 0, ',', '.') }}
+                                        </span>
+                                    </div>
+                                @endif
                             @elseif($isFixed)
                                 <div>
                                     <p class="text-[11px] font-medium text-zinc-400">Gaji Pokok Flat</p>
@@ -233,17 +268,6 @@
                                 @endif
                             @endif
 
-                            @if(($scheme->alpha_penalty_nominal ?? 0) > 0)
-                                <div class="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-rose-50/70 border border-rose-200/60 mt-2" title="Denda potongan jika tanpa keterangan absen">
-                                    <span class="text-[11px] font-bold text-rose-800 flex items-center gap-1.5">
-                                        <x-ui.icon name="alert-triangle" class="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                                        <span>Denda Alpha</span>
-                                    </span>
-                                    <span class="text-xs font-black text-rose-700 num">
-                                        -Rp{{ number_format($scheme->alpha_penalty_nominal, 0, ',', '.') }} <span class="text-[10px] font-normal text-rose-600">/ hari</span>
-                                    </span>
-                                </div>
-                            @endif
                         </div>
 
                         <!-- Card Footer: Anggota Aktif & Tombol Aksi -->
@@ -274,15 +298,17 @@
 
                                 <button
                                     type="button"
-                                    onclick="openEditSchemeModal({{ json_encode([
+                                    data-scheme="{{ json_encode([
                                         'id' => $scheme->id,
                                         'name' => $scheme->name,
                                         'type' => $scheme->type,
                                         'base_salary' => $scheme->base_salary,
                                         'alpha_penalty_nominal' => (int) ($scheme->alpha_penalty_nominal ?? 0),
                                         'commission_percentage' => $scheme->effective_commission_percentage,
+                                        'has_percentage_commission' => $scheme->has_percentage_commission,
                                         'bonus_tiers' => $bonusTiers,
-                                    ]) }})"
+                                    ]) }}"
+                                    onclick="openEditSchemeModal(JSON.parse(this.dataset.scheme))"
                                     class="px-2.5 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
                                 >
                                     <x-ui.icon name="edit" class="w-3 h-3 text-amber-600" />
@@ -450,47 +476,13 @@
                             <x-ui.icon name="scissors" class="w-5 h-5 text-amber-600" />
                             <span>Komisi Default untuk Setiap Layanan</span>
                         </h2>
-                        @if(! $hasCommissionAuto)
-                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
-                                Fitur Pro &amp; Business
-                            </span>
-                        @endif
                     </div>
                     <p class="text-xs text-zinc-500 mt-0.5">
-                        Tarif komisi flat atau persentase barber per layanan (khusus skema Gaji Pokok + Komisi).
+                        Tarif komisi flat atau persentase komisi barber per layanan (per kepala pangkas). Terbuka untuk semua paket.
                     </p>
                 </div>
                 <span class="text-xs text-zinc-400 font-medium sm:text-right shrink-0">{{ $services->count() }} Layanan Terdaftar</span>
             </div>
-
-            @if(! $hasCommissionAuto)
-                <!-- Banner Kunci Fitur Komisi Otomatis untuk Paket Starter -->
-                <div class="p-3.5 sm:p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 shadow-2xs">
-                    <div class="flex items-start gap-3 min-w-0">
-                        <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
-                            <x-ui.icon name="lock" class="w-4 h-4 text-amber-700" />
-                        </div>
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-xs sm:text-sm font-extrabold text-amber-950">Komisi Tambahan Layanan Terkunci</span>
-                                <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-200/80 text-amber-900 border border-amber-300 shrink-0">
-                                    Fitur Pro
-                                </span>
-                            </div>
-                            <p class="text-[11px] sm:text-xs text-zinc-600 mt-1 leading-relaxed">
-                                Skema <strong>Murni Bagi Hasil (Mitra/Freelance)</strong> tetap aktif otomatis di paket Starter. Fitur komisi tambahan per layanan (untuk staf bergaji pokok) memerlukan upgrade ke paket Pro.
-                            </p>
-                        </div>
-                    </div>
-                    <a
-                        href="{{ route('owner.subscription') }}"
-                        class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shrink-0 transition shadow-2xs self-start lg:self-center"
-                    >
-                        <x-ui.icon name="zap" class="w-3.5 h-3.5 text-zinc-950" />
-                        <span>Upgrade ke Pro</span>
-                    </a>
-                </div>
-            @endif
 
             <x-ui.card class="overflow-hidden">
                 <x-slot:header>
@@ -555,61 +547,35 @@
                                         </span>
                                     </td>
                                     <td class="py-3 sm:py-3.5 px-3 sm:px-4 text-center whitespace-nowrap">
-                                        @if(! $hasCommissionAuto)
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-bold text-xs bg-zinc-100 text-zinc-500 border border-zinc-200">
-                                                <span class="w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0"></span>
-                                                <span class="num">Rp0 (Nonaktif di Starter)</span>
-                                            </span>
-                                        @else
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-xs {{ $commType === 'percentage' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200' }}">
-                                                <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ $commType === 'percentage' ? 'bg-purple-500' : 'bg-emerald-500' }}"></span>
-                                                <span class="num">{{ $displayComm }}</span>
-                                            </span>
-                                        @endif
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-extrabold text-xs {{ $commType === 'percentage' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200' }}">
+                                            <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ $commType === 'percentage' ? 'bg-purple-500' : 'bg-emerald-500' }}"></span>
+                                            <span class="num">{{ $displayComm }}</span>
+                                        </span>
                                     </td>
                                     <td class="py-3 sm:py-3.5 px-3 sm:px-4 text-right whitespace-nowrap">
-                                        @if(! $hasCommissionAuto)
-                                            <span class="font-extrabold text-xs num text-zinc-800 block">
-                                                Rp{{ number_format($srv->price, 0, ',', '.') }}
-                                            </span>
-                                            <span class="text-[11px] text-zinc-400 font-semibold num block">
-                                                100% omzet toko
-                                            </span>
-                                        @else
-                                            <span class="font-extrabold text-xs num text-zinc-800 block">
-                                                Rp{{ number_format($shopShare, 0, ',', '.') }}
-                                            </span>
-                                            <span class="text-[11px] text-zinc-400 font-semibold num block">
-                                                {{ $shopPct }}% omzet
-                                            </span>
-                                        @endif
+                                        <span class="font-extrabold text-xs num text-zinc-800 block">
+                                            Rp{{ number_format($shopShare, 0, ',', '.') }}
+                                        </span>
+                                        <span class="text-[11px] text-zinc-400 font-semibold num block">
+                                            {{ $shopPct }}% omzet
+                                        </span>
                                     </td>
                                     <td class="py-3 sm:py-3.5 px-3.5 sm:px-4 text-right whitespace-nowrap">
-                                        @if($hasCommissionAuto)
-                                            <button
-                                                type="button"
-                                                onclick="openEditCommissionModal({
-                                                    id: {{ $srv->id }},
-                                                    name: '{{ addslashes($srv->name) }}',
-                                                    price: {{ $srv->price }},
-                                                    comm_type: '{{ $commType }}',
-                                                    comm_val: {{ $commVal }}
-                                                })"
-                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-xs font-bold shadow-2xs transition cursor-pointer shrink-0"
-                                            >
-                                                <x-ui.icon name="sliders" class="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                                <span>Ubah Komisi</span>
-                                            </button>
-                                        @else
-                                            <a
-                                                href="{{ route('owner.subscription') }}"
-                                                title="Tersedia di Paket Pro"
-                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs font-bold transition shrink-0"
-                                            >
-                                                <x-ui.icon name="lock" class="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                                                <span>Kunci (Pro)</span>
-                                            </a>
-                                        @endif
+                                        <button
+                                            type="button"
+                                            data-commission="{{ json_encode([
+                                                'id' => $srv->id,
+                                                'name' => $srv->name,
+                                                'price' => $srv->price,
+                                                'comm_type' => $commType,
+                                                'comm_val' => $commVal,
+                                            ]) }}"
+                                            onclick="openEditCommissionModal(JSON.parse(this.dataset.commission))"
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-xs font-bold shadow-2xs transition cursor-pointer shrink-0"
+                                        >
+                                            <x-ui.icon name="sliders" class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                            <span>Ubah Komisi</span>
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
@@ -670,67 +636,42 @@
                                     <span class="text-xs font-black text-zinc-900 num truncate">Rp{{ number_format($srv->price, 0, ',', '.') }}</span>
                                 </div>
 
-                                @if(! $hasCommissionAuto)
-                                    <!-- Komisi Staf Nonaktif di Starter -->
-                                    <div class="flex flex-col justify-center px-1 py-1 rounded-lg bg-zinc-100 text-zinc-500 min-w-0">
-                                        <span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500 mb-0.5 truncate">Komisi Staf</span>
-                                        <span class="text-xs font-bold num leading-tight truncate">Rp0</span>
-                                        <span class="text-[9px] font-semibold text-zinc-400 leading-tight truncate">(Nonaktif)</span>
-                                    </div>
+                                <!-- Komisi Staf -->
+                                <div class="flex flex-col justify-center px-1 py-1 rounded-lg {{ $commType === 'percentage' ? 'bg-purple-50 text-purple-900' : 'bg-emerald-50 text-emerald-900' }} min-w-0">
+                                    <span class="text-[9px] uppercase font-black tracking-wider {{ $commType === 'percentage' ? 'text-purple-700' : 'text-emerald-700' }} mb-0.5 truncate">Komisi Staf</span>
+                                    @if($commType === 'percentage')
+                                        <span class="text-xs font-black num leading-tight truncate">{{ $commVal }}%</span>
+                                        <span class="text-[10px] font-bold text-purple-700 num leading-tight truncate">~Rp{{ number_format($barberShare, 0, ',', '.') }}</span>
+                                    @else
+                                        <span class="text-xs font-black num leading-tight truncate">Rp{{ number_format($commVal, 0, ',', '.') }}</span>
+                                        <span class="text-[9px] font-bold text-emerald-700 leading-tight truncate">/ pangkas</span>
+                                    @endif
+                                </div>
 
-                                    <!-- Bagian Toko 100% -->
-                                    <div class="flex flex-col justify-center px-1 py-1 border-l border-zinc-100 min-w-0">
-                                        <span class="text-[9px] uppercase font-bold tracking-wider text-zinc-400 mb-0.5 truncate">Bagian Toko</span>
-                                        <span class="text-xs font-bold text-zinc-800 num leading-tight truncate">Rp{{ number_format($srv->price, 0, ',', '.') }}</span>
-                                        <span class="text-[10px] font-semibold text-zinc-400 num truncate">(100%)</span>
-                                    </div>
-                                @else
-                                    <!-- Komisi Staf -->
-                                    <div class="flex flex-col justify-center px-1 py-1 rounded-lg {{ $commType === 'percentage' ? 'bg-purple-50 text-purple-900' : 'bg-emerald-50 text-emerald-900' }} min-w-0">
-                                        <span class="text-[9px] uppercase font-black tracking-wider {{ $commType === 'percentage' ? 'text-purple-700' : 'text-emerald-700' }} mb-0.5 truncate">Komisi Staf</span>
-                                        @if($commType === 'percentage')
-                                            <span class="text-xs font-black num leading-tight truncate">{{ $commVal }}%</span>
-                                            <span class="text-[10px] font-bold text-purple-700 num leading-tight truncate">~Rp{{ number_format($barberShare, 0, ',', '.') }}</span>
-                                        @else
-                                            <span class="text-xs font-black num leading-tight truncate">Rp{{ number_format($commVal, 0, ',', '.') }}</span>
-                                            <span class="text-[9px] font-bold text-emerald-700 leading-tight truncate">/ pangkas</span>
-                                        @endif
-                                    </div>
-
-                                    <!-- Bagian Toko -->
-                                    <div class="flex flex-col justify-center px-1 py-1 border-l border-zinc-100 min-w-0">
-                                        <span class="text-[9px] uppercase font-bold tracking-wider text-zinc-400 mb-0.5 truncate">Bagian Toko</span>
-                                        <span class="text-xs font-bold text-zinc-800 num leading-tight truncate">Rp{{ number_format($shopShare, 0, ',', '.') }}</span>
-                                        <span class="text-[10px] font-semibold text-zinc-400 num truncate">({{ $shopPct }}%)</span>
-                                    </div>
-                                @endif
+                                <!-- Bagian Toko -->
+                                <div class="flex flex-col justify-center px-1 py-1 border-l border-zinc-100 min-w-0">
+                                    <span class="text-[9px] uppercase font-bold tracking-wider text-zinc-400 mb-0.5 truncate">Bagian Toko</span>
+                                    <span class="text-xs font-bold text-zinc-800 num leading-tight truncate">Rp{{ number_format($shopShare, 0, ',', '.') }}</span>
+                                    <span class="text-[10px] font-semibold text-zinc-400 num truncate">({{ $shopPct }}%)</span>
+                                </div>
                             </div>
 
                             <!-- Tombol Aksi -->
-                            @if($hasCommissionAuto)
-                                <button
-                                    type="button"
-                                    onclick="openEditCommissionModal({
-                                        id: {{ $srv->id }},
-                                        name: '{{ addslashes($srv->name) }}',
-                                        price: {{ $srv->price }},
-                                        comm_type: '{{ $commType }}',
-                                        comm_val: {{ $commVal }}
-                                    })"
-                                    class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-xs font-bold shadow-2xs transition-all duration-500 ease-in-out inline-flex items-center justify-center gap-1.5 cursor-pointer"
-                                >
-                                    <x-ui.icon name="sliders" class="w-3.5 h-3.5 text-amber-400" />
-                                    <span>Ubah Komisi</span>
-                                </button>
-                            @else
-                                <a
-                                    href="{{ route('owner.subscription') }}"
-                                    class="w-full py-2 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs font-bold transition inline-flex items-center justify-center gap-1.5"
-                                >
-                                    <x-ui.icon name="lock" class="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>Kunci (Fitur Pro &amp; Business)</span>
-                                </a>
-                            @endif
+                            <button
+                                type="button"
+                                data-commission="{{ json_encode([
+                                    'id' => $srv->id,
+                                    'name' => $srv->name,
+                                    'price' => $srv->price,
+                                    'comm_type' => $commType,
+                                    'comm_val' => $commVal,
+                                ]) }}"
+                                onclick="openEditCommissionModal(JSON.parse(this.dataset.commission))"
+                                class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-xs font-bold shadow-2xs transition-all duration-500 ease-in-out inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                                <x-ui.icon name="sliders" class="w-3.5 h-3.5 text-amber-400" />
+                                <span>Ubah Komisi</span>
+                            </button>
                         </div>
                     @empty
                         <div class="col-span-full py-8 text-center text-xs text-zinc-400">
@@ -771,33 +712,82 @@
                 <label class="block text-xs font-bold text-zinc-700 mb-1.5">Tipe Penggajian <span class="text-rose-500 font-bold ml-0.5">*</span></label>
                 <div class="grid grid-cols-1 gap-2">
                     <label class="flex items-start gap-3 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/30">
-                        <input type="radio" name="type" value="base_plus_commission" checked onchange="toggleSchemeFormType('add', 'base_plus_commission')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
+                        <input type="radio" name="type" value="commission_only" checked onchange="toggleSchemeFormType('add', 'commission_only')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
                         <div>
-                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok + Komisi Pangkas (Standar Barber Tetap)</span>
-                            <span class="text-[11px] text-zinc-500 block">Menerima gaji pokok bulanan, komisi layanan, dan opsi target bonus.</span>
+                            <span class="text-xs font-extrabold text-zinc-900 block">Murni Komisi Layanan (Standar Staff Barber)</span>
+                            <span class="text-[11px] text-zinc-500 block">Tanpa gaji pokok (Rp0), penghasilan barber dihitung murni dari tarif komisi layanan per kepala (misal Rp5.000/pangkas) atau opsi bagi hasil.</span>
                         </div>
                     </label>
 
                     <label class="flex items-start gap-3 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/30">
                         <input type="radio" name="type" value="fixed" onchange="toggleSchemeFormType('add', 'fixed')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
                         <div>
-                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok Tetap (Kasir / Petugas Kebersihan)</span>
+                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok Tetap (Kasir / Petugas Toko / Admin)</span>
                             <span class="text-[11px] text-zinc-500 block">Gaji flat per bulan tanpa hitungan komisi layanan pangkas.</span>
                         </div>
                     </label>
 
                     <label class="flex items-start gap-3 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/30">
-                        <input type="radio" name="type" value="commission_only" onchange="toggleSchemeFormType('add', 'commission_only')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
+                        <input type="radio" name="type" value="base_plus_commission" onchange="toggleSchemeFormType('add', 'base_plus_commission')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
                         <div>
-                            <span class="text-xs font-extrabold text-zinc-900 block">Murni Bagi Hasil / Komisi (Mitra Lepas / Freelance)</span>
-                            <span class="text-[11px] text-zinc-500 block">Tanpa gaji pokok (Rp0), barber menerima persentase bagi hasil bebas (misal 30%, 40%, 50%).</span>
+                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok + Komisi Tambahan (Opsional Staf Khusus)</span>
+                            <span class="text-[11px] text-zinc-500 block">Menerima gaji pokok bulanan, komisi layanan, dan opsi target bonus.</span>
                         </div>
                     </label>
                 </div>
             </div>
 
+            <!-- Model Komisi untuk Commission Only -->
+            <div id="add-field-commission-model" class="space-y-2 p-3 rounded-2xl bg-zinc-50 border border-zinc-200">
+                <label class="block text-xs font-bold text-zinc-800">Model Komisi Barber <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/40">
+                        <input type="radio" name="commission_model" id="add-comm-model-per-service" value="per_service" checked onchange="toggleCommissionModel('add')" class="text-emerald-600 focus:ring-emerald-500 mt-0.5" />
+                        <div>
+                            <span class="text-xs font-bold text-zinc-900 block">Tarif per Layanan</span>
+                            <span class="text-[10px] text-zinc-500 block leading-tight">Komisi per kepala (misal Rp5.000/pangkas) dari katalog</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50/40">
+                        <input type="radio" name="commission_model" id="add-comm-model-percentage" value="percentage" onchange="toggleCommissionModel('add')" class="text-purple-600 focus:ring-purple-500 mt-0.5" />
+                        <div>
+                            <span class="text-xs font-bold text-zinc-900 block">Bagi Hasil Persen (%)</span>
+                            <span class="text-[10px] text-zinc-500 block leading-tight">Persentase dari total omzet cukur (misal 30% atau 40%)</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Notice untuk per service -->
+                <div id="add-notice-per-service" class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800 flex items-start gap-2">
+                    <x-ui.icon name="check-circle" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Barber menerima komisi dari tarif masing-masing layanan (misal Rp5.000 untuk pangkas biasa). Anda dapat mengatur tarif setiap layanan pada tabel komisi di bawah.</span>
+                </div>
+
+                <!-- Bagian B: Input Persentase Bagi Hasil (Jika model percentage dipilih) -->
+                <div id="add-field-commission-pct" class="space-y-2 hidden pt-1">
+                    <label class="block text-xs font-bold text-purple-900">Persentase Bagi Hasil Mitra (%) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                    <div class="relative">
+                        <input
+                            type="number"
+                            name="commission_percentage"
+                            id="add-input-commission-pct"
+                            value="30"
+                            min="1"
+                            max="100"
+                            oninput="updateSimNotice('add')"
+                            class="w-full text-xs font-black pl-3 pr-8 py-2.5 rounded-xl bg-white border border-purple-300 text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-purple-600">%</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-[11px] text-purple-800 flex items-start gap-2" id="add-notice-pct">
+                        <x-ui.icon name="info" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                        <span id="add-notice-text">Dari layanan seharga Rp50.000, Barber menerima <strong>Rp15.000 (30%)</strong> dan Barbershop menerima <strong>Rp35.000 (70%)</strong>.</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Bagian A: Input Gaji Pokok (Untuk Fixed & Base+Commission) -->
-            <div id="add-field-base-salary" class="space-y-1">
+            <div id="add-field-base-salary" class="space-y-1 hidden">
                 <label class="block text-xs font-bold text-zinc-700">Gaji Pokok Bulanan (Rp) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
                 <div class="relative">
                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">Rp</span>
@@ -814,29 +804,7 @@
                 </div>
             </div>
 
-            <!-- Bagian B: Input Persentase Bagi Hasil (Hanya untuk Commission Only) -->
-            <div id="add-field-commission-pct" class="space-y-2 hidden">
-                <label class="block text-xs font-bold text-purple-900">Persentase Bagi Hasil Mitra (%) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                <div class="relative">
-                    <input
-                        type="number"
-                        name="commission_percentage"
-                        id="add-input-commission-pct"
-                        value="40"
-                        min="1"
-                        max="100"
-                        oninput="updateSimNotice('add')"
-                        class="w-full text-xs font-black pl-3 pr-8 py-2.5 rounded-xl bg-white border border-purple-300 text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-purple-600">%</span>
-                </div>
-                <div class="p-3 rounded-xl bg-purple-50 border border-purple-200 text-[11px] text-purple-800 flex items-start gap-2" id="add-notice-pct">
-                    <x-ui.icon name="info" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                    <span id="add-notice-text">Dari layanan seharga Rp50.000, Barber menerima <strong>Rp20.000 (40%)</strong> dan Barbershop menerima <strong>Rp30.000 (60%)</strong>.</span>
-                </div>
-            </div>
-
-            <!-- Bagian C: Bonus Target Layanan Berjenjang (Hanya untuk Base+Commission) -->
+            <!-- Bagian C: Bonus Target Layanan Berjenjang -->
             <div id="add-field-bonus-tiers" class="space-y-2 pt-2 border-t border-zinc-100">
                 <div class="flex items-center justify-between">
                     <div>
@@ -855,26 +823,6 @@
                 <div id="add-bonus-tier-container" class="space-y-2">
                     <!-- Default tier rows will be inserted here by JS -->
                 </div>
-            </div>
-
-            <!-- Bagian D: Potongan Denda Alpha (Nominal Rp) -->
-            <div id="add-field-alpha-penalty" class="space-y-1 pt-2 border-t border-zinc-100">
-                <label class="block text-xs font-bold text-rose-900">Potongan Gaji Jika Alpha / Tanpa Izin (Rp / Hari)</label>
-                <div class="relative">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-rose-500">Rp</span>
-                    <input
-                        type="text"
-                        inputmode="numeric"
-                        name="alpha_penalty_nominal"
-                        id="add-input-alpha-penalty"
-                        value="0"
-                        data-currency-input
-                        oninput="formatCurrencyInput(this)"
-                        class="w-full text-xs font-black pl-9 pr-3 py-2.5 rounded-xl bg-white border border-rose-200 text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-                        placeholder="Contoh: 50.000"
-                    />
-                </div>
-                <p class="text-[11px] text-zinc-400">Nominal tetap (Rp) per hari yang otomatis dipotong saat penggajian jika staf tidak masuk tanpa izin yang di-ACC owner.</p>
             </div>
 
             <div class="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
@@ -923,28 +871,76 @@
                 <label class="block text-xs font-bold text-zinc-700 mb-1.5">Tipe Penggajian <span class="text-rose-500 font-bold ml-0.5">*</span></label>
                 <div class="grid grid-cols-1 gap-2">
                     <label class="flex items-start gap-3 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/30">
-                        <input type="radio" name="type" id="edit-type-base-comm" value="base_plus_commission" onchange="toggleSchemeFormType('edit', 'base_plus_commission')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
+                        <input type="radio" name="type" id="edit-type-comm-only" value="commission_only" onchange="toggleSchemeFormType('edit', 'commission_only')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
                         <div>
-                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok + Komisi Pangkas (Standar Barber Tetap)</span>
-                            <span class="text-[11px] text-zinc-500 block">Menerima gaji pokok bulanan, komisi layanan, dan target bonus.</span>
+                            <span class="text-xs font-extrabold text-zinc-900 block">Murni Komisi Layanan (Standar Staff Barber)</span>
+                            <span class="text-[11px] text-zinc-500 block">Tanpa gaji pokok (Rp0), penghasilan barber dihitung murni dari tarif komisi layanan per kepala (misal Rp5.000/pangkas) atau opsi bagi hasil.</span>
                         </div>
                     </label>
 
                     <label class="flex items-start gap-3 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/30">
                         <input type="radio" name="type" id="edit-type-fixed" value="fixed" onchange="toggleSchemeFormType('edit', 'fixed')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
                         <div>
-                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok Tetap (Kasir / Petugas Kebersihan)</span>
+                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok Tetap (Kasir / Petugas Toko / Admin)</span>
                             <span class="text-[11px] text-zinc-500 block">Gaji flat per bulan tanpa hitungan komisi layanan pangkas.</span>
                         </div>
                     </label>
 
                     <label class="flex items-start gap-3 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/30">
-                        <input type="radio" name="type" id="edit-type-comm-only" value="commission_only" onchange="toggleSchemeFormType('edit', 'commission_only')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
+                        <input type="radio" name="type" id="edit-type-base-comm" value="base_plus_commission" onchange="toggleSchemeFormType('edit', 'base_plus_commission')" class="text-amber-600 focus:ring-amber-500 mt-0.5" />
                         <div>
-                            <span class="text-xs font-extrabold text-zinc-900 block">Murni Bagi Hasil / Komisi (Mitra Lepas / Freelance)</span>
-                            <span class="text-[11px] text-zinc-500 block">Tanpa gaji pokok (Rp0), barber menerima persentase bagi hasil bebas.</span>
+                            <span class="text-xs font-extrabold text-zinc-900 block">Gaji Pokok + Komisi Tambahan (Opsional Staf Khusus)</span>
+                            <span class="text-[11px] text-zinc-500 block">Menerima gaji pokok bulanan, komisi layanan, dan target bonus.</span>
                         </div>
                     </label>
+                </div>
+            </div>
+
+            <!-- Model Komisi untuk Commission Only -->
+            <div id="edit-field-commission-model" class="space-y-2 p-3 rounded-2xl bg-zinc-50 border border-zinc-200">
+                <label class="block text-xs font-bold text-zinc-800">Model Komisi Barber <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/40">
+                        <input type="radio" name="commission_model" id="edit-comm-model-per-service" value="per_service" checked onchange="toggleCommissionModel('edit')" class="text-emerald-600 focus:ring-emerald-500 mt-0.5" />
+                        <div>
+                            <span class="text-xs font-bold text-zinc-900 block">Tarif per Layanan</span>
+                            <span class="text-[10px] text-zinc-500 block leading-tight">Komisi per kepala (misal Rp5.000/pangkas) dari katalog</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50/40">
+                        <input type="radio" name="commission_model" id="edit-comm-model-percentage" value="percentage" onchange="toggleCommissionModel('edit')" class="text-purple-600 focus:ring-purple-500 mt-0.5" />
+                        <div>
+                            <span class="text-xs font-bold text-zinc-900 block">Bagi Hasil Persen (%)</span>
+                            <span class="text-[10px] text-zinc-500 block leading-tight">Persentase dari total omzet cukur (misal 30% atau 40%)</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Notice untuk per service -->
+                <div id="edit-notice-per-service" class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800 flex items-start gap-2">
+                    <x-ui.icon name="check-circle" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Barber menerima komisi dari tarif masing-masing layanan (misal Rp5.000 untuk pangkas biasa). Anda dapat mengatur tarif setiap layanan pada tabel komisi di bawah.</span>
+                </div>
+
+                <!-- Bagian B: Input Persentase Bagi Hasil -->
+                <div id="edit-field-commission-pct" class="space-y-2 hidden pt-1">
+                    <label class="block text-xs font-bold text-purple-900">Persentase Bagi Hasil Mitra (%) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                    <div class="relative">
+                        <input
+                            type="number"
+                            name="commission_percentage"
+                            id="edit-input-commission-pct"
+                            min="1"
+                            max="100"
+                            oninput="updateSimNotice('edit')"
+                            class="w-full text-xs font-black pl-3 pr-8 py-2.5 rounded-xl bg-white border border-purple-300 text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-purple-600">%</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-[11px] text-purple-800 flex items-start gap-2" id="edit-notice-pct">
+                        <x-ui.icon name="info" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                        <span id="edit-notice-text">Dari layanan seharga Rp50.000, Barber menerima <strong>Rp20.000 (40%)</strong> dan Barbershop menerima <strong>Rp30.000 (60%)</strong>.</span>
+                    </div>
                 </div>
             </div>
 
@@ -962,27 +958,6 @@
                         oninput="formatCurrencyInput(this)"
                         class="w-full text-xs font-black pl-9 pr-3 py-2.5 rounded-xl bg-white border border-zinc-200 text-zinc-950 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                     />
-                </div>
-            </div>
-
-            <!-- Bagian B: Input Persentase Bagi Hasil -->
-            <div id="edit-field-commission-pct" class="space-y-2 hidden">
-                <label class="block text-xs font-bold text-purple-900">Persentase Bagi Hasil Mitra (%) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                <div class="relative">
-                    <input
-                        type="number"
-                        name="commission_percentage"
-                        id="edit-input-commission-pct"
-                        min="1"
-                        max="100"
-                        oninput="updateSimNotice('edit')"
-                        class="w-full text-xs font-black pl-3 pr-8 py-2.5 rounded-xl bg-white border border-purple-300 text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-purple-600">%</span>
-                </div>
-                <div class="p-3 rounded-xl bg-purple-50 border border-purple-200 text-[11px] text-purple-800 flex items-start gap-2" id="edit-notice-pct">
-                    <x-ui.icon name="info" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                    <span id="edit-notice-text">Dari layanan seharga Rp50.000, Barber menerima <strong>Rp20.000 (40%)</strong> dan Barbershop menerima <strong>Rp30.000 (60%)</strong>.</span>
                 </div>
             </div>
 
@@ -1005,26 +980,6 @@
                 <div id="edit-bonus-tier-container" class="space-y-2">
                     <!-- Populated dynamically by JS -->
                 </div>
-            </div>
-
-            <!-- Bagian D: Potongan Denda Alpha (Nominal Rp) -->
-            <div id="edit-field-alpha-penalty" class="space-y-1 pt-2 border-t border-zinc-100">
-                <label class="block text-xs font-bold text-rose-900">Potongan Gaji Jika Alpha / Tanpa Izin (Rp / Hari)</label>
-                <div class="relative">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-rose-500">Rp</span>
-                    <input
-                        type="text"
-                        inputmode="numeric"
-                        name="alpha_penalty_nominal"
-                        id="edit-input-alpha-penalty"
-                        value="0"
-                        data-currency-input
-                        oninput="formatCurrencyInput(this)"
-                        class="w-full text-xs font-black pl-9 pr-3 py-2.5 rounded-xl bg-white border border-rose-200 text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-                        placeholder="Contoh: 50.000"
-                    />
-                </div>
-                <p class="text-[11px] text-zinc-400">Nominal tetap (Rp) per hari yang otomatis dipotong saat penggajian jika staf tidak masuk tanpa izin yang di-ACC owner.</p>
             </div>
 
             <div class="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
@@ -1117,8 +1072,9 @@
         </form>
     </dialog>
 
+    <script type="application/json" id="schemes-data-json">@json($schemesJson)</script>
     <script>
-        const schemesData = @json($schemesJson);
+        const schemesData = JSON.parse(document.getElementById('schemes-data-json')?.textContent || '{}');
         let currentCommissionServicePrice = 0;
 
         // Helper memformat angka ke format ribuan rupiah Indonesia (misal: 2000000 -> "2.000.000")
@@ -1175,18 +1131,69 @@
             let targetStatusHtml = '';
 
             if (scheme.type === 'commission_only') {
-                const pct = scheme.commission_percentage || 30;
                 baseSalary = 0;
-                commTotal = Math.round((grossOmzet * pct) / 100);
-                bonusTotal = 0;
-                commLabel = 'Bagi Hasil Komisi:';
-                commSublabel = `${pct}% dari omzet cukur`;
-                targetStatusHtml = `
-                    <div class="flex items-center gap-2 text-purple-900 font-semibold text-xs">
-                        <svg class="w-4 h-4 text-purple-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                        <span>Murni bagi hasil ${pct}% dari total transaksi pangkas</span>
-                    </div>
-                `;
+                if (scheme.has_percentage_commission) {
+                    const pct = scheme.commission_percentage || 30;
+                    commTotal = Math.round((grossOmzet * pct) / 100);
+                    commLabel = 'Bagi Hasil Komisi:';
+                    commSublabel = `${pct}% dari omzet cukur`;
+                    targetStatusHtml = `
+                        <div class="flex items-center gap-2 text-purple-900 font-semibold text-xs">
+                            <svg class="w-4 h-4 text-purple-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                            <span>Murni bagi hasil ${pct}% dari total omzet transaksi</span>
+                        </div>
+                    `;
+                } else {
+                    commTotal = cuts * 5000;
+                    commLabel = 'Komisi Layanan:';
+                    commSublabel = `Tarif ~Rp5.000 x ${cuts} pangkas`;
+                    targetStatusHtml = `
+                        <div class="flex items-center gap-2 text-emerald-900 font-semibold text-xs">
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"></circle><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"></path></svg>
+                            <span>Murni komisi per layanan (tanpa gaji pokok)</span>
+                        </div>
+                    `;
+                }
+
+                // Evaluasi bonus target jika skema komisi memiliki target
+                if (scheme.bonus_tiers && scheme.bonus_tiers.length > 0) {
+                    let highestTier = null;
+                    let nextTier = null;
+
+                    for (const tier of scheme.bonus_tiers) {
+                        const min = parseInt(tier.min_services, 10);
+                        const bonus = parseInt(tier.bonus, 10);
+                        if (cuts >= min) {
+                            if (bonus > bonusTotal) {
+                                bonusTotal = bonus;
+                                highestTier = tier;
+                            }
+                        } else if (!nextTier) {
+                            nextTier = tier;
+                        }
+                    }
+
+                    if (highestTier) {
+                        targetStatusHtml = `
+                            <div class="flex items-start gap-2 text-emerald-900 text-xs">
+                                <svg class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                                <div class="leading-snug">
+                                    <span class="font-bold">Target ≥${highestTier.min_services}x tercapai! Bonus +Rp${highestTier.bonus.toLocaleString('id-ID')}</span>
+                                    ${nextTier ? `<span class="block text-[11px] text-zinc-500 mt-0.5 font-medium">Kurang ${nextTier.min_services - cuts} pangkas lagi ke bonus +Rp${nextTier.bonus.toLocaleString('id-ID')}</span>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    } else if (nextTier) {
+                        targetStatusHtml = `
+                            <div class="flex items-start gap-2 text-amber-900 text-xs">
+                                <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"></circle><polyline points="12 6 12 12 16 14" stroke-width="2"></polyline></svg>
+                                <div class="leading-snug font-medium">
+                                    <span>Kurang <strong>${nextTier.min_services - cuts}x</strong> pangkas lagi untuk bonus +Rp${nextTier.bonus.toLocaleString('id-ID')}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
             } else if (scheme.type === 'fixed') {
                 baseSalary = scheme.base_salary;
                 commTotal = 0;
@@ -1295,35 +1302,54 @@
         // ==========================================
         // 2. TOGGLE TIPE FORM SKEMA (ADD / EDIT)
         // ==========================================
+        function toggleCommissionModel(mode) {
+            const isPercentage = document.getElementById(`${mode}-comm-model-percentage`)?.checked;
+            const pctField = document.getElementById(`${mode}-field-commission-pct`);
+            const perServiceNotice = document.getElementById(`${mode}-notice-per-service`);
+            const pctInput = document.getElementById(`${mode}-input-commission-pct`);
+
+            if (isPercentage) {
+                if (pctField) pctField.classList.remove('hidden');
+                if (perServiceNotice) perServiceNotice.classList.add('hidden');
+                if (pctInput && !pctInput.value) pctInput.value = '30';
+                updateSimNotice(mode);
+            } else {
+                if (pctField) pctField.classList.add('hidden');
+                if (perServiceNotice) perServiceNotice.classList.remove('hidden');
+                if (pctInput) pctInput.value = '';
+            }
+        }
+
         function toggleSchemeFormType(mode, type) {
             const baseSalaryField = document.getElementById(`${mode}-field-base-salary`);
-            const commissionPctField = document.getElementById(`${mode}-field-commission-pct`);
+            const commModelField = document.getElementById(`${mode}-field-commission-model`);
             const bonusTiersField = document.getElementById(`${mode}-field-bonus-tiers`);
             const baseInput = document.getElementById(`${mode}-input-base-salary`);
 
             if (type === 'commission_only') {
-                baseSalaryField.classList.add('hidden');
-                commissionPctField.classList.remove('hidden');
-                bonusTiersField.classList.add('hidden');
-                baseInput.value = '0';
-                updateSimNotice(mode);
+                if (baseSalaryField) baseSalaryField.classList.add('hidden');
+                if (commModelField) commModelField.classList.remove('hidden');
+                if (bonusTiersField) bonusTiersField.classList.remove('hidden');
+                if (baseInput) baseInput.value = '0';
+                toggleCommissionModel(mode);
             } else if (type === 'fixed') {
-                baseSalaryField.classList.remove('hidden');
-                commissionPctField.classList.add('hidden');
-                bonusTiersField.classList.add('hidden');
-                if (baseInput.value === '0' || !baseInput.value) baseInput.value = '2.500.000';
+                if (baseSalaryField) baseSalaryField.classList.remove('hidden');
+                if (commModelField) commModelField.classList.add('hidden');
+                if (bonusTiersField) bonusTiersField.classList.add('hidden');
+                if (baseInput && (baseInput.value === '0' || !baseInput.value)) baseInput.value = '2.500.000';
             } else {
                 // base_plus_commission
-                baseSalaryField.classList.remove('hidden');
-                commissionPctField.classList.add('hidden');
-                bonusTiersField.classList.remove('hidden');
-                if (baseInput.value === '0' || !baseInput.value) baseInput.value = '2.000.000';
+                if (baseSalaryField) baseSalaryField.classList.remove('hidden');
+                if (commModelField) commModelField.classList.add('hidden');
+                if (bonusTiersField) bonusTiersField.classList.remove('hidden');
+                if (baseInput && (baseInput.value === '0' || !baseInput.value)) baseInput.value = '2.000.000';
             }
         }
 
         function updateSimNotice(mode) {
             const input = document.getElementById(`${mode}-input-commission-pct`);
             const notice = document.getElementById(`${mode}-notice-pct`);
+            if (!input || !notice) return;
             const pct = parseInt(input.value || '30', 10);
             const barberShare = Math.round((50000 * pct) / 100);
             const shopShare = Math.max(0, 50000 - barberShare);
@@ -1356,7 +1382,7 @@
                         placeholder="250"
                         min="1"
                         required
-                        class="w-full font-bold px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-zinc-900 num text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        class="w-full font-bold px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 num text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span class="text-zinc-400 text-[11px] shrink-0">pangkas</span>
                 </div>
@@ -1371,7 +1397,7 @@
                         data-currency-input
                         oninput="formatCurrencyInput(this)"
                         required
-                        class="w-full font-bold px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-zinc-900 num text-xs"
+                        class="w-full font-bold px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 num text-xs"
                     />
                 </div>
                 <button
@@ -1393,8 +1419,11 @@
             addBonusTierRow('add', 200, 200000);
             addBonusTierRow('add', 250, 300000);
 
-            document.getElementById('add-input-base-salary').value = '2.000.000';
-            toggleSchemeFormType('add', 'base_plus_commission');
+            document.getElementById('add-input-base-salary').value = '0';
+            const perServiceRadio = document.getElementById('add-comm-model-per-service');
+            if (perServiceRadio) perServiceRadio.checked = true;
+
+            toggleSchemeFormType('add', 'commission_only');
             document.getElementById('modal-add-scheme').showModal();
         }
 
@@ -1406,8 +1435,24 @@
             document.getElementById('edit-scheme-name').value = scheme.name;
             document.getElementById('edit-modal-subtitle').textContent = `Mengubah pengaturan untuk ${scheme.name}`;
             document.getElementById('edit-input-base-salary').value = formatCurrencyNumber(scheme.base_salary);
-            document.getElementById('edit-input-alpha-penalty').value = formatCurrencyNumber(scheme.alpha_penalty_nominal || 0);
-            document.getElementById('edit-input-commission-pct').value = scheme.commission_percentage || 30;
+            const alphaInput = document.getElementById('edit-input-alpha-penalty');
+            if (alphaInput) {
+                alphaInput.value = formatCurrencyNumber(scheme.alpha_penalty_nominal || 0);
+            }
+
+            // Radio model komisi
+            const isPct = Boolean(scheme.has_percentage_commission);
+            const pctRadio = document.getElementById('edit-comm-model-percentage');
+            const perServiceRadio = document.getElementById('edit-comm-model-per-service');
+            const pctInput = document.getElementById('edit-input-commission-pct');
+
+            if (isPct) {
+                if (pctRadio) pctRadio.checked = true;
+                if (pctInput) pctInput.value = scheme.commission_percentage || 30;
+            } else {
+                if (perServiceRadio) perServiceRadio.checked = true;
+                if (pctInput) pctInput.value = '';
+            }
 
             // Set radio checked
             if (scheme.type === 'commission_only') {

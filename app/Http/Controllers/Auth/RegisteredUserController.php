@@ -15,8 +15,12 @@ use Illuminate\View\View;
 
 final class RegisteredUserController extends Controller
 {
-    public function create(): View
+    public function create(Request $request): View|RedirectResponse
     {
+        if (AuthenticatedSessionController::isSubdomainRequest($request)) {
+            return redirect()->to(AuthenticatedSessionController::resolveRootUrl($request, '/register'));
+        }
+
         return view('auth.register');
     }
 
@@ -48,6 +52,12 @@ final class RegisteredUserController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $request->session()->forget([
+            'scanned_customer_tenant_id',
+            'scanned_customer_tenant_slug',
+            'active_customer_tenant_id',
+            'active_customer_tenant_slug',
+        ]);
 
         return redirect()->intended(route('customer.dashboard'))->with('status', 'Selamat datang di BarberOS! Akun Anda berhasil didaftarkan.');
     }

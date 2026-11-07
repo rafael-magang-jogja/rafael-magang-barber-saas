@@ -39,7 +39,7 @@
                     </span>
                     <h2 class="text-lg sm:text-xl font-black text-white tracking-tight">Masa Aktif Langganan Telah Berakhir</h2>
                     <p class="text-xs sm:text-sm text-rose-100 leading-relaxed max-w-2xl">
-                        Seluruh fitur operasional barbershop (kasir POS, antrean pelanggan, absensi, dan jadwal) saat ini dikunci sementara. Silakan pilih paket di bawah untuk menerbitkan tagihan perpanjangan. Setelah pembayaran ditransfer dan dikonfirmasi oleh Superadmin, sistem akan aktif kembali.
+                        Seluruh fitur operasional barbershop (kasir POS, antrean pelanggan, absensi, dan jadwal) saat ini dikunci sementara. Silakan pilih paket di bawah untuk melakukan pembayaran instan. Setelah pembayaran selesai, sistem akan aktif kembali secara otomatis.
                     </p>
                 </div>
             </div>
@@ -91,7 +91,7 @@
                     <span>Petunjuk Pembayaran:</span>
                 </p>
                 <p class="leading-relaxed text-zinc-600 pl-5">
-                    Silakan buka halaman rincian tagihan untuk memilih rekening bank resmi platform, melakukan transfer, dan mengunggah struk bukti pembayaran agar akun Anda segera diproses Superadmin.
+                    Silakan buka halaman tagihan untuk menyelesaikan pembayaran instan via QRIS atau Virtual Account agar langganan Anda langsung aktif seketika.
                 </p>
             </div>
         </div>
@@ -168,7 +168,12 @@
                 @elseif($tenantSub?->plan && $canRenew)
                     <button
                         type="button"
-                        onclick="openPlanPopup('{{ $tenantSub->plan_id }}', '{{ $tenantSub->plan->name }}', 'Rp{{ number_format($tenantSub->plan->price_monthly, 0, ',', '.') }}', true, {{ $subDiffDays ?? 0 }}, false, '{{ $tenantSub->plan->code }}')"
+                        data-plan-id="{{ $tenantSub->plan_id }}"
+                        data-plan-name="{{ $tenantSub->plan->name }}"
+                        data-plan-price="Rp{{ number_format($tenantSub->plan->price_monthly, 0, ',', '.') }}"
+                        data-diff-days="{{ $subDiffDays ?? 0 }}"
+                        data-plan-code="{{ $tenantSub->plan->code }}"
+                        onclick="openPlanPopup(this.dataset.planId, this.dataset.planName, this.dataset.planPrice, true, Number(this.dataset.diffDays), false, this.dataset.planCode)"
                         class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs shadow-sm hover:shadow transition cursor-pointer"
                     >
                         <x-ui.icon name="refresh-cw" class="w-3.5 h-3.5 text-zinc-950" />
@@ -198,7 +203,7 @@
                         $maxBr = $tenantSub?->plan?->max_branches ?? 1;
                         $pctBr = min(100, (int) round(($branchCount / max(1, $maxBr)) * 100));
                     @endphp
-                    <div class="bg-amber-500 h-1.5 rounded-full" style="width: {{ $pctBr }}%"></div>
+                    <div class="bg-amber-500 h-1.5 rounded-full" @style(['width: ' . $pctBr . '%'])></div>
                 </div>
             </div>
 
@@ -215,7 +220,7 @@
                         $maxSt = $tenantSub?->plan?->max_staff ?? 5;
                         $pctSt = $maxSt ? min(100, (int) round(($staffCount / max(1, $maxSt)) * 100)) : 20;
                     @endphp
-                    <div class="bg-amber-500 h-1.5 rounded-full" style="width: {{ $pctSt }}%"></div>
+                    <div class="bg-amber-500 h-1.5 rounded-full" @style(['width: ' . $pctSt . '%'])></div>
                 </div>
             </div>
 
@@ -369,21 +374,6 @@
                             @endif
                         </li>
 
-                        <!-- Notifikasi WhatsApp Pelanggan -->
-                        <li class="flex items-center gap-2">
-                            @if($plan->code === 'starter')
-                                <span class="w-4 h-4 rounded-full bg-rose-50 text-rose-500 border border-rose-200/70 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="x" class="w-2.5 h-2.5" />
-                                </span>
-                                <span class="text-zinc-400 line-through">Notifikasi WhatsApp Pelanggan</span>
-                            @else
-                                <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                                    <x-ui.icon name="check" class="w-2.5 h-2.5" />
-                                </span>
-                                <span>Notifikasi WhatsApp Pelanggan</span>
-                            @endif
-                        </li>
-
                         <!-- Layar TV Display Antrean Live -->
                         <li class="flex items-center gap-2">
                             <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
@@ -407,18 +397,18 @@
                             @endif
                         </li>
 
-                        <!-- White-label & Subdomain Khusus (Eksklusif Business) -->
+                        <!-- White-label Penuh (Eksklusif Business) -->
                         <li class="flex items-center gap-2">
                             @if($plan->code === 'business')
                                 <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                                     <x-ui.icon name="check" class="w-2.5 h-2.5" />
                                 </span>
-                                <span><strong>White-label &amp; Subdomain Khusus</strong></span>
+                                <span><strong>White-label Penuh</strong></span>
                             @else
                                 <span class="w-4 h-4 rounded-full bg-rose-50 text-rose-500 border border-rose-200/70 flex items-center justify-center shrink-0">
                                     <x-ui.icon name="x" class="w-2.5 h-2.5" />
                                 </span>
-                                <span class="text-zinc-400 line-through">White-label &amp; Subdomain Khusus</span>
+                                <span class="text-zinc-400 line-through">White-label Penuh</span>
                             @endif
                         </li>
                     </ul>
@@ -438,7 +428,12 @@
                         @elseif($canRenew)
                             <button
                                 type="button"
-                                onclick="openPlanPopup('{{ $plan->id }}', '{{ $plan->name }}', 'Rp{{ number_format($plan->price_monthly, 0, ',', '.') }}', true, {{ $subDiffDays ?? 0 }}, false, '{{ $plan->code }}')"
+                                data-plan-id="{{ $plan->id }}"
+                                data-plan-name="{{ $plan->name }}"
+                                data-plan-price="Rp{{ number_format($plan->price_monthly, 0, ',', '.') }}"
+                                data-diff-days="{{ $subDiffDays ?? 0 }}"
+                                data-plan-code="{{ $plan->code }}"
+                                onclick="openPlanPopup(this.dataset.planId, this.dataset.planName, this.dataset.planPrice, true, Number(this.dataset.diffDays), false, this.dataset.planCode)"
                                 class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
                             >
                                 @if($plan->code === 'business')
@@ -473,7 +468,13 @@
                         @endphp
                         <button
                             type="button"
-                            onclick="openPlanPopup('{{ $plan->id }}', '{{ $plan->name }}', 'Rp{{ number_format($plan->price_monthly, 0, ',', '.') }}', false, {{ $subDiffDays ?? 0 }}, {{ $isDowngrade ? 'true' : 'false' }}, '{{ $plan->code }}')"
+                            data-plan-id="{{ $plan->id }}"
+                            data-plan-name="{{ $plan->name }}"
+                            data-plan-price="Rp{{ number_format($plan->price_monthly, 0, ',', '.') }}"
+                            data-diff-days="{{ $subDiffDays ?? 0 }}"
+                            data-is-downgrade="{{ $isDowngrade ? '1' : '0' }}"
+                            data-plan-code="{{ $plan->code }}"
+                            onclick="openPlanPopup(this.dataset.planId, this.dataset.planName, this.dataset.planPrice, false, Number(this.dataset.diffDays), this.dataset.isDowngrade === '1', this.dataset.planCode)"
                             class="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
                         >
                             @if($plan->code === 'business')
@@ -529,9 +530,10 @@
                         </div>
                         <div class="flex items-center justify-between text-xs text-zinc-500 pt-1">
                             <div class="flex items-center gap-1.5">
-                                <span class="text-[11px] font-bold uppercase {{ $inv->type === 'upgrade' ? 'text-amber-700' : ($inv->type === 'downgrade' ? 'text-purple-700' : 'text-emerald-700') }}">
-                                    {{ $inv->type ?? 'renewal' }}
+                                <span class="text-xs font-bold {{ $inv->type_text_color }}">
+                                    {{ $inv->type_label }}
                                 </span>
+                                <span class="text-zinc-300 font-bold">&bull;</span>
                                 <span>{{ $inv->paid_at ? $inv->paid_at->translatedFormat('d M Y') : ($inv->due_at ? $inv->due_at->translatedFormat('d M Y') : '-') }}</span>
                             </div>
                             <span class="font-extrabold text-zinc-900 num">Rp{{ number_format($inv->amount, 0, ',', '.') }}</span>
@@ -567,12 +569,8 @@
                                     </a>
                                 </td>
                                 <td class="py-3 px-3 sm:px-4 whitespace-nowrap">
-                                    <span class="text-[11px] font-bold uppercase
-                                        @if($inv->type === 'upgrade') text-amber-700
-                                        @elseif($inv->type === 'downgrade') text-purple-700
-                                        @else text-emerald-700 @endif
-                                    ">
-                                        {{ $inv->type ?? 'renewal' }}
+                                    <span class="text-xs font-bold {{ $inv->type_text_color }}">
+                                        {{ $inv->type_label }}
                                     </span>
                                 </td>
                                 <td class="py-3 px-3 sm:px-4 text-zinc-500 whitespace-nowrap">
@@ -609,6 +607,9 @@
         @endif
     </x-ui.card>
 
+    <!-- Ruang Jarak Bawah agar Konten & Tombol Invoice Bebas dari FAB saat Scroll Mentok -->
+    <div class="pb-24 sm:pb-28"></div>
+
     <!-- Modal Dialog Popup Konfirmasi Langganan Lengkap dengan Benefit -->
     @php
         $planBenefitsMap = $plans->mapWithKeys(function ($p) {
@@ -621,17 +622,24 @@
                 $benefits[] = 'Papan Kasir POS & Antrean Walk-in / Booking';
                 $benefits[] = 'Layar TV Display Antrean Live di Outlet';
                 $benefits[] = 'Payroll Sederhana (Gaji Pokok Dasar)';
+                $benefits[] = 'Manajemen Jadwal & Absensi Staf Outlet';
+                $benefits[] = 'Laporan Transaksi & Keuangan Dasar';
             } elseif ($code === 'pro') {
-                $benefits[] = 'Komisi Barber Otomatis (Per Layanan & Kategori)';
+                $benefits[] = 'Papan Kasir POS & Antrean Walk-in / Booking';
+                $benefits[] = 'Layar TV Display Antrean Live di Outlet';
                 $benefits[] = 'Payroll Full (Multi-Skema Gaji & Tunjangan)';
-                $benefits[] = 'Grafik Analitik Pro (Tren Omzet & Efektivitas Staf)';
-                $benefits[] = 'Custom Logo & Warna Tema Brand Barbershop';
-                $benefits[] = 'Notifikasi WhatsApp Pelanggan';
+                $benefits[] = 'Komisi Otomatis (Per Barber, Layanan & Kategori)';
+                $benefits[] = 'Grafik Analitik Pro (Efektivitas & Tren Omzet)';
+                $benefits[] = 'Custom Logo & Warna Tema Barbershop';
             } elseif ($code === 'business') {
+                $benefits[] = 'White-label Penuh';
                 $benefits[] = 'Cetak Dokumen Slip Gaji Resmi (Print & PDF)';
-                $benefits[] = 'Konsolidasi Payroll Multi-Outlet Seluruh Cabang';
+                $benefits[] = 'Payroll Full Multi-Outlet (Multi-Skema Seluruh Cabang)';
+                $benefits[] = 'Komisi Otomatis (Per Barber, Layanan & Kategori)';
+                $benefits[] = 'Grafik Analitik Pro (Efektivitas & Tren Omzet)';
+                $benefits[] = 'Layar TV Display Antrean Live di Seluruh Outlet';
+                $benefits[] = 'Custom Logo, Favicon & Warna Tema Lengkap';
                 $benefits[] = 'Prioritas Server Superadmin & Dukungan Khusus';
-                $benefits[] = 'Semua Fitur Pro & Kustomisasi Tanpa Batas';
             } else {
                 $benefits[] = 'Papan Kasir POS & Antrean Walk-in / Booking';
                 $benefits[] = 'Layar TV Display Antrean Live';
@@ -654,12 +662,12 @@
         }
     </style>
 
-    <dialog id="modal-plan-confirm" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/60 backdrop:backdrop-blur-xs w-[calc(100%-2rem)] max-w-md mx-auto my-auto border border-zinc-200 bg-white outline-none focus:outline-none focus-visible:outline-none ring-0">
-        <form method="POST" action="{{ route('owner.subscription.upgrade') }}" id="form-plan-confirm">
+    <dialog id="modal-plan-confirm" class="rounded-3xl p-0 shadow-2xl backdrop:bg-zinc-950/60 backdrop:backdrop-blur-xs w-[calc(100%-2rem)] max-w-md max-h-[90vh] max-h-[90dvh] mx-auto my-auto border border-zinc-200 bg-white outline-none focus:outline-none focus-visible:outline-none ring-0 overflow-hidden">
+        <form method="POST" action="{{ route('owner.subscription.upgrade') }}" id="form-plan-confirm" class="flex flex-col max-h-[90vh] max-h-[90dvh]">
             @csrf
             <input type="hidden" name="plan_id" id="popup-plan-id" value="">
 
-            <div class="p-5 sm:p-6 space-y-4 text-center">
+            <div class="p-5 sm:p-6 space-y-4 text-center overflow-y-auto overscroll-contain flex-1">
                 <!-- Header Popup: Judul Paket & Deskripsi -->
                 <div>
                     <div class="inline-flex items-center justify-center gap-2">
@@ -687,7 +695,7 @@
                         <x-ui.icon name="sparkles" class="w-3.5 h-3.5 text-amber-500" />
                         <span>Benefit &amp; Fitur yang Didapatkan:</span>
                     </span>
-                    <ul id="popup-plan-benefits" class="space-y-1.5 text-xs text-zinc-700">
+                    <ul id="popup-plan-benefits" class="space-y-1.5 text-xs text-zinc-700 max-h-56 sm:max-h-64 overflow-y-auto overscroll-contain pr-1">
                         <!-- Disisipkan otomatis via JavaScript -->
                     </ul>
                 </div>
@@ -728,8 +736,9 @@
         </form>
     </dialog>
 
+    <script type="application/json" id="plan-benefits-json">@json($planBenefitsMap)</script>
     <script>
-        const allPlanBenefits = @json($planBenefitsMap);
+        const allPlanBenefits = JSON.parse(document.getElementById('plan-benefits-json')?.textContent || '{}');
 
         function openPlanPopup(planId, planName, planPriceFormatted, isRenewal, daysRemaining, isDowngrade, planCode) {
             document.getElementById('popup-plan-id').value = planId;
@@ -816,26 +825,27 @@
     <!-- ========================================================================= -->
     <!-- FLOATING ACTION BUTTON: BANTUAN & KOMPLAIN SUPERADMIN                     -->
     <!-- Menyesuaikan tampilan mobile, tablet, & desktop secara responsif          -->
-    <!-- Diposisikan bottom-20 di Mobile agar tidak tertutup nav drawer bawah       -->
+    <!-- Tombol bulat minimalis + tooltip hover, dipadukan pb-24 agar tidak        -->
+    <!-- menghalangi tombol Aksi / Detail pada tabel invoice                       -->
     <!-- ========================================================================= -->
-    <div class="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40">
+    <div class="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40 group flex items-center">
+        <!-- Floating Tooltip saat Hover di Desktop (Sebelah Kiri Tombol) -->
+        <div class="hidden sm:flex items-center mr-3 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all duration-200 pointer-events-none">
+            <div class="px-3 py-1.5 rounded-xl bg-zinc-900/95 text-white text-xs font-bold shadow-xl border border-zinc-700/80 backdrop-blur-xs whitespace-nowrap flex items-center gap-1.5">
+                <span>Butuh Bantuan?</span>
+                <span class="text-amber-400 font-semibold">Kontak Superadmin</span>
+            </div>
+        </div>
+
         <button
             type="button"
             onclick="document.getElementById('modal-support-superadmin').showModal()"
-            class="group flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white shadow-xl hover:shadow-2xl shadow-amber-950/25 hover:scale-105 active:scale-95 transition-all duration-200 border border-amber-400/40 cursor-pointer"
+            class="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-500 hover:to-amber-700 text-white shadow-xl hover:shadow-2xl shadow-amber-950/30 hover:scale-105 active:scale-95 transition-all duration-200 border border-amber-400/40 cursor-pointer flex items-center justify-center shrink-0"
             title="Pusat Bantuan & Komplain Langganan ke Superadmin"
+            aria-label="Pusat Bantuan & Komplain"
         >
-            <div class="relative">
-                <span class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 shadow-inner group-hover:rotate-12 transition-transform">
-                    <x-ui.icon name="help-circle" class="w-4 h-4 text-white" />
-                </span>
-                <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-amber-700 animate-pulse"></span>
-            </div>
-            <div class="text-left hidden sm:block">
-                <span class="block text-[11px] font-black leading-tight tracking-tight">Butuh Bantuan?</span>
-                <span class="block text-[10px] text-amber-200 font-semibold leading-tight">Kontak Superadmin</span>
-            </div>
-            <span class="sm:hidden text-xs font-black pr-1">Bantuan</span>
+            <x-ui.icon name="help-circle" class="w-5 h-5 text-white transition-transform group-hover:scale-110" />
+            <span class="absolute top-0 right-0 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse"></span>
         </button>
     </div>
 

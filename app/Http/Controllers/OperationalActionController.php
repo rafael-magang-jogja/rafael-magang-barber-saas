@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\BookingStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
 use App\Enums\QueueStatus;
 use App\Enums\WorkStatus;
 use App\Http\Requests\Customer\CreateBookingRequest;
@@ -22,11 +23,14 @@ use App\Repositories\PlatformRepository;
 use App\Repositories\StaffRepository;
 use App\Services\BookingService;
 use App\Services\CheckoutService;
+use App\Services\CustomerWalletService;
 use App\Services\QueueService;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 final class OperationalActionController extends Controller
 {
@@ -37,6 +41,7 @@ final class OperationalActionController extends Controller
         private readonly BranchRepository $branchRepository,
         private readonly StaffRepository $staffRepository,
         private readonly PlatformRepository $platformRepository,
+        private readonly CustomerWalletService $customerWalletService,
     ) {}
 
     public function storeWalkIn(StoreWalkInRequest $request): RedirectResponse
@@ -61,6 +66,7 @@ final class OperationalActionController extends Controller
                 notes: $validated['notes'] ?? null,
                 actorUserId: $request->user()?->id,
                 hairColorId: ! empty($validated['hair_color_id']) ? (int) $validated['hair_color_id'] : null,
+                isCashierInput: true,
             );
         } catch (DomainException $e) {
             return back()->withErrors(['queue' => $e->getMessage()]);
@@ -70,9 +76,13 @@ final class OperationalActionController extends Controller
             $request->session()->push('guest_ticket_ids', $ticket->id);
         }
 
+        $targetUrl = $request->boolean('pay_now', false)
+            ? route('cashier.tickets.payment', $ticket)
+            : route('cashier.dashboard');
+
         return redirect()
-            ->route('cashier.dashboard')
-            ->with('status', "Tiket antrean {$ticket->number} berhasil dibuat untuk {$validated['customer_name']}.");
+            ->to($targetUrl)
+            ->with('status', "Tiket antrean {$ticket->number} berhasil dibuat. Silakan proses pembayaran pelanggan terlebih dahulu sebelum layanan dimulai.");
     }
 
     public function checkInBooking(Request $request, Booking $booking): RedirectResponse
@@ -85,7 +95,13 @@ final class OperationalActionController extends Controller
             return back()->withErrors(['queue' => $e->getMessage()]);
         }
 
-        return back()->with('status', "Booking {$booking->code} berhasil check-in dengan nomor antrean {$ticket->number}.");
+        $targetUrl = $request->boolean('pay_now', false)
+            ? route('cashier.tickets.payment', $ticket)
+            : back();
+
+        return redirect()
+            ->to($targetUrl)
+            ->with('status', "Booking {$booking->code} berhasil check-in dengan nomor antrean {$ticket->number}. Silakan proses pembayaran pelanggan terlebih dahulu.");
     }
 
     public function cancelBooking(Request $request, Booking $booking): RedirectResponse
@@ -94,16 +110,161 @@ final class OperationalActionController extends Controller
         $targetStatus = $action === 'no_show' ? BookingStatus::NoShow : BookingStatus::Cancelled;
         $reason = $request->input('reason', $action === 'no_show' ? 'Pelanggan tidak hadir' : 'Dibatalkan oleh kasir');
 
-        $booking->update([
+        $isPaid = $booking->xendit_paid_at !== null
+            || $booking->payment_approved_at !== null
+            || in_array($booking->status, [BookingStatus::Confirmed, BookingStatus::CheckedIn, BookingStatus::Completed], true)
+            || (! empty($booking->payment_proof_path) && in_array($booking->status, [BookingStatus::Pending, BookingStatus::Confirmed], true));
+
+        $refundUpdates = [];
+        if ($targetStatus === BookingStatus::Cancelled && $isPaid) {
+            $customerUser = $booking->customerProfile?->user ?? $booking->user;
+            $refundAmount = (int) $booking->estimated_total;
+
+            if ($customerUser !== null && $refundAmount > 0) {
+                $this->customerWalletService->credit(
+                    user: $customerUser,
+                    amount: $refundAmount,
+                    category: 'refund_booking',
+                    referenceId: $booking->code,
+                    notes: "Pengembalian dana pembatalan booking {$booking->code} oleh kasir",
+                    tenantId: $booking->tenant_id,
+                    profile: $booking->customerProfile
+                );
+
+                $refundUpdates = [
+                    'refund_status' => 'completed',
+                    'refund_amount' => $refundAmount,
+                    'refund_requested_at' => now(),
+                    'refunded_at' => now(),
+                    'refund_notes' => 'Otomatis masuk ke Saldo Dompet Akun Customer',
+                ];
+            }
+        }
+
+        $booking->update(array_merge([
             'status' => $targetStatus,
             'notes' => $booking->notes ? $booking->notes . " [{$reason}]" : $reason,
-        ]);
+        ], $refundUpdates));
+
+        if ($booking->queueTicket !== null && ! in_array($booking->queueTicket->status, [QueueStatus::Completed, QueueStatus::Cancelled, QueueStatus::NoShow], true)) {
+            $this->queueService->transitionStatus(
+                ticket: $booking->queueTicket,
+                targetStatus: $targetStatus === BookingStatus::NoShow ? QueueStatus::NoShow : QueueStatus::Cancelled,
+                actorUserId: $request->user()?->id,
+                reason: $reason,
+            );
+
+            if (! empty($refundUpdates)) {
+                $booking->queueTicket->update($refundUpdates);
+            }
+        }
 
         $msg = $targetStatus === BookingStatus::NoShow
             ? "Booking {$booking->code} berhasil ditandai Tidak Hadir (No-Show)."
-            : "Booking {$booking->code} berhasil dibatalkan.";
+            : "Booking {$booking->code} berhasil dibatalkan." . (! empty($refundUpdates) ? " Pengembalian dana otomatis masuk ke Saldo Dompet Customer." : "");
 
         return back()->with('status', $msg);
+    }
+
+    public function approveBookingPayment(Request $request, Booking $booking): RedirectResponse
+    {
+        if ($booking->queueTicket !== null) {
+            return back()->with('status', "Booking {$booking->code} sudah memiliki tiket antrean {$booking->queueTicket->number}.");
+        }
+
+        $hairColorId = $request->filled('hair_color_id') ? $request->integer('hair_color_id') : null;
+        $isToday = $booking->scheduled_at->isToday();
+
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $booking, $hairColorId, $isToday): RedirectResponse {
+            $booking->update([
+                'status' => BookingStatus::Confirmed,
+                'payment_approved_at' => now(),
+                'payment_approved_by' => $request->user()?->id,
+                'payment_rejected_reason' => null,
+            ]);
+
+            // Jika jadwal booking adalah HARI INI: Langsung terbitkan tiket antrean & Order lunas
+            if ($isToday) {
+                try {
+                    $ticket = $this->queueService->checkInBooking($booking, $request->user()?->id, $hairColorId);
+                } catch (DomainException $e) {
+                    return back()->withErrors(['queue' => $e->getMessage()]);
+                }
+
+                // Buat Order Lunas di muka via Transfer Rekening Bank
+                $orderTotal = (int) $ticket->items->sum('price');
+                $order = \App\Models\Order::query()->create([
+                    'tenant_id' => $booking->tenant_id,
+                    'branch_id' => $booking->branch_id,
+                    'queue_ticket_id' => $ticket->id,
+                    'customer_profile_id' => $booking->customer_profile_id,
+                    'barber_membership_id' => $booking->barber_membership_id,
+                    'number' => 'ORD-' . strtoupper(\Illuminate\Support\Str::random(10)),
+                    'subtotal' => $orderTotal,
+                    'discount_total' => 0,
+                    'tip_amount' => 0,
+                    'grand_total' => $orderTotal,
+                    'paid_total' => $orderTotal,
+                    'refunded_total' => 0,
+                    'payment_status' => \App\Enums\PaymentStatus::Paid,
+                    'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+                    'paid_at' => now(),
+                ]);
+
+                foreach ($ticket->items as $item) {
+                    \App\Models\OrderItem::query()->create([
+                        'tenant_id' => $booking->tenant_id,
+                        'order_id' => $order->id,
+                        'service_id' => $item->service_id,
+                        'barber_membership_id' => $booking->barber_membership_id,
+                        'name' => $item->service_name,
+                        'type' => 'service',
+                        'qty' => 1,
+                        'unit_price' => $item->price,
+                        'discount' => 0,
+                        'line_total' => $item->price,
+                    ]);
+                }
+
+                \App\Models\Payment::query()->create([
+                    'tenant_id' => $booking->tenant_id,
+                    'order_id' => $order->id,
+                    'amount' => $orderTotal,
+                    'method' => PaymentMethod::Transfer->value,
+                    'reference' => 'TRANSFER-REK-' . $booking->code,
+                    'status' => 'success',
+                    'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+                ]);
+
+                return back()->with('status', "Pembayaran booking {$booking->code} disetujui! Karena jadwal hari ini, tiket antrean {$ticket->number} otomatis diterbitkan dan masuk antrean sesuai jam {$booking->scheduled_at->format('H:i')} WIB.");
+            }
+
+            // Jika jadwal booking adalah HARI LAIN / MENDATANG: Tetap tersimpan sebagai confirmed dan akan otomatis masuk antrean saat hari H tiba
+            return back()->with('status', "Pembayaran booking {$booking->code} disetujui! Booking berstatus Lunas dan akan otomatis masuk ke antrean pada hari H ({$booking->scheduled_at->translatedFormat('d M Y')}) sesuai jam {$booking->scheduled_at->format('H:i')} WIB.");
+        });
+    }
+
+    public function rejectBookingPayment(Request $request, Booking $booking): RedirectResponse
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:255'],
+        ], [
+            'reason.required' => 'Alasan penolakan bukti pembayaran wajib diisi.',
+        ]);
+
+        if (! empty($booking->payment_proof_path) && \Illuminate\Support\Facades\Storage::disk('public')->exists($booking->payment_proof_path)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($booking->payment_proof_path);
+        }
+
+        $booking->update([
+            'payment_proof_path' => null,
+            'payment_proof_uploaded_at' => null,
+            'payment_approved_at' => null,
+            'payment_approved_by' => null,
+            'payment_rejected_reason' => $validated['reason'],
+        ]);
+
+        return back()->with('status', "Bukti transfer booking {$booking->code} telah ditolak dengan alasan: {$validated['reason']}. Pelanggan dapat mengunggah bukti baru.");
     }
 
     public function transitionTicket(TransitionTicketRequest $request, QueueTicket $ticket): RedirectResponse
@@ -119,6 +280,18 @@ final class OperationalActionController extends Controller
             if ($barberMembership === null) {
                 return back()->withErrors([
                     'queue' => 'Pemanggilan antrean dan proses pengerjaan layanan hanya dapat dilakukan oleh staff barber.',
+                ]);
+            }
+        }
+
+        // Validasi: Sebelum pengerjaan ('in_service') dimulai, pembayaran wajib sudah Lunas
+        if ($target === QueueStatus::InService) {
+            $ticket->load('order');
+            $isPaid = $ticket->order !== null && $ticket->order->payment_status === PaymentStatus::Paid;
+
+            if (! $isPaid && ! $request->boolean('bypass_payment')) {
+                return back()->withErrors([
+                    'queue' => "Tiket {$ticket->number} belum lunas. Sesuai ketentuan operasional, pembayaran wajib diselesaikan di kasir atau via QRIS sebelum layanan cukur dimulai.",
                 ]);
             }
         }
@@ -296,7 +469,6 @@ final class OperationalActionController extends Controller
                 ticket: $ticket,
                 method: PaymentMethod::from($validated['method']),
                 discountTotal: (int) ($validated['discount_total'] ?? 0),
-                tipAmount: (int) ($validated['tip_amount'] ?? 0),
                 cashReceived: isset($validated['cash_received']) ? (int) $validated['cash_received'] : null,
                 reference: $validated['reference'] ?? null,
                 idempotencyKey: $validated['idempotency_key'] ?? null,
@@ -418,6 +590,12 @@ final class OperationalActionController extends Controller
     {
         $tenant = $this->platformRepository->findTenantBySlugOrFail($tenantSlug);
 
+        if (! $request->user()) {
+            return redirect()
+                ->to($tenant->loginUrl())
+                ->with('info', 'Silakan masuk ke akun Anda terlebih dahulu untuk melakukan reservasi booking jadwal.');
+        }
+
         if ($tenant->isSubscriptionLocked()) {
             return back()->withInput()->withErrors(['booking' => 'Layanan booking online barbershop ini sedang dinonaktifkan sementara.']);
         }
@@ -471,7 +649,102 @@ final class OperationalActionController extends Controller
         }
 
         return redirect()
-            ->route('customer.bookings.show', $booking->id)
+            ->route('customer.bookings.show', $booking)
             ->with('status', "Booking {$booking->code} berhasil dikonfirmasi untuk ".$booking->scheduled_at->format('d M H:i').'.');
+    }
+
+    public function processTicketRefund(Request $request, QueueTicket $ticket): RedirectResponse
+    {
+        $ticket->load(['order.payments', 'tenant', 'branch']);
+
+        if ($ticket->refund_status !== 'pending') {
+            return back()->withErrors(['refund' => 'Antrean ini tidak memiliki permohonan refund yang menunggu persetujuan.']);
+        }
+
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string', 'max:255'],
+            'method' => ['nullable', 'string', Rule::in(['transfer', 'cash', 'qris', 'ewallet'])],
+        ]);
+
+        $refundMethod = $validated['method'] ?? 'transfer';
+        $refundAmount = $ticket->refund_amount;
+
+        DB::transaction(function () use ($ticket, $request, $validated, $refundMethod, $refundAmount): void {
+            $ticket->update([
+                'refund_status' => 'completed',
+                'refunded_at' => now(),
+                'refunded_by' => $request->user()?->id,
+                'refund_notes' => $validated['notes'] ?? 'Pengembalian dana telah ditransfer ke rekening pelanggan.',
+            ]);
+
+            if ($ticket->order !== null) {
+                $ticket->order->update([
+                    'refunded_total' => $refundAmount,
+                    'payment_status' => PaymentStatus::Refunded,
+                    'notes' => trim(($ticket->order->notes ?? '') . ' [Refund berhasil diselesaikan]'),
+                ]);
+
+                \App\Models\Payment::query()->create([
+                    'tenant_id' => $ticket->tenant_id,
+                    'order_id' => $ticket->order->id,
+                    'type' => 'refund',
+                    'method' => $refundMethod,
+                    'amount' => $refundAmount,
+                    'status' => 'success',
+                    'reason' => 'Pengembalian dana pembatalan antrean ' . $ticket->number . (!empty($validated['notes']) ? ': ' . $validated['notes'] : ''),
+                    'idempotency_key' => 'refund-ticket-' . $ticket->id . '-' . (string) \Illuminate\Support\Str::uuid(),
+                    'received_by' => $request->user()?->id,
+                    'created_at' => now(),
+                ]);
+            }
+
+            if ($ticket->booking_id !== null) {
+                Booking::query()
+                    ->whereKey($ticket->booking_id)
+                    ->update([
+                        'refund_status' => 'completed',
+                        'refunded_at' => now(),
+                        'refunded_by' => $request->user()?->id,
+                        'refund_notes' => $validated['notes'] ?? 'Pengembalian dana telah ditransfer ke rekening pelanggan.',
+                    ]);
+            }
+        });
+
+        return back()->with('status', "Pengembalian dana tiket {$ticket->number} sebesar Rp" . number_format($refundAmount, 0, ',', '.') . ' berhasil diselesaikan.');
+    }
+
+    public function processBookingRefund(Request $request, Booking $booking): RedirectResponse
+    {
+        if ($booking->refund_status !== 'pending') {
+            return back()->withErrors(['refund' => 'Reservasi booking ini tidak memiliki permohonan refund yang menunggu persetujuan.']);
+        }
+
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string', 'max:255'],
+            'method' => ['nullable', 'string', Rule::in(['transfer', 'cash', 'qris', 'ewallet'])],
+        ]);
+
+        $refundMethod = $validated['method'] ?? 'transfer';
+        $refundAmount = $booking->refund_amount;
+
+        DB::transaction(function () use ($booking, $request, $validated, $refundMethod, $refundAmount): void {
+            $booking->update([
+                'refund_status' => 'completed',
+                'refunded_at' => now(),
+                'refunded_by' => $request->user()?->id,
+                'refund_notes' => $validated['notes'] ?? 'Pengembalian dana telah ditransfer ke rekening pelanggan.',
+            ]);
+
+            if ($booking->queueTicket !== null) {
+                $booking->queueTicket->update([
+                    'refund_status' => 'completed',
+                    'refunded_at' => now(),
+                    'refunded_by' => $request->user()?->id,
+                    'refund_notes' => $validated['notes'] ?? 'Pengembalian dana telah ditransfer ke rekening pelanggan.',
+                ]);
+            }
+        });
+
+        return back()->with('status', "Pengembalian dana reservasi booking {$booking->code} sebesar Rp" . number_format($refundAmount, 0, ',', '.') . ' berhasil diselesaikan.');
     }
 }

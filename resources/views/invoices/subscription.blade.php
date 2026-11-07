@@ -1,20 +1,84 @@
 @php
     $tenant = $invoice->tenant;
-    $plan = $invoice->subscription?->plan;
+    $plan = $invoice->subscription?->plan ?? $invoice->targetPlan;
     $isPaid = $invoice->status === 'paid';
     $previousUrl = url()->previous();
     $backUrl = ($previousUrl && $previousUrl !== request()->fullUrl() && $previousUrl !== request()->url())
         ? $previousUrl
-        : route('platform.subscriptions');
+        : (auth()->user()?->is_superadmin ? route('platform.subscriptions') : route('owner.subscription'));
+
+    $platformName = \App\Support\Platform\PlatformConfig::name();
+    $platformColor = \App\Support\Platform\PlatformConfig::themeColor();
+    $platformFaviconUrl = \App\Support\Platform\PlatformConfig::faviconUrl();
+    $platformSvgFaviconUrl = \App\Support\Platform\PlatformConfig::hasSvgFavicon() ? \App\Support\Platform\PlatformConfig::svgFaviconUrl() : null;
+    $logoType = \App\Support\Platform\PlatformConfig::logoType();
+    $logoImageUrl = \App\Support\Platform\PlatformConfig::logoImageUrl();
+    $logoIcon = \App\Support\Platform\PlatformConfig::logoIcon();
+
+    $cleanHex = ltrim($platformColor, '#');
+    if (strlen($cleanHex) === 3) {
+        $cleanHex = $cleanHex[0].$cleanHex[0].$cleanHex[1].$cleanHex[1].$cleanHex[2].$cleanHex[2];
+    }
+    $platformContrast = '#09090b';
+    if (strlen($cleanHex) === 6 && ctype_xdigit($cleanHex)) {
+        $r = hexdec(substr($cleanHex, 0, 2));
+        $g = hexdec(substr($cleanHex, 2, 2));
+        $b = hexdec(substr($cleanHex, 4, 2));
+        $luminance = (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
+        $platformContrast = $luminance > 0.6 ? '#09090b' : '#ffffff';
+    }
 @endphp
 
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" @style(['--tenant-brand: ' . $platformColor, '--tenant-brand-contrast: ' . $platformContrast])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Invoice Langganan {{ $invoice->number }} — {{ config('app.name', 'BarberOS') }}</title>
+    <title>Invoice Langganan {{ $invoice->number }} — {{ $platformName }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ $platformFaviconUrl }}">
+    @if($platformSvgFaviconUrl)
+        <link rel="icon" type="image/svg+xml" href="{{ $platformSvgFaviconUrl }}">
+    @endif
+    <x-ui.theme-styles :color="$platformColor" />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        @page {
+            size: auto;
+            margin: 0mm !important;
+        }
+        @media print {
+            @page {
+                size: auto;
+                margin: 0mm !important;
+            }
+            html, body {
+                background: #ffffff !important;
+                padding: 12mm 15mm !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+            *, *::before, *::after {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .print\:hidden {
+                display: none !important;
+            }
+            .print\:shadow-none {
+                box-shadow: none !important;
+            }
+            .print\:border-zinc-300 {
+                border-color: #d4d4d8 !important;
+            }
+            .print-logo-box {
+                background-color: var(--tenant-brand) !important;
+                border-color: var(--tenant-brand) !important;
+                color: var(--tenant-brand-contrast) !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-zinc-100 text-zinc-900 antialiased py-8 px-4">
     <div class="max-w-xl mx-auto space-y-4">
@@ -31,7 +95,7 @@
             <button
                 type="button"
                 onclick="window.print()"
-                class="inline-flex items-center gap-1.5 text-xs font-extrabold bg-zinc-950 hover:bg-zinc-800 text-amber-400 px-4 py-2 rounded-xl shadow-xs cursor-pointer transition"
+                class="inline-flex items-center gap-1.5 text-xs font-extrabold bg-amber-500 hover:bg-amber-400 text-zinc-950 px-4 py-2 rounded-xl shadow-xs cursor-pointer transition"
             >
                 <x-ui.icon name="printer" class="w-4 h-4" />
                 <span>Cetak / Simpan PDF</span>
@@ -41,26 +105,33 @@
         <!-- Kartu Tagihan Resmi SaaS -->
         <div class="bg-white rounded-3xl border border-zinc-200/90 shadow-xl overflow-hidden print:shadow-none print:border-zinc-300">
             <!-- Header Brand Pengelola Platform -->
-            <div class="bg-zinc-950 text-white p-6 sm:p-7">
+            <div class="bg-zinc-950 text-white p-6 sm:p-7" style="background-color: #09090b !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
                 <div class="flex items-start justify-between gap-4">
                     <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-2xl bg-amber-500 text-zinc-950 flex items-center justify-center shrink-0 font-black text-xl shadow-md">
-                            <x-ui.icon name="scissors" class="w-6 h-6 text-zinc-950" />
-                        </div>
+                        @if($logoType === 'image' && $logoImageUrl)
+                            <img src="{{ $logoImageUrl }}" alt="{{ $platformName }}" class="w-12 h-12 rounded-2xl object-cover shrink-0 border border-white/20 shadow-md" />
+                        @else
+                            <div
+                                class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 font-black text-xl shadow-md print-logo-box"
+                                style="background-color: var(--tenant-brand) !important; border: 1.5px solid var(--tenant-brand) !important; color: var(--tenant-brand-contrast) !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;"
+                            >
+                                <x-ui.icon name="{{ $logoIcon }}" class="w-6 h-6" style="color: var(--tenant-brand-contrast) !important;" />
+                            </div>
+                        @endif
                         <div>
-                            <h1 class="font-black text-lg tracking-tight">{{ config('app.name', 'BarberOS Platform') }}</h1>
-                            <p class="text-xs text-amber-400 font-semibold tracking-wider uppercase">Faktur Pembayaran Layanan SaaS</p>
+                            <h1 class="font-black text-lg tracking-tight">{{ $platformName }}</h1>
+                            <p class="text-xs font-semibold tracking-wider uppercase" style="color: var(--tenant-brand) !important;">Faktur Pembayaran Layanan SaaS</p>
                         </div>
                     </div>
 
                     <div class="text-right">
                         @if($isPaid)
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
                                 <x-ui.icon name="check" class="w-3 h-3 stroke-[3]" />
                                 <span>LUNAS</span>
                             </span>
                         @else
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase" style="background-color: color-mix(in srgb, var(--tenant-brand) 20%, transparent) !important; color: var(--tenant-brand) !important; border: 1px solid color-mix(in srgb, var(--tenant-brand) 40%, transparent) !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
                                 <span>PENDING</span>
                             </span>
                         @endif
@@ -94,7 +165,7 @@
                         <span class="text-[10px] font-black uppercase tracking-wider text-zinc-400 block mb-1">Status &amp; Periode:</span>
                         <p class="font-bold text-zinc-900">Paket {{ $plan?->name ?? 'Custom' }}</p>
                         <p class="text-zinc-600 font-semibold text-[11px] mt-0.5">
-                            Periode: {{ $invoice->subscription?->starts_at?->translatedFormat('d M Y') ?? '-' }} s/d {{ $invoice->subscription?->ends_at?->translatedFormat('d M Y') ?? '-' }}
+                            Periode: {{ $invoice->period_starts_at?->translatedFormat('d M Y') ?? '-' }} s/d {{ $invoice->period_ends_at?->translatedFormat('d M Y') ?? '-' }}
                         </p>
                         <p class="text-zinc-500 text-[11px] mt-0.5">
                             Batas Jatuh Tempo: <strong class="text-zinc-700">{{ $invoice->due_at?->translatedFormat('d M Y') ?? '-' }}</strong>
@@ -136,7 +207,7 @@
                             <tfoot>
                                 <tr class="bg-zinc-50/80 border-t border-zinc-200 font-black">
                                     <td colspan="2" class="py-3.5 px-4 text-right text-zinc-900 uppercase tracking-wider text-xs">Total Pembayaran</td>
-                                    <td class="py-3.5 px-4 text-right text-base text-amber-600">
+                                    <td class="py-3.5 px-4 text-right text-base font-black" style="color: var(--tenant-brand) !important;">
                                         Rp{{ number_format($invoice->amount, 0, ',', '.') }}
                                     </td>
                                 </tr>
@@ -147,7 +218,7 @@
 
                 <!-- Footer Catatan Pembayaran -->
                 <div class="pt-4 border-t border-zinc-100 text-center text-zinc-400 text-[11px] space-y-1">
-                    <p class="font-bold text-zinc-600">Terima kasih atas kepercayaan Anda menggunakan layanan {{ config('app.name', 'BarberOS') }}.</p>
+                    <p class="font-bold text-zinc-600">Terima kasih atas kepercayaan Anda menggunakan layanan {{ $platformName }}.</p>
                     <p>Faktur ini diterbitkan secara resmi melalui sistem platform terkomputerisasi.</p>
                 </div>
             </div>

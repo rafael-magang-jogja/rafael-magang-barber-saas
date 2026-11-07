@@ -19,10 +19,16 @@ final class PlatformSettingController extends Controller
     {
         $settings = PlatformConfig::all();
         $bankAccounts = SubscriptionInvoice::platformBankAccounts();
+        $promotedProducts = PlatformConfig::promotedProducts();
+        $slideDuration = PlatformConfig::promotedProductsSlideDuration();
+        $promotedWhatsapp = PlatformConfig::promotedProductsWhatsapp();
 
         return view('platform.settings', [
             'settings' => $settings,
             'bankAccounts' => $bankAccounts,
+            'promotedProducts' => $promotedProducts,
+            'slideDuration' => $slideDuration,
+            'promotedWhatsapp' => $promotedWhatsapp,
         ]);
     }
 
@@ -40,7 +46,23 @@ final class PlatformSettingController extends Controller
             'support_phone' => ['nullable', 'string', 'max:30'],
             'default_trial_days' => ['required', 'integer', 'min:1', 'max:90'],
             'announcement_banner' => ['nullable', 'string', 'max:500'],
+            'announcement_type' => ['nullable', 'string', 'in:info,warning,urgent'],
+            'is_announcement_active' => ['nullable', 'boolean'],
             'is_maintenance' => ['nullable', 'boolean'],
+            'promoted_products_slide_seconds' => ['nullable', 'integer', 'min:2', 'max:60'],
+            'promoted_products_whatsapp' => ['nullable', 'string', 'max:30'],
+            'promoted_products' => ['nullable', 'array'],
+            'promoted_products.*.id' => ['nullable', 'string', 'max:50'],
+            'promoted_products.*.name' => ['nullable', 'string', 'max:150'],
+            'promoted_products.*.price' => ['nullable', 'string', 'max:50'],
+            'promoted_products.*.original_price' => ['nullable', 'string', 'max:50'],
+            'promoted_products.*.price_color' => ['nullable', 'string', 'max:50'],
+            'promoted_products.*.image_existing' => ['nullable', 'string', 'max:255'],
+            'promoted_products.*.images_existing' => ['nullable', 'string'],
+            'promoted_products.*.image_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp,svg', 'max:2048'],
+            'promoted_products.*.image_files.*' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp,svg', 'max:2048'],
+            'promoted_products.*.desc' => ['nullable', 'string', 'max:500'],
+            'promoted_products.*.features' => ['nullable', 'string', 'max:500'],
             'bank_accounts' => ['nullable', 'array'],
             'bank_accounts.*.bank' => ['required_with:bank_accounts', 'string', 'max:50'],
             'bank_accounts.*.account_number' => ['required_with:bank_accounts', 'string', 'max:50'],
@@ -69,7 +91,11 @@ final class PlatformSettingController extends Controller
             'support_phone' => $validated['support_phone'] ?? '',
             'default_trial_days' => (int) $validated['default_trial_days'],
             'announcement_banner' => $validated['announcement_banner'] ?? '',
+            'announcement_type' => $validated['announcement_type'] ?? 'info',
+            'is_announcement_active' => (bool) ($request->has('is_announcement_active') ? $request->boolean('is_announcement_active') : false),
             'is_maintenance' => (bool) ($request->has('is_maintenance') ? $request->boolean('is_maintenance') : false),
+            'promoted_products_slide_seconds' => (int) ($validated['promoted_products_slide_seconds'] ?? 5),
+            'promoted_products_whatsapp' => (string) ($validated['promoted_products_whatsapp'] ?? ''),
         ];
 
         // 1. Upload Logo Gambar (jika ada file baru diunggah)
@@ -88,8 +114,16 @@ final class PlatformSettingController extends Controller
             }
         }
 
-        // 2. Upload / Generate Favicon
-        if ($request->hasFile('favicon')) {
+        $existingFaviconPath = PlatformConfig::get('favicon_path');
+
+        // 2. Upload / Generate / Preserve Favicon
+        if ($request->boolean('remove_favicon')) {
+            $settingsMap['favicon_path'] = null;
+            if (! empty($existingFaviconPath) && Storage::disk('public')->exists((string) $existingFaviconPath)) {
+                Storage::disk('public')->delete((string) $existingFaviconPath);
+            }
+            FaviconService::generateFromIcon($logoIcon, $themeColor);
+        } elseif ($request->hasFile('favicon')) {
             $faviconFile = $request->file('favicon');
             if ($faviconFile && $faviconFile->isValid()) {
                 $ext = strtolower($faviconFile->getClientOriginalExtension());
@@ -99,12 +133,15 @@ final class PlatformSettingController extends Controller
                 // Konversi dan simpan ke public/favicons/favicon.ico dan public/favicon.ico
                 FaviconService::generateFromImageFile($faviconFile);
             }
-        } elseif ($logoType === 'icon' && ! $request->hasFile('logo_image')) {
-            // Bersihkan custom favicon_path lama agar selalu menggunakan generated icon
-            $settingsMap['favicon_path'] = null;
-
-            // Generate favicon SVG dan ICO yang sinkron dengan icon dan warna tema
-            FaviconService::generateFromIcon($logoIcon, $themeColor);
+        } else {
+            // Jika sudah ada custom favicon yang pernah diupload dan masih ada di storage, pertahankan!
+            if (! empty($existingFaviconPath) && Storage::disk('public')->exists((string) $existingFaviconPath)) {
+                $settingsMap['favicon_path'] = $existingFaviconPath;
+            } elseif ($logoType === 'icon' && ! $request->hasFile('logo_image')) {
+                // Hanya generate dari icon jika memang belum ada custom favicon
+                $settingsMap['favicon_path'] = null;
+                FaviconService::generateFromIcon($logoIcon, $themeColor);
+            }
         }
 
         // Simpan setiap item setting ke tabel settings
@@ -141,6 +178,91 @@ final class PlatformSettingController extends Controller
                 Setting::query()->withoutGlobalScope('tenant')->updateOrCreate(
                     ['tenant_id' => null, 'key' => 'platform_bank_accounts'],
                     ['value' => json_encode($cleanBanks, JSON_UNESCAPED_UNICODE)]
+                );
+            }
+        }
+
+        // 4. Simpan Konfigurasi Produk Promosi Official Platform
+        if ($request->has('promoted_products')) {
+            $rawProducts = $request->input('promoted_products', []);
+            $cleanProducts = [];
+            if (is_array($rawProducts)) {
+                foreach ($rawProducts as $index => $item) {
+                    $name = trim((string) ($item['name'] ?? ''));
+                    $price = trim((string) ($item['price'] ?? ''));
+                    if ($name === '' || $price === '') {
+                        continue;
+                    }
+
+                    $existingImages = [];
+                    if (! empty($item['images_existing'])) {
+                        $decoded = json_decode((string) $item['images_existing'], true);
+                        if (is_array($decoded)) {
+                            $existingImages = array_values(array_filter($decoded));
+                        }
+                    } elseif (! empty($item['image_existing'])) {
+                        $existingImages = [trim((string) $item['image_existing'])];
+                    }
+
+                    // Cek jika ada unggahan gambar file baru (single atau multiple)
+                    if ($request->hasFile("promoted_products.{$index}.image_files")) {
+                        $uploadedFiles = (array) $request->file("promoted_products.{$index}.image_files");
+                        $newImages = [];
+                        foreach ($uploadedFiles as $fIdx => $pImg) {
+                            if ($pImg && $pImg->isValid()) {
+                                $ext = $pImg->getClientOriginalExtension();
+                                $pFileName = 'product_' . ($index + 1) . '_' . ($fIdx + 1) . '_' . time() . '.' . $ext;
+                                $stored = $pImg->storeAs('platform/products', $pFileName, 'public');
+                                $newImages[] = asset('storage/' . $stored);
+                            }
+                        }
+                        if (! empty($newImages)) {
+                            $existingImages = array_values(array_unique(array_merge($newImages, $existingImages)));
+                        }
+                    } elseif ($request->hasFile("promoted_products.{$index}.image_file")) {
+                        $pImg = $request->file("promoted_products.{$index}.image_file");
+                        if ($pImg && $pImg->isValid()) {
+                            $ext = $pImg->getClientOriginalExtension();
+                            $pFileName = 'product_' . ($index + 1) . '_' . time() . '.' . $ext;
+                            $stored = $pImg->storeAs('platform/products', $pFileName, 'public');
+                            array_unshift($existingImages, asset('storage/' . $stored));
+                        }
+                    }
+
+                    if (empty($existingImages)) {
+                        $existingImages = [asset('images/products/pomade.svg')];
+                    }
+
+                    $mainImage = $existingImages[0];
+
+                    $featuresRaw = $item['features'] ?? [];
+                    if (is_string($featuresRaw)) {
+                        $featuresList = array_values(array_filter(array_map('trim', explode("\n", $featuresRaw))));
+                    } elseif (is_array($featuresRaw)) {
+                        $featuresList = array_values(array_filter(array_map('trim', $featuresRaw)));
+                    } else {
+                        $featuresList = [];
+                    }
+
+                    $cleanProducts[] = [
+                        'id' => trim((string) ($item['id'] ?? ('prod-' . ($index + 1)))),
+                        'name' => $name,
+                        'price' => $price,
+                        'original_price' => trim((string) ($item['original_price'] ?? '')),
+                        'image' => $mainImage,
+                        'images' => $existingImages,
+                        'price_color' => trim((string) ($item['price_color'] ?? 'text-amber-400')),
+                        'desc' => trim((string) ($item['desc'] ?? '')),
+                        'features' => $featuresList,
+                        'is_active' => isset($item['is_active']) ? (bool) $item['is_active'] : true,
+                    ];
+                }
+            }
+
+            if (! empty($cleanProducts)) {
+                Setting::query()->withoutGlobalScope('tenant')->updateOrCreate(
+                    ['tenant_id' => null, 'key' => 'promoted_products_json'],
+                    ['value' => json_encode($cleanProducts, JSON_UNESCAPED_UNICODE)]
                 );
             }
         }

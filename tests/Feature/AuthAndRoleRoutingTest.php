@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 final class AuthAndRoleRoutingTest extends TestCase
@@ -35,6 +36,23 @@ final class AuthAndRoleRoutingTest extends TestCase
         $response->assertRedirect(route('owner.dashboard'));
 
         $this->get('/owner')->assertOk()->assertSee('Dashboard Owner');
+    }
+
+    public function test_user_can_login_with_remember_me(): void
+    {
+        $user = User::query()->where('email', 'owner@barberking.id')->firstOrFail();
+
+        $response = $this->post('/login', [
+            'login' => 'owner@barberking.id',
+            'password' => 'password',
+            'remember' => 'on',
+        ]);
+
+        $response->assertRedirect(route('owner.dashboard'));
+        /** @var \Illuminate\Auth\SessionGuard $guard */
+        $guard = Auth::guard();
+        $response->assertCookie($guard->getRecallerName());
+        $this->assertNotNull($user->fresh()->remember_token);
     }
 
     public function test_barber_cannot_access_owner_or_platform_dashboard(): void

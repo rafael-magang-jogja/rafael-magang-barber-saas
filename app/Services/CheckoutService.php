@@ -47,7 +47,6 @@ final class CheckoutService
             $ticket,
             $method,
             $discountTotal,
-            $tipAmount,
             $cashReceived,
             $reference,
             $idempotencyKey,
@@ -66,9 +65,125 @@ final class CheckoutService
                 }
             }
 
-            $existingForTicket = $this->orderRepository->findPaidOrderByQueueTicketId($lockedTicket->tenant_id, $lockedTicket->id);
+            $existingForTicket = Order::query()
+                ->withoutGlobalScope('tenant')
+                ->where('tenant_id', $lockedTicket->tenant_id)
+                ->where('queue_ticket_id', $lockedTicket->id)
+                ->lockForUpdate()
+                ->first();
 
             if ($existingForTicket !== null) {
+                if ($existingForTicket->payment_status === PaymentStatus::Paid) {
+                    return $existingForTicket->load(['items', 'payments']);
+                }
+
+                // Jika pesanan sudah ada namun belum lunas (unpaid),
+                // dan dipanggil untuk pelunasan ($markAsPaid = true)
+                if ($markAsPaid) {
+                    $subtotal = (int) $lockedTicket->items->sum('price');
+                    $safeDiscount = max(0, min($discountTotal, $subtotal));
+                    $grandTotal = $subtotal - $safeDiscount;
+
+                    $received = $cashReceived ?? $grandTotal;
+                    if ($method === PaymentMethod::Cash && $received < $grandTotal) {
+                        throw new DomainException('Nominal uang tunai yang diterima kurang dari total tagihan.');
+                    }
+                    $changeAmount = max(0, $received - $grandTotal);
+
+                    $activeShift = CashShift::query()
+                        ->withoutGlobalScope('tenant')
+                        ->where('tenant_id', $lockedTicket->tenant_id)
+                        ->where('branch_id', $lockedTicket->branch_id)
+                        ->whereNull('closed_at')
+                        ->first();
+
+                    $existingForTicket->update([
+                        'discount_total' => $safeDiscount,
+                        'tip_amount' => 0,
+                        'grand_total' => $grandTotal,
+                        'paid_total' => $grandTotal,
+                        'payment_status' => PaymentStatus::Paid,
+                        'paid_at' => now(),
+                        'cashier_user_id' => $cashierUserId ?? $existingForTicket->cashier_user_id,
+                        'cash_shift_id' => $activeShift?->id ?? $existingForTicket->cash_shift_id,
+                    ]);
+
+                    if ($lockedTicket->status === QueueStatus::Completed && $lockedTicket->completed_at === null) {
+                        $lockedTicket->update([
+                            'completed_at' => now(),
+                            'version' => $lockedTicket->version + 1,
+                        ]);
+                    }
+
+                    $payment = Payment::query()
+                        ->withoutGlobalScope('tenant')
+                        ->where('order_id', $existingForTicket->id)
+                        ->latest('id')
+                        ->first();
+
+                    if ($payment !== null) {
+                        $payment->update([
+                            'method' => $method,
+                            'amount' => $grandTotal,
+                            'status' => 'completed',
+                            'cash_received' => $method === PaymentMethod::Cash ? $received : null,
+                            'change_amount' => $method === PaymentMethod::Cash ? $changeAmount : null,
+                            'reference' => $reference ?? $payment->reference,
+                            'received_by' => $cashierUserId,
+                        ]);
+                    } else {
+                        Payment::query()
+                            ->withoutGlobalScope('tenant')
+                            ->create([
+                                'tenant_id' => $lockedTicket->tenant_id,
+                                'order_id' => $existingForTicket->id,
+                                'type' => 'charge',
+                                'method' => $method,
+                                'amount' => $grandTotal,
+                                'cash_received' => $method === PaymentMethod::Cash ? $received : null,
+                                'change_amount' => $method === PaymentMethod::Cash ? $changeAmount : null,
+                                'reference' => $reference,
+                                'status' => 'completed',
+                                'received_by' => $cashierUserId,
+                                'idempotency_key' => 'pay-'.$existingForTicket->idempotency_key,
+                            ]);
+                    }
+
+                    if ($activeShift !== null && $method === PaymentMethod::Cash) {
+                        $activeShift->increment('expected_cash', $grandTotal);
+                    }
+
+                    if ($lockedTicket->customer_profile_id !== null) {
+                        $cp = CustomerProfile::query()
+                            ->withoutGlobalScope('tenant')
+                            ->find($lockedTicket->customer_profile_id);
+
+                        if ($cp !== null) {
+                            $cp->update([
+                                'visit_count' => $cp->visit_count + 1,
+                                'total_spent' => $cp->total_spent + $grandTotal,
+                                'last_visit_at' => now(),
+                            ]);
+                        }
+                    }
+
+                    $existingForTicket->load('items');
+                    $this->commissionService->recordOrderCommissions($existingForTicket);
+
+                    $this->auditLogger->log(
+                        action: 'order.paid',
+                        auditable: $existingForTicket,
+                        newValues: [
+                            'number' => $existingForTicket->number,
+                            'grand_total' => $existingForTicket->grand_total,
+                            'method' => $method->value,
+                        ],
+                        userId: $cashierUserId,
+                    );
+
+                    return $existingForTicket->load(['items', 'payments']);
+                }
+
                 return $existingForTicket->load(['items', 'payments']);
             }
 
@@ -76,9 +191,8 @@ final class CheckoutService
                 throw new DomainException('Tiket antrean tidak memiliki item layanan untuk dibayar.');
             }
 
-            if ($lockedTicket->status !== QueueStatus::Completed) {
+            if ($lockedTicket->status === QueueStatus::Completed && $lockedTicket->completed_at === null) {
                 $lockedTicket->update([
-                    'status' => QueueStatus::Completed,
                     'completed_at' => now(),
                     'version' => $lockedTicket->version + 1,
                 ]);
@@ -86,8 +200,7 @@ final class CheckoutService
 
             $subtotal = (int) $lockedTicket->items->sum('price');
             $safeDiscount = max(0, min($discountTotal, $subtotal));
-            $safeTip = max(0, $tipAmount);
-            $grandTotal = ($subtotal - $safeDiscount) + $safeTip;
+            $grandTotal = $subtotal - $safeDiscount;
 
             $received = $cashReceived ?? $grandTotal;
             if ($method === PaymentMethod::Cash && $received < $grandTotal) {
@@ -109,27 +222,41 @@ final class CheckoutService
                 ->whereNull('closed_at')
                 ->first();
 
-            $order = Order::query()
-                ->withoutGlobalScope('tenant')
-                ->create([
-                    'tenant_id' => $lockedTicket->tenant_id,
-                    'branch_id' => $lockedTicket->branch_id,
-                    'queue_ticket_id' => $lockedTicket->id,
-                    'customer_profile_id' => $lockedTicket->customer_profile_id,
-                    'barber_membership_id' => $lockedTicket->barber_membership_id,
-                    'cashier_user_id' => $cashierUserId,
-                    'cash_shift_id' => $activeShift?->id,
-                    'number' => $invoiceNumber,
-                    'subtotal' => $subtotal,
-                    'discount_total' => $safeDiscount,
-                    'tip_amount' => $safeTip,
-                    'grand_total' => $grandTotal,
-                    'paid_total' => $markAsPaid ? $grandTotal : 0,
-                    'refunded_total' => 0,
-                    'payment_status' => $markAsPaid ? PaymentStatus::Paid : PaymentStatus::Unpaid,
-                    'idempotency_key' => $idempotencyKey ?: Str::uuid()->toString(),
-                    'paid_at' => $markAsPaid ? now() : null,
-                ]);
+            try {
+                $order = Order::query()
+                    ->withoutGlobalScope('tenant')
+                    ->create([
+                        'tenant_id' => $lockedTicket->tenant_id,
+                        'branch_id' => $lockedTicket->branch_id,
+                        'queue_ticket_id' => $lockedTicket->id,
+                        'customer_profile_id' => $lockedTicket->customer_profile_id,
+                        'barber_membership_id' => $lockedTicket->barber_membership_id,
+                        'cashier_user_id' => $cashierUserId,
+                        'cash_shift_id' => $activeShift?->id,
+                        'number' => $invoiceNumber,
+                        'subtotal' => $subtotal,
+                        'discount_total' => $safeDiscount,
+                        'tip_amount' => 0,
+                        'grand_total' => $grandTotal,
+                        'paid_total' => $markAsPaid ? $grandTotal : 0,
+                        'refunded_total' => 0,
+                        'payment_status' => $markAsPaid ? PaymentStatus::Paid : PaymentStatus::Unpaid,
+                        'idempotency_key' => $idempotencyKey ?: Str::uuid()->toString(),
+                        'paid_at' => $markAsPaid ? now() : null,
+                    ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                $existingOrder = Order::query()
+                    ->withoutGlobalScope('tenant')
+                    ->where('tenant_id', $lockedTicket->tenant_id)
+                    ->where('queue_ticket_id', $lockedTicket->id)
+                    ->first();
+
+                if ($existingOrder !== null) {
+                    return $existingOrder->load(['items', 'payments']);
+                }
+
+                throw $e;
+            }
 
             foreach ($lockedTicket->items as $ticketItem) {
                 $service = $ticketItem->service_id
@@ -339,6 +466,18 @@ final class CheckoutService
                 ]);
 
             $this->commissionService->reverseOrderCommissions($locked);
+
+            if ($locked->queue_ticket_id !== null) {
+                \App\Models\QueueTicket::query()
+                    ->withoutGlobalScope('tenant')
+                    ->whereKey($locked->queue_ticket_id)
+                    ->update([
+                        'refund_status' => 'completed',
+                        'refunded_at' => now(),
+                        'refunded_by' => $actorUserId,
+                        'refund_notes' => $reason,
+                    ]);
+            }
 
             $this->auditLogger->log(
                 action: 'order.refunded',

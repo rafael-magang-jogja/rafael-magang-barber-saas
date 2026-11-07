@@ -7,10 +7,19 @@
     $tenant = $barberMembership?->tenant;
     $branch = $barberMembership?->branch;
     $workStatus = $barberMembership?->work_status?->value ?? 'active';
+
+    $barberTodayAtt = $barberMembership !== null
+        ? \App\Models\Attendance::query()
+            ->withoutGlobalScope('tenant')
+            ->where('membership_id', $barberMembership->id)
+            ->whereDate('date', now()->format('Y-m-d'))
+            ->first()
+        : null;
+    $barberCheckedIn = $barberTodayAtt !== null && $barberTodayAtt->check_in_at !== null;
 @endphp
 
 <!DOCTYPE html>
-<html lang="id" style="--tenant-brand: {{ $tenant?->brand_color ?? '#D97706' }}">
+<html lang="id" @style(['--tenant-brand: ' . ($tenant?->brand_color ?? '#D97706')])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -31,7 +40,7 @@
     <!-- Frame Full Mobile Mode (Tampilan Mobile App Centered di Desktop, Full di HP) -->
     <div class="w-full max-w-md min-h-screen bg-zinc-100 flex flex-col relative shadow-2xl border-x border-zinc-900/40 pb-20">
         <!-- Header Mobile Topbar Barber -->
-        <header class="bg-zinc-950 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-md border-b border-zinc-800/80">
+        <header class="bg-zinc-950 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-[60] shadow-md border-b border-zinc-800/80">
             <a href="{{ route('barber.profile') }}" class="flex items-center gap-2.5 min-w-0 group hover:opacity-90 transition">
                 <div class="w-8 h-8 rounded-xl bg-amber-500 text-zinc-950 grid place-items-center shrink-0 shadow-sm font-black text-xs group-hover:scale-105 transition">
                     {{ strtoupper(substr($barberMembership?->display_name ?? 'B', 0, 1)) }}
@@ -98,7 +107,7 @@
                     class="relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[10px] font-semibold leading-none transition select-none {{ request()->routeIs('barber.dashboard') ? 'text-amber-400 bg-white/5 font-bold' : 'hover:text-zinc-200' }}"
                 >
                     <span class="relative inline-flex">
-                        <x-ui.icon name="scissors" class="w-4 h-4 {{ request()->routeIs('barber.dashboard') ? 'text-amber-400' : 'text-zinc-400' }}" />
+                        <x-ui.icon name="scissors" class="w-5 h-5 shrink-0 {{ request()->routeIs('barber.dashboard') ? 'text-amber-400' : 'text-zinc-400' }}" />
                     </span>
                     <span class="truncate max-w-full text-center">Antrean</span>
                 </a>
@@ -108,7 +117,7 @@
                     class="relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[10px] font-semibold leading-none transition select-none {{ request()->routeIs('barber.earnings*') ? 'text-amber-400 bg-white/5 font-bold' : 'hover:text-zinc-200' }}"
                 >
                     <span class="relative inline-flex">
-                        <x-ui.icon name="wallet" class="w-4 h-4 {{ request()->routeIs('barber.earnings*') ? 'text-amber-400' : 'text-zinc-400' }}" />
+                        <x-ui.icon name="wallet" class="w-5 h-5 shrink-0 {{ request()->routeIs('barber.earnings*') ? 'text-amber-400' : 'text-zinc-400' }}" />
                     </span>
                     <span class="truncate max-w-full text-center">Penghasilan</span>
                 </a>
@@ -118,7 +127,15 @@
                     class="relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[10px] font-semibold leading-none transition select-none {{ request()->routeIs('barber.attendance') ? 'text-amber-400 bg-white/5 font-bold' : 'hover:text-zinc-200' }}"
                 >
                     <span class="relative inline-flex">
-                        <x-ui.icon name="clock" class="w-4 h-4 {{ request()->routeIs('barber.attendance') ? 'text-amber-400' : 'text-zinc-400' }}" />
+                        <x-ui.icon name="clock" class="w-5 h-5 shrink-0 {{ request()->routeIs('barber.attendance') ? 'text-amber-400' : 'text-zinc-400' }}" />
+                        <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5 shrink-0" title="{{ $barberCheckedIn ? 'Sudah Absen Masuk' : 'Belum Absen Masuk' }}">
+                            @if($barberCheckedIn)
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 ring-2 ring-zinc-950"></span>
+                            @else
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-400 ring-2 ring-zinc-950"></span>
+                            @endif
+                        </span>
                     </span>
                     <span class="truncate max-w-full text-center">Absen</span>
                 </a>
@@ -128,13 +145,15 @@
                     class="relative flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[10px] font-semibold leading-none transition select-none {{ request()->routeIs('barber.profile*') ? 'text-amber-400 bg-white/5 font-bold' : 'hover:text-zinc-200' }}"
                 >
                     <span class="relative inline-flex">
-                        <x-ui.icon name="user" class="w-4 h-4 {{ request()->routeIs('barber.profile*') ? 'text-amber-400' : 'text-zinc-400' }}" />
+                        <x-ui.icon name="user" class="w-5 h-5 shrink-0 {{ request()->routeIs('barber.profile*') ? 'text-amber-400' : 'text-zinc-400' }}" />
                     </span>
                     <span class="truncate max-w-full text-center">Profil</span>
                 </a>
             </div>
         </nav>
     </div>
+    <x-platform-announcement-popup role="barber" />
+
     @livewireScripts
 </body>
 </html>

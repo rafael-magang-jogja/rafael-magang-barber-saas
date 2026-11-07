@@ -10,14 +10,18 @@
             ['value' => 'all', 'label' => 'Semua Status'],
             ['value' => 'present', 'label' => 'Hadir Tepat Waktu'],
             ['value' => 'late', 'label' => 'Terlambat'],
+            ['value' => 'sick', 'label' => 'Sakit'],
             ['value' => 'leave', 'label' => 'Izin / Cuti'],
+            ['value' => 'holiday', 'label' => 'Libur'],
             ['value' => 'absent', 'label' => 'Alpa / Tidak Hadir'],
         ];
 
         $attendanceStatusOptions = [
             ['value' => 'present', 'label' => 'Hadir Tepat Waktu'],
             ['value' => 'late', 'label' => 'Terlambat'],
+            ['value' => 'sick', 'label' => 'Sakit'],
             ['value' => 'leave', 'label' => 'Izin / Cuti'],
+            ['value' => 'holiday', 'label' => 'Libur'],
             ['value' => 'absent', 'label' => 'Alpa / Tanpa Keterangan'],
         ];
 
@@ -134,9 +138,9 @@
             @if($period === 'custom')
                 <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100 text-xs font-semibold">
                     <span class="text-zinc-500 text-xs font-bold">Periode:</span>
-                    <input type="date" name="date_from" value="{{ $dateFrom }}" class="px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-zinc-50 flex-1 sm:flex-initial" />
+                    <input type="date" name="date_from" value="{{ $dateFrom }}" class="px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 flex-1 sm:flex-initial" />
                     <span class="text-zinc-400">s/d</span>
-                    <input type="date" name="date_to" value="{{ $dateTo }}" class="px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-zinc-50 flex-1 sm:flex-initial" />
+                    <input type="date" name="date_to" value="{{ $dateTo }}" class="px-2.5 py-1.5 rounded-xl border border-zinc-200 bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 flex-1 sm:flex-initial" />
                     <button type="submit" class="px-4 py-1.5 rounded-xl bg-zinc-900 text-white font-bold text-xs">Cari</button>
                 </div>
             @endif
@@ -144,7 +148,7 @@
     </div>
 
     <!-- Tabel Rekap & Log Absensi -->
-    <x-ui.card>
+    <x-ui.card data-pagination-container="owner-attendances">
         <x-slot:header>
             <div class="flex flex-wrap items-center justify-between gap-2 w-full">
                 <div>
@@ -158,55 +162,73 @@
             </div>
         </x-slot:header>
 
-        <!-- Desktop Table View -->
+        <!-- Desktop Table View (Responsif dengan horizontal scroll halus di mode Tablet) -->
         <div class="hidden lg:block overflow-x-auto">
-            <table class="w-full text-xs">
-                <thead class="text-zinc-400 text-left border-b border-zinc-100">
-                    <tr>
-                        <th class="py-3 font-bold">Tanggal</th>
-                        <th>Barber</th>
-                        <th>Cabang</th>
-                        <th>Jam Masuk</th>
-                        <th>Jam Pulang</th>
-                        <th>Keterlambatan</th>
-                        <th>Status</th>
-                        <th class="text-right font-bold py-3 pr-2">Aksi</th>
+            <table class="w-full text-xs min-w-[880px] text-left">
+                <thead class="text-zinc-500 border-b border-zinc-100 bg-zinc-50/60">
+                    <tr class="text-[11px] font-bold">
+                        <th class="py-3 px-3.5 whitespace-nowrap">Tanggal</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap">Staf / Barber</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap">Cabang</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap text-center">Jam Masuk</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap text-center">Jam Pulang</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap text-center">Keterlambatan</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap text-center">Status</th>
+                        <th class="py-3 px-3.5 whitespace-nowrap text-right pr-4 font-bold">Aksi</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-100">
+                <tbody class="divide-y divide-zinc-100 font-medium text-zinc-800">
                     @forelse($attendances as $att)
+                        @php
+                            $isExcused = in_array($att->status, ['sick', 'leave', 'holiday', 'absent']);
+                            $staffName = $att->membership?->display_name ?? $att->membership?->user?->name ?? 'Staf';
+                            $roleLabel = $att->membership?->role?->value === 'admin' ? 'Kasir' : ($att->membership?->specialty ?: 'Barber');
+                        @endphp
                         <tr class="hover:bg-zinc-50/60 transition">
-                            <td class="py-3.5 font-bold text-zinc-900">
+                            <td class="py-3 px-3.5 font-bold text-zinc-900 whitespace-nowrap">
                                 <p class="text-xs">{{ $att->date->translatedFormat('d M Y') }}</p>
                                 <p class="text-[10px] text-zinc-400 font-semibold">{{ $att->date->translatedFormat('l') }}</p>
                             </td>
-                            <td class="font-bold text-zinc-900">
-                                <p class="text-xs font-extrabold text-zinc-900">{{ $att->membership?->display_name ?? $att->membership?->user?->name }}</p>
-                                <p class="text-[10px] text-zinc-400 font-normal">{{ $att->membership?->specialty ?: 'Barber' }}</p>
+                            <td class="py-3 px-3.5 whitespace-nowrap">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                        {{ strtoupper(substr($staffName, 0, 2)) }}
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-extrabold text-zinc-900 leading-snug">{{ $staffName }}</p>
+                                        <p class="text-[10px] text-zinc-400 font-normal leading-none mt-0.5">{{ $roleLabel }}</p>
+                                    </div>
+                                </div>
                             </td>
-                            <td class="font-semibold text-zinc-600">
+                            <td class="py-3 px-3.5 font-semibold text-zinc-600 whitespace-nowrap">
                                 <span class="px-2 py-1 rounded-md bg-zinc-100 text-zinc-700 text-[11px] font-bold">
                                     {{ $att->branch?->name ?? 'Cabang Utama' }}
                                 </span>
                             </td>
-                            <td class="num font-bold text-zinc-800">
-                                @if($att->check_in_at)
+                            <td class="py-3 px-3.5 num font-bold text-zinc-800 text-center whitespace-nowrap">
+                                @if($isExcused)
+                                    <span class="text-zinc-400 font-semibold">-</span>
+                                @elseif($att->check_in_at)
                                     <span class="text-zinc-900 font-extrabold">{{ $att->check_in_at->format('H:i') }}</span>
                                     <span class="text-[10px] text-zinc-400 font-normal">WIB</span>
                                 @else
                                     <span class="text-zinc-400 italic">-</span>
                                 @endif
                             </td>
-                            <td class="num font-bold text-zinc-800">
-                                @if($att->check_out_at)
+                            <td class="py-3 px-3.5 num font-bold text-zinc-800 text-center whitespace-nowrap">
+                                @if($isExcused)
+                                    <span class="text-zinc-400 font-semibold">-</span>
+                                @elseif($att->check_out_at)
                                     <span class="text-zinc-900 font-extrabold">{{ $att->check_out_at->format('H:i') }}</span>
                                     <span class="text-[10px] text-zinc-400 font-normal">WIB</span>
                                 @else
                                     <span class="text-zinc-400 italic">-</span>
                                 @endif
                             </td>
-                            <td>
-                                @if($att->late_minutes > 0)
+                            <td class="py-3 px-3.5 text-center whitespace-nowrap">
+                                @if($isExcused)
+                                    <span class="text-zinc-400 font-semibold">-</span>
+                                @elseif($att->late_minutes > 0)
                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/50 num">
                                         <x-ui.icon name="clock" class="w-3 h-3 text-rose-600" />
                                         <span>+{{ $att->late_minutes }} mnt</span>
@@ -215,21 +237,35 @@
                                     <span class="text-emerald-600 font-medium">Tepat Waktu</span>
                                 @endif
                             </td>
-                            <td>
+                            <td class="py-3 px-3.5 text-center whitespace-nowrap">
                                 @if($att->status === 'present')
                                     <span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/50">Hadir</span>
                                 @elseif($att->status === 'late')
                                     <span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/50">Terlambat</span>
                                 @elseif($att->status === 'leave')
-                                    <span class="px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 font-bold text-[11px] border border-sky-200/50">Izin / Cuti</span>
+                                    <span class="px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 font-bold text-[11px] border border-sky-200/50">Cuti</span>
+                                @elseif($att->status === 'sick')
+                                    <span class="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/50">Izin Sakit</span>
+                                @elseif($att->status === 'holiday')
+                                    <span class="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 font-bold text-[11px] border border-purple-200/50">Libur</span>
+                                @elseif($att->status === 'absent')
+                                    <span class="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/50">Alpa</span>
                                 @else
                                     <span class="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600 font-bold text-[11px] border border-zinc-200/50">{{ ucfirst($att->status) }}</span>
                                 @endif
                             </td>
-                            <td class="text-right pr-2">
+                            <td class="py-3 px-3.5 text-right pr-4 whitespace-nowrap">
                                 <button
                                     type="button"
-                                    onclick="openEditAttendanceModal({{ $att->id }}, '{{ addslashes($att->membership?->display_name ?? $att->membership?->user?->name) }}', '{{ $att->date->format('d M Y') }}', '{{ $att->check_in_at ? $att->check_in_at->format('H:i') : '' }}', '{{ $att->check_out_at ? $att->check_out_at->format('H:i') : '' }}', '{{ $att->status }}', {{ $att->late_minutes }}, {{ $att->branch_id }})"
+                                    data-att-id="{{ $att->id }}"
+                                    data-staff-name="{{ $staffName }}"
+                                    data-att-date="{{ $att->date->format('d M Y') }}"
+                                    data-check-in="{{ $att->check_in_at ? $att->check_in_at->format('H:i') : '' }}"
+                                    data-check-out="{{ $att->check_out_at ? $att->check_out_at->format('H:i') : '' }}"
+                                    data-status="{{ $att->status }}"
+                                    data-late="{{ (int) $att->late_minutes }}"
+                                    data-branch-id="{{ $att->branch_id }}"
+                                    onclick="openEditAttendanceModal(Number(this.dataset.attId), this.dataset.staffName, this.dataset.attDate, this.dataset.checkIn, this.dataset.checkOut, this.dataset.status, Number(this.dataset.late), Number(this.dataset.branchId))"
                                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition cursor-pointer"
                                 >
                                     <x-ui.icon name="edit" class="w-3 h-3 text-amber-600" />
@@ -249,19 +285,24 @@
         <!-- Mobile & Tablet Card List View -->
         <div class="divide-y divide-zinc-100 lg:hidden">
             @forelse($attendances as $att)
+                @php
+                    $isExcused = in_array($att->status, ['sick', 'leave', 'holiday', 'absent']);
+                    $staffName = $att->membership?->display_name ?? $att->membership?->user?->name ?? 'Staf';
+                    $roleLabel = $att->membership?->role?->value === 'admin' ? 'Kasir' : ($att->membership?->specialty ?: 'Barber');
+                @endphp
                 <div class="p-3.5 sm:p-4 hover:bg-zinc-50/50 transition">
                     <!-- Top: Avatar, Name, Branch, Status & Tombol Koreksi -->
                     <div class="flex items-center justify-between gap-2.5">
                         <div class="flex items-center gap-2.5 min-w-0">
                             <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
-                                {{ strtoupper(substr($att->membership?->display_name ?? $att->membership?->user?->name ?? 'B', 0, 2)) }}
+                                {{ strtoupper(substr($staffName, 0, 2)) }}
                             </div>
                             <div class="min-w-0">
                                 <p class="text-xs font-bold text-zinc-900 truncate">
-                                    {{ $att->membership?->display_name ?? $att->membership?->user?->name }}
+                                    {{ $staffName }}
                                 </p>
                                 <p class="text-[11px] text-zinc-400 truncate">
-                                    {{ $att->membership?->specialty ?: 'Barber' }} &bull; {{ $att->branch?->name ?? 'Cabang Utama' }}
+                                    {{ $roleLabel }} &bull; {{ $att->branch?->name ?? 'Cabang Utama' }}
                                 </p>
                             </div>
                         </div>
@@ -273,14 +314,28 @@
                             @elseif($att->status === 'late')
                                 <span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/50">Terlambat</span>
                             @elseif($att->status === 'leave')
-                                <span class="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-bold text-[11px] border border-sky-200/50">Izin / Cuti</span>
+                                <span class="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-bold text-[11px] border border-sky-200/50">Cuti</span>
+                            @elseif($att->status === 'sick')
+                                <span class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/50">Izin Sakit</span>
+                            @elseif($att->status === 'holiday')
+                                <span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-bold text-[11px] border border-purple-200/50">Libur</span>
+                            @elseif($att->status === 'absent')
+                                <span class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/50">Alpa</span>
                             @else
                                 <span class="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-bold text-[11px] border border-zinc-200/50">{{ ucfirst($att->status) }}</span>
                             @endif
 
                             <button
                                 type="button"
-                                onclick="openEditAttendanceModal({{ $att->id }}, '{{ addslashes($att->membership?->display_name ?? $att->membership?->user?->name) }}', '{{ $att->date->format('d M Y') }}', '{{ $att->check_in_at ? $att->check_in_at->format('H:i') : '' }}', '{{ $att->check_out_at ? $att->check_out_at->format('H:i') : '' }}', '{{ $att->status }}', {{ $att->late_minutes }}, {{ $att->branch_id }})"
+                                data-att-id="{{ $att->id }}"
+                                data-staff-name="{{ $staffName }}"
+                                data-att-date="{{ $att->date->format('d M Y') }}"
+                                data-check-in="{{ $att->check_in_at ? $att->check_in_at->format('H:i') : '' }}"
+                                data-check-out="{{ $att->check_out_at ? $att->check_out_at->format('H:i') : '' }}"
+                                data-status="{{ $att->status }}"
+                                data-late="{{ (int) $att->late_minutes }}"
+                                data-branch-id="{{ $att->branch_id }}"
+                                onclick="openEditAttendanceModal(Number(this.dataset.attId), this.dataset.staffName, this.dataset.attDate, this.dataset.checkIn, this.dataset.checkOut, this.dataset.status, Number(this.dataset.late), Number(this.dataset.branchId))"
                                 class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[11px] font-bold transition cursor-pointer"
                             >
                                 <x-ui.icon name="edit" class="w-3 h-3 text-amber-600" />
@@ -302,7 +357,9 @@
                         <div class="order-3 sm:order-2">
                             <span class="text-[10px] text-zinc-400 font-semibold block uppercase tracking-wider">Jam Masuk</span>
                             <div class="mt-0.5">
-                                @if($att->check_in_at)
+                                @if($isExcused)
+                                    <span class="text-zinc-400 font-semibold text-xs">-</span>
+                                @elseif($att->check_in_at)
                                     <span class="font-extrabold text-zinc-900 num text-xs">{{ $att->check_in_at->format('H:i') }}</span>
                                     <span class="text-[10px] text-zinc-400 font-normal">WIB</span>
                                 @else
@@ -315,7 +372,9 @@
                         <div class="order-4 sm:order-3">
                             <span class="text-[10px] text-zinc-400 font-semibold block uppercase tracking-wider">Jam Pulang</span>
                             <div class="mt-0.5">
-                                @if($att->check_out_at)
+                                @if($isExcused)
+                                    <span class="text-zinc-400 font-semibold text-xs">-</span>
+                                @elseif($att->check_out_at)
                                     <span class="font-extrabold text-zinc-900 num text-xs">{{ $att->check_out_at->format('H:i') }}</span>
                                     <span class="text-[10px] text-zinc-400 font-normal">WIB</span>
                                 @else
@@ -328,7 +387,9 @@
                         <div class="order-2 sm:order-4">
                             <span class="text-[10px] text-zinc-400 font-semibold block uppercase tracking-wider">Keterlambatan</span>
                             <div class="mt-0.5">
-                                @if($att->late_minutes > 0)
+                                @if($isExcused)
+                                    <span class="text-zinc-400 font-semibold text-xs">-</span>
+                                @elseif($att->late_minutes > 0)
                                     <span class="inline-flex items-center gap-1 text-rose-700 font-bold text-xs num">
                                         <x-ui.icon name="clock" class="w-3 h-3 text-rose-500 shrink-0" />
                                         <span>+{{ $att->late_minutes }} mnt</span>

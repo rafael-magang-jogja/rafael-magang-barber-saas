@@ -38,6 +38,19 @@ final class Attendance extends Model
         ];
     }
 
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->status) {
+            'present' => 'Hadir',
+            'late' => 'Terlambat',
+            'sick' => 'Sakit',
+            'leave' => 'Izin / Cuti',
+            'holiday' => 'Libur',
+            'absent' => 'Alpa',
+            default => ucfirst((string) $this->status),
+        };
+    }
+
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);

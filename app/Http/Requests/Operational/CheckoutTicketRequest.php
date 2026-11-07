@@ -22,9 +22,6 @@ final class CheckoutTicketRequest extends FormRequest
             'discount_total' => $this->filled('discount_total')
                 ? (int) str_replace(['.', ',', ' '], '', (string) $this->input('discount_total'))
                 : 0,
-            'tip_amount' => $this->filled('tip_amount')
-                ? (int) str_replace(['.', ',', ' '], '', (string) $this->input('tip_amount'))
-                : 0,
             'cash_received' => $this->filled('cash_received')
                 ? (int) str_replace(['.', ',', ' '], '', (string) $this->input('cash_received'))
                 : null,
@@ -39,7 +36,6 @@ final class CheckoutTicketRequest extends FormRequest
         return [
             'method' => ['required', Rule::enum(PaymentMethod::class)],
             'discount_total' => ['nullable', 'integer', 'min:0'],
-            'tip_amount' => ['nullable', 'integer', 'min:0'],
             'cash_received' => ['nullable', 'integer', 'min:0'],
             'reference' => ['nullable', 'string', 'max:100'],
             'idempotency_key' => ['nullable', 'string', 'max:80'],

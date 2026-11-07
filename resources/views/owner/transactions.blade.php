@@ -95,7 +95,7 @@
                                     <div class="w-full max-w-[28px] sm:max-w-[36px] flex flex-col items-center justify-end h-full">
                                         <div
                                             class="w-full rounded-t-md transition-all duration-300 {{ $day['is_peak'] ? 'bg-amber-500 shadow-xs shadow-amber-500/30' : ($day['is_today'] ? 'bg-zinc-800' : 'bg-zinc-200 group-hover:bg-amber-400/80') }}"
-                                            style="height: {{ max(6, $day['percentage']) }}%;"
+                                            @style(['height: ' . max(6, $day['percentage']) . '%'])
                                         ></div>
                                     </div>
 
@@ -147,12 +147,12 @@
                         <div class="h-3 w-full bg-zinc-100 rounded-full overflow-hidden flex shadow-inner">
                             <div
                                 class="bg-emerald-500 h-full transition-all duration-500"
-                                style="width: {{ $analytics['payment_methods']['qris_pct'] }}%;"
+                                @style(['width: ' . $analytics['payment_methods']['qris_pct'] . '%'])
                                 title="QRIS / Non-Tunai: {{ $analytics['payment_methods']['qris_pct'] }}%"
                             ></div>
                             <div
                                 class="bg-zinc-700 h-full transition-all duration-500"
-                                style="width: {{ $analytics['payment_methods']['cash_pct'] }}%;"
+                                @style(['width: ' . $analytics['payment_methods']['cash_pct'] . '%'])
                                 title="Tunai: {{ $analytics['payment_methods']['cash_pct'] }}%"
                             ></div>
                         </div>
@@ -369,7 +369,7 @@
     </div>
 
     <!-- Tabel & Daftar Transaksi (Responsif: Card di Mobile/Tablet, Tabel di Desktop) -->
-    <x-ui.card class="overflow-hidden">
+    <x-ui.card class="overflow-hidden" data-pagination-container="owner-transactions">
         <x-slot:header>
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 w-full">
                 <h2 class="font-bold text-sm sm:text-base flex items-center gap-2 text-zinc-900">
@@ -474,7 +474,10 @@
                                     @if($order->payment_status->value === 'paid')
                                         <button
                                             type="button"
-                                            onclick="openRefundModal('{{ route('owner.orders.refund', $order) }}', '{{ $order->number }}', 'Rp{{ number_format($order->grand_total, 0, ',', '.') }}')"
+                                            data-refund-url="{{ route('owner.orders.refund', $order) }}"
+                                            data-order-number="{{ $order->number }}"
+                                            data-order-total="Rp{{ number_format($order->grand_total, 0, ',', '.') }}"
+                                            onclick="openRefundModal(this.dataset.refundUrl, this.dataset.orderNumber, this.dataset.orderTotal)"
                                             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold shadow-xs transition cursor-pointer"
                                             title="Refund Invoice"
                                         >
@@ -594,7 +597,10 @@
                             <div class="mt-2.5 pt-2 border-t border-zinc-100/70 flex items-center justify-end">
                                 <button
                                     type="button"
-                                    onclick="openRefundModal('{{ route('owner.orders.refund', $order) }}', '{{ $order->number }}', 'Rp{{ number_format($order->grand_total, 0, ',', '.') }}')"
+                                    data-refund-url="{{ route('owner.orders.refund', $order) }}"
+                                    data-order-number="{{ $order->number }}"
+                                    data-order-total="Rp{{ number_format($order->grand_total, 0, ',', '.') }}"
+                                    onclick="openRefundModal(this.dataset.refundUrl, this.dataset.orderNumber, this.dataset.orderTotal)"
                                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 text-xs font-bold border border-rose-200/70 shadow-2xs transition cursor-pointer"
                                     title="Ajukan Refund untuk transaksi ini"
                                 >

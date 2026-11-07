@@ -19,6 +19,7 @@ final class OwnerFullFeaturesTest extends TestCase
 
     protected User $owner;
     protected Tenant $tenant;
+    protected \App\Models\Branch $branch;
 
     protected function setUp(): void
     {
@@ -27,6 +28,7 @@ final class OwnerFullFeaturesTest extends TestCase
 
         $this->owner = User::query()->where('email', 'owner@barberking.id')->firstOrFail();
         $this->tenant = Tenant::query()->where('slug', 'barber-king')->firstOrFail();
+        $this->branch = \App\Models\Branch::query()->where('tenant_id', $this->tenant->id)->firstOrFail();
     }
 
     public function test_owner_sidebar_renders_all_eleven_menus(): void
@@ -64,10 +66,11 @@ final class OwnerFullFeaturesTest extends TestCase
         $response->assertOk();
         $response->assertSee('Gaji & Komisi');
 
-        // Test generate payroll baru
+        // Test generate payroll baru (periode bulan kemarin agar pelunasan gaji pokok diizinkan)
+        $lastMonth = now()->subMonth();
         $generateResponse = $this->actingAs($this->owner)->post(route('owner.payroll.generate'), [
-            'period_start' => now()->startOfMonth()->toDateString(),
-            'period_end' => now()->endOfMonth()->toDateString(),
+            'period_start' => $lastMonth->copy()->startOfMonth()->toDateString(),
+            'period_end' => $lastMonth->copy()->endOfMonth()->toDateString(),
         ]);
 
         $generateResponse->assertSessionHas('status');
@@ -246,14 +249,16 @@ final class OwnerFullFeaturesTest extends TestCase
         $response->assertSessionHas('status');
         $this->tenant->refresh();
         $this->assertNotNull($this->tenant->logo_path);
-        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($this->tenant->logo_path);
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $publicDisk */
+        $publicDisk = \Illuminate\Support\Facades\Storage::disk('public');
+        $publicDisk->assertExists($this->tenant->logo_path);
 
         // Test tampil di halaman pengaturan owner & portal customer publik
         $settingsResponse = $this->actingAs($this->owner)->get(route('owner.settings'));
         $settingsResponse->assertOk();
         $settingsResponse->assertSee($this->tenant->logo_url);
 
-        auth()->logout();
+        \Illuminate\Support\Facades\Auth::logout();
         $portalResponse = $this->get(route('customer.portal', $this->tenant->slug));
         $portalResponse->assertOk();
         $portalResponse->assertSee($this->tenant->logo_url);
@@ -360,11 +365,11 @@ final class OwnerFullFeaturesTest extends TestCase
         $response->assertSee('Gaji per Karyawan & Kenaikan Gaji');
         $response->assertSee('Total Beban Gaji Pokok');
 
-        $barber = $this->tenant->memberships()->where('role', 'barber')->firstOrFail();
+        $staff = $this->tenant->memberships()->where('role', 'admin')->firstOrFail();
         $scheme = \App\Models\SalaryScheme::query()->where('tenant_id', $this->tenant->id)->firstOrFail();
 
-        // Test update gaji khusus / kenaikan gaji per orangan
-        $updateSalaryResponse = $this->actingAs($this->owner)->post(route('owner.payroll.update-staff-salary', $barber), [
+        // Test update gaji khusus / kenaikan gaji pokok staf kasir / admin
+        $updateSalaryResponse = $this->actingAs($this->owner)->post(route('owner.payroll.update-staff-salary', $staff), [
             'salary_scheme_id' => $scheme->id,
             'salary_mode' => 'custom',
             'custom_base_salary' => 3_200_000,
@@ -372,8 +377,8 @@ final class OwnerFullFeaturesTest extends TestCase
         ]);
 
         $updateSalaryResponse->assertSessionHas('status');
-        $this->assertEquals(3_200_000, $barber->fresh()->custom_base_salary);
-        $this->assertEquals(3_200_000, $barber->fresh()->effective_base_salary);
+        $this->assertEquals(3_200_000, $staff->fresh()->custom_base_salary);
+        $this->assertEquals(3_200_000, $staff->fresh()->effective_base_salary);
     }
 
     public function test_owner_can_view_and_manage_job_salary_schemes_and_service_commission_rules(): void
@@ -415,7 +420,7 @@ final class OwnerFullFeaturesTest extends TestCase
         $this->assertEquals(12_500, $serviceRule->value);
     }
 
-    public function test_owner_can_view_reports_with_pro_operational_analytics_and_audit_logs(): void
+    public function test_owner_can_view_reports_with_pro_operational_analytics(): void
     {
         $response = $this->actingAs($this->owner)->get(route('owner.reports'));
 
@@ -427,12 +432,12 @@ final class OwnerFullFeaturesTest extends TestCase
         $response->assertSee('Layanan Terlaris');
         $response->assertSee('Performa & Kinerja Barber');
         $response->assertSee('Riwayat Transaksi & Refund');
-        $response->assertSee('Audit Log Keamanan (50 Aktivitas Terakhir)');
+        $response->assertDontSee('Audit Log Keamanan');
 
-        // Test export CSV laporan
+        // Test export Excel laporan
         $exportResponse = $this->actingAs($this->owner)->get(route('owner.reports.export'));
         $exportResponse->assertOk();
-        $exportResponse->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $this->assertStringContainsString('spreadsheetml', (string) $exportResponse->headers->get('content-type'));
     }
 
     public function test_owner_can_view_transactions_with_pro_financial_charts(): void
@@ -513,7 +518,7 @@ final class OwnerFullFeaturesTest extends TestCase
 
     public function test_owner_can_cancel_subscription_invoice_before_approval(): void
     {
-        $plan = \App\Models\Plan::query()->where('code', 'pro')->firstOrFail();
+        $plan = \App\Models\Plan::query()->where('code', 'business')->firstOrFail();
 
         $this->actingAs($this->owner)->post(route('owner.subscription.upgrade'), [
             'plan_id' => $plan->id,
@@ -582,7 +587,7 @@ final class OwnerFullFeaturesTest extends TestCase
 
     public function test_superadmin_can_reject_subscription_invoice_with_reason(): void
     {
-        $plan = \App\Models\Plan::query()->where('code', 'pro')->firstOrFail();
+        $plan = \App\Models\Plan::query()->where('code', 'business')->firstOrFail();
 
         $this->actingAs($this->owner)->post(route('owner.subscription.upgrade'), [
             'plan_id' => $plan->id,
@@ -623,7 +628,6 @@ final class OwnerFullFeaturesTest extends TestCase
             'brand_color' => '#10B981',
             'settings' => [
                 'white_label' => true,
-                'custom_subdomain' => 'barberking-vip',
             ],
         ]);
 
@@ -670,6 +674,89 @@ final class OwnerFullFeaturesTest extends TestCase
         $this->assertFalse($this->tenant->hasFeature('white_label'));
         $this->assertFalse($this->tenant->hasFeature('custom_logo'));
         $this->assertFalse($this->tenant->settings['white_label'] ?? false);
-        $this->assertNull($this->tenant->settings['custom_subdomain'] ?? null);
+    }
+
+    public function test_owner_attendances_paginates_at_10_items(): void
+    {
+        $barber = \App\Models\Membership::query()
+            ->where('tenant_id', $this->tenant->id)
+            ->where('role', \App\Enums\Role::Barber)
+            ->first();
+
+        // Buat 15 attendance di tanggal berbeda (karena unique per membership_id & date)
+        for ($i = 1; $i <= 15; $i++) {
+            \App\Models\Attendance::create([
+                'tenant_id' => $this->tenant->id,
+                'branch_id' => $this->branch->id,
+                'membership_id' => $barber->id,
+                'date' => now()->subDays($i)->toDateString(),
+                'status' => 'present',
+                'check_in_at' => now()->subDays($i)->setTime(9, 0),
+                'check_out_at' => now()->subDays($i)->setTime(18, 0),
+            ]);
+        }
+
+        $response = $this->actingAs($this->owner)->get(route('owner.attendances', [
+            'period' => 'custom',
+            'date_from' => now()->subDays(20)->toDateString(),
+            'date_to' => now()->toDateString(),
+        ]));
+        $response->assertOk();
+        $attendances = $response->viewData('attendances');
+        $this->assertEquals(10, $attendances->perPage());
+        $this->assertGreaterThanOrEqual(15, $attendances->total());
+        $this->assertTrue($attendances->hasPages());
+
+        $page2Response = $this->actingAs($this->owner)->get(route('owner.attendances', [
+            'period' => 'custom',
+            'date_from' => now()->subDays(20)->toDateString(),
+            'date_to' => now()->toDateString(),
+            'page' => 2,
+        ]));
+        $page2Response->assertOk();
+    }
+
+    public function test_owner_payroll_hides_pay_buttons_when_locked_or_zero(): void
+    {
+        $payroll = \App\Models\Payroll::create([
+            'tenant_id' => $this->tenant->id,
+            'branch_id' => $this->branch->id,
+            'period_start' => now()->startOfMonth(),
+            'period_end' => now()->endOfMonth(),
+            'status' => \App\Enums\PayrollStatus::Approved,
+            'total_amount' => 0,
+        ]);
+
+        $barber = \App\Models\Membership::query()
+            ->where('tenant_id', $this->tenant->id)
+            ->first();
+
+        // 1 staf tetap dengan gaji ditahan (Rp0)
+        \App\Models\PayrollItem::create([
+            'tenant_id' => $this->tenant->id,
+            'payroll_id' => $payroll->id,
+            'membership_id' => $barber->id,
+            'scheme_snapshot' => ['scheme' => 'fixed'],
+            'base_salary' => 0,
+            'commission_total' => 0,
+            'bonus_total' => 0,
+            'deduction_total' => 0,
+            'net_total' => 0,
+            'payment_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->owner)->get(route('owner.payroll', ['payroll_id' => $payroll->id]));
+        $response->assertOk();
+
+        // Tombol Terkunci dan tombol Bayar tidak boleh muncul untuk net_total 0 / terkunci
+        $response->assertDontSee('Terkunci (H-3)');
+        $response->assertDontSee('Pelunasan Terkunci (H-3 Akhir Bulan)');
+        $response->assertDontSee('Bayar Gaji Ini');
+        $response->assertDontSee('Setujui Payroll (Approve)');
+
+        // Modal generate payroll memiliki pilihan 1 bulan: Kemarin, Sekarang, dan Besok
+        $response->assertSee('Bulan Kemarin');
+        $response->assertSee('Bulan Ini (Sekarang)');
+        $response->assertSee('Bulan Depan (Besok)');
     }
 }

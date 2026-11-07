@@ -41,14 +41,14 @@ final class RoleDashboardController extends Controller
         return view('dashboards.cashier', $this->dashboardQueryService->getCashierBoardData($request->user()?->id, $selectedDate));
     }
 
-    public function cashierWalkIn(): View
+    public function cashierWalkIn(Request $request): View
     {
-        return view('dashboards.cashier', $this->dashboardQueryService->getCashierWalkInData());
+        return view('dashboards.cashier', $this->dashboardQueryService->getCashierWalkInData($request->user()?->id));
     }
 
-    public function cashierBookings(): View
+    public function cashierBookings(Request $request): View
     {
-        return view('dashboards.cashier', $this->dashboardQueryService->getCashierBookingsData());
+        return view('dashboards.cashier', $this->dashboardQueryService->getCashierBookingsData($request->user()?->id));
     }
 
     public function cashierChairs(): RedirectResponse
@@ -56,9 +56,102 @@ final class RoleDashboardController extends Controller
         return redirect()->route('cashier.dashboard');
     }
 
-    public function cashierAttendance(Request $request): View
+    public function cashierAttendance(Request $request): View|RedirectResponse
     {
-        return view('dashboards.cashier-attendance', $this->dashboardQueryService->getCashierAttendanceData($request->user()->id));
+        $data = $this->dashboardQueryService->getCashierAttendanceData(
+            userId: $request->user()->id,
+            period: (string) $request->input('period', 'today'),
+            dateFrom: $request->input('date_from'),
+            dateTo: $request->input('date_to'),
+            status: (string) $request->input('status', 'all'),
+            barberId: $request->filled('barber_id') ? $request->integer('barber_id') : null,
+        );
+
+        if ($request->has('page') && $data['recentAttendances']->currentPage() > $data['recentAttendances']->lastPage() && $data['recentAttendances']->lastPage() > 0) {
+            return redirect()->route('cashier.attendance', $request->except('page'));
+        }
+
+        return view('dashboards.cashier-attendance', $data);
+    }
+
+    public function cashierEarnings(Request $request): View
+    {
+        return view('dashboards.cashier-earnings', $this->dashboardQueryService->getCashierEarningsData(
+            userId: $request->user()?->id,
+            period: (string) $request->input('period', 'this_month'),
+            dateFrom: $request->input('date_from'),
+            dateTo: $request->input('date_to'),
+        ));
+    }
+
+    public function cashierProfile(Request $request): View
+    {
+        return view('dashboards.cashier-profile', $this->dashboardQueryService->getCashierProfileData($request->user()?->id));
+    }
+
+    public function editCashierProfile(Request $request): View
+    {
+        return view('dashboards.cashier-profile-edit', $this->dashboardQueryService->getCashierProfileData($request->user()?->id));
+    }
+
+    public function updateCashierProfile(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $membership = \App\Models\Membership::query()
+            ->withoutGlobalScope('tenant')
+            ->where('user_id', $user?->id)
+            ->first();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'display_name' => ['required', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'email' => ['required', 'email', 'max:150', 'unique:users,email,' . $user?->id],
+        ], [
+            'name.required' => 'Nama lengkap kasir wajib diisi.',
+            'display_name.required' => 'Nama panggilan kasir / display wajib diisi.',
+            'email.required' => 'Email login kasir wajib diisi.',
+            'email.email' => 'Format email tidak valid.',
+            'email.unique' => 'Email sudah digunakan oleh akun lain.',
+        ]);
+
+        $user->update([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'] ?? null,
+        ]);
+
+        if ($membership !== null) {
+            $membership->update([
+                'display_name' => $validated['display_name'],
+            ]);
+        }
+
+        return redirect()->route('cashier.profile')
+            ->with('status', 'Informasi profil kasir berhasil diperbarui.')
+            ->with('success', 'Informasi profil kasir berhasil diperbarui.');
+    }
+
+    public function updateCashierPassword(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ], [
+            'current_password.required' => 'Kata sandi saat ini wajib diisi.',
+            'current_password.current_password' => 'Kata sandi saat ini salah.',
+            'password.required' => 'Kata sandi baru wajib diisi.',
+            'password.min' => 'Kata sandi baru minimal 6 karakter.',
+            'password.confirmed' => 'Konfirmasi kata sandi baru tidak cocok.',
+        ]);
+
+        $request->user()->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        return redirect()->route('cashier.profile')
+            ->with('status', 'Kata sandi kasir berhasil diperbarui.')
+            ->with('success', 'Kata sandi kasir berhasil diperbarui.');
     }
 
     public function barber(Request $request): View
@@ -149,19 +242,41 @@ final class RoleDashboardController extends Controller
         return back()->with('status', 'Kata sandi berhasil diperbarui.');
     }
 
-    public function customerPortal(Request $request, string $tenantSlug): View
+    public function customerPortal(Request $request, string $tenantSlug): View|RedirectResponse
     {
-        return view('dashboards.customer', $this->dashboardQueryService->getCustomerPortalData(
+        $data = $this->dashboardQueryService->getCustomerPortalData(
             tenantSlug: $tenantSlug,
             ticketNumber: $request->query('ticket'),
             userId: $request->user()?->id,
             branchCodeOrId: $request->query('branch') ?: $request->query('branch_id'),
-        ));
+        );
+
+        /** @var \App\Models\Tenant|null $tenant */
+        $tenant = $data['tenant'] ?? null;
+
+        if ($tenant !== null && $request->hasSession()) {
+            $request->session()->put('scanned_customer_tenant_id', $tenant->id);
+            $request->session()->put('scanned_customer_tenant_slug', $tenant->slug);
+        }
+
+        return view('dashboards.customer', $data);
     }
 
-    public function tvDisplay(string $tenantSlug, string $branchCode): View
+    public function tvDisplay(string $tenantSlug, string $branchCode): View|RedirectResponse
     {
-        return view('dashboards.tv', $this->dashboardQueryService->getTvDisplayData($tenantSlug, $branchCode));
+        $data = $this->dashboardQueryService->getTvDisplayData($tenantSlug, $branchCode);
+
+        return view('dashboards.tv', $data);
+    }
+
+    public function tvDisplaySubdomain(Request $request, string $branchCode): View|RedirectResponse
+    {
+        $tenant = app(\App\Support\Tenancy\CurrentTenant::class)->get();
+        if ($tenant === null) {
+            abort(404, 'Layar TV antrean tidak ditemukan.');
+        }
+
+        return redirect()->route('display.queue', [$tenant->slug, $branchCode]);
     }
 
     public function showInvoice(string $orderNumber): View

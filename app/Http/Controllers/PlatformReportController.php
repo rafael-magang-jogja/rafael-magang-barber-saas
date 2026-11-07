@@ -18,10 +18,16 @@ final class PlatformReportController extends Controller
 {
     public function index(): View
     {
-        $totalTenants = Tenant::query()->count();
-        $activeTenants = Tenant::query()->where('status', TenantStatus::Active)->count();
-        $trialTenants = Tenant::query()->where('status', TenantStatus::Trial)->count();
-        $suspendedTenants = Tenant::query()->where('status', TenantStatus::Suspended)->count();
+        $statusCounts = Tenant::query()
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->all();
+
+        $activeTenants = (int) ($statusCounts[TenantStatus::Active->value] ?? 0);
+        $trialTenants = (int) ($statusCounts[TenantStatus::Trial->value] ?? 0);
+        $suspendedTenants = (int) ($statusCounts[TenantStatus::Suspended->value] ?? 0);
+        $totalTenants = (int) array_sum($statusCounts);
 
         $totalBranches = Branch::query()->withoutGlobalScope('tenant')->count();
 

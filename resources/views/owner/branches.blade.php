@@ -91,7 +91,7 @@
                                 @if($isLocked)
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-300">
                                         <x-ui.icon name="lock" class="w-3 h-3 text-rose-600" />
-                                        <span>Terkunci (Melebihi Kuota {{ $planName }})</span>
+                                        <span>Terkunci</span>
                                     </span>
                                 @else
                                     <x-ui.badge :status="$branch->is_active ? 'active' : 'cancelled'" />
@@ -101,9 +101,7 @@
                             @if($isLocked)
                                 <div class="p-2 sm:p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2 mt-1">
                                     <x-ui.icon name="alert-triangle" class="w-4 h-4 text-rose-600 shrink-0" />
-                                    <span class="leading-relaxed">
-                                        Dikunci karena melebihi kuota <strong>Paket {{ $planName }} (Maks. {{ $maxBranches }} Cabang)</strong>. Akses kasir &amp; TV dinonaktifkan.
-                                    </span>
+                                    <span>Melebihi batas kuota Paket {{ $planName }} (maks. {{ $maxBranches }} cabang).</span>
                                 </div>
                             @endif
 
@@ -144,7 +142,7 @@
                             @else
                                 <!-- Tombol Layar TV jika aktif -->
                                 <a
-                                    href="{{ route('display.queue', [$tenantSlug, $branch->code]) }}"
+                                    href="{{ $tenant ? $tenant->tvDisplayUrl($branch->code) : route('display.queue', [$tenantSlug, $branch->code]) }}"
                                     target="_blank"
                                     class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition"
                                 >

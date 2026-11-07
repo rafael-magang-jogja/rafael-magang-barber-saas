@@ -115,8 +115,8 @@
 >
     @if($label)
         @php
-            $isRequired = $attributes->has('required') || str_ends_with(trim((string) $label), '*');
-            $cleanLabel = rtrim(trim((string) $label), " *");
+            $isRequired = $attributes->has('required') || str_contains((string) $label, '*');
+            $cleanLabel = trim(str_replace('*', '', (string) $label));
         @endphp
         <label class="block text-xs font-semibold text-zinc-700 mb-1.5">
             {{ $cleanLabel }}@if($isRequired)<span class="text-rose-500 font-bold ml-0.5">*</span>@endif
@@ -146,7 +146,7 @@
                 <span
                     data-select-color-swatch
                     class="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0 shadow-2xs"
-                    style="background-color: {{ $selectedOption['color'] }}"
+                    @style(['background-color: ' . $selectedOption['color']])
                 ></span>
             @else
                 <span
@@ -233,7 +233,7 @@
                         @if(!empty($item['color']))
                             <span
                                 class="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0 shadow-2xs"
-                                style="background-color: {{ $item['color'] }}"
+                                @style(['background-color: ' . $item['color']])
                             ></span>
                         @endif
                         <span class="min-w-0 flex-1">

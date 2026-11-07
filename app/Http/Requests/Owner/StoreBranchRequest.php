@@ -31,7 +31,7 @@ final class StoreBranchRequest extends FormRequest
                 Rule::unique('branches', 'code')->where('tenant_id', $tenantId),
             ],
             'address' => ['required', 'string', 'max:255'],
-            'maps_url' => ['nullable', 'string', 'max:500'],
+            'maps_url' => ['required', 'string', 'max:500'],
             'phone' => ['required', 'string', 'max:30'],
             'late_tolerance_minutes' => ['required', 'integer', 'min:0', 'max:120'],
         ];
@@ -48,6 +48,7 @@ final class StoreBranchRequest extends FormRequest
             'code.unique' => 'Kode cabang ini sudah digunakan di cabang lain.',
             'phone.required' => 'Nomor telepon cabang wajib diisi.',
             'address.required' => 'Alamat lengkap cabang wajib diisi.',
+            'maps_url.required' => 'Link Google Maps cabang wajib diisi.',
             'late_tolerance_minutes.required' => 'Toleransi telat booking wajib diisi.',
         ];
     }

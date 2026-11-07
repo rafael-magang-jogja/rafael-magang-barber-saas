@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Book - Panduan Pengguna Lengkap BarberOS Platform</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        :root {
+            --primary: #d97706;
+            --primary-dark: #b45309;
+            --primary-light: #fef3c7;
+            --dark: #09090b;
+            --zinc-900: #18181b;
+            --zinc-800: #27272a;
+            --zinc-700: #3f3f46;
+            --zinc-600: #52525b;
+            --zinc-400: #a1a1aa;
+            --zinc-200: #e4e4e7;
+            --zinc-100: #f4f4f5;
+            --zinc-50: #fafafa;
+            --emerald: #059669;
+            --emerald-light: #ecfdf5;
+            --rose: #e11d48;
+            --rose-light: #fff1f2;
+            --blue: #2563eb;
+            --blue-light: #eff6ff;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #18181b;
+            background-color: #f4f4f5;
+            line-height: 1.6;
+            font-size: 13px;
+        }
+
+        .no-print-bar {
+            background: #09090b;
+            color: white;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-print {
+            background: #f59e0b;
+            color: #09090b;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 12px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+        .btn-print:hover {
+            background: #d97706;
+            color: white;
+        }
+
+        .document-container {
+            max-width: 920px;
+            margin: 30px auto;
+            background: white;
+            padding: 60px 65px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+            border-radius: 16px;
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 18mm 15mm 18mm 15mm;
+        }
+
+        @media print {
+            body { background: white; color: black; }
+            .no-print-bar { display: none !important; }
+            .document-container { max-width: 100%; margin: 0; padding: 0; box-shadow: none; border-radius: 0; }
+            .page-break { page-break-before: always; }
+            .avoid-break { page-break-inside: avoid; }
+        }
+
+        h1, h2, h3, h4 { color: #09090b; font-weight: 800; }
+        h1 { font-size: 26px; }
+        h2 { font-size: 18px; margin-top: 36px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid var(--zinc-100); display: flex; align-items: center; gap: 8px; }
+        h3 { font-size: 14px; margin-top: 22px; margin-bottom: 8px; color: #18181b; }
+        h4 { font-size: 12.5px; margin-top: 14px; margin-bottom: 4px; color: #27272a; }
+        p { margin-bottom: 10px; color: #3f3f46; }
+        ul, ol { margin-left: 20px; margin-bottom: 12px; color: #3f3f46; }
+        li { margin-bottom: 4px; }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-amber { background: var(--primary-light); color: var(--primary-dark); }
+        .badge-emerald { background: var(--emerald-light); color: var(--emerald); }
+        .badge-rose { background: var(--rose-light); color: var(--rose); }
+        .badge-blue { background: var(--blue-light); color: var(--blue); }
+
+        .callout {
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin: 14px 0;
+            border-left: 4px solid;
+            font-size: 12px;
+        }
+        .callout-amber { background: #fffbeb; border-left-color: #f59e0b; color: #92400e; }
+        .callout-emerald { background: #ecfdf5; border-left-color: #10b981; color: #065f46; }
+        .callout-blue { background: #eff6ff; border-left-color: #3b82f6; color: #1e40af; }
+
+        /* UI Mockup Frame untuk Screenshot */
+        .mockup-frame {
+            background: #fafafa;
+            border: 1px solid #e4e4e7;
+            border-radius: 14px;
+            overflow: hidden;
+            margin: 16px 0;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+        }
+        .mockup-header {
+            background: #f4f4f5;
+            padding: 8px 14px;
+            border-bottom: 1px solid #e4e4e7;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mockup-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #d4d4d8;
+            display: inline-block;
+        }
+        .mockup-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #71717a;
+            margin-left: 6px;
+        }
+        .mockup-body {
+            padding: 16px;
+            text-align: center;
+        }
+        .mockup-placeholder {
+            border: 2px dashed #d4d4d8;
+            border-radius: 10px;
+            padding: 20px;
+            color: #71717a;
+            font-size: 11.5px;
+            background: white;
+            line-height: 1.5;
+        }
+
+        .step-list { list-style: none; margin: 12px 0; padding-left: 0; }
+        .step-item { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+        .step-num {
+            width: 24px;
+            height: 24px;
+            background: #09090b;
+            color: #f59e0b;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-weight: 800;
+            font-size: 11px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .step-text { flex: 1; }
+        .step-text strong { color: #09090b; display: block; margin-bottom: 2px; }
+
+        /* Cover Page */
+        .cover-page {
+            min-height: 840px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px 0 20px 0;
+            page-break-after: always;
+        }
+        .cover-top { border-top: 6px solid #f59e0b; padding-top: 30px; }
+        .cover-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: #09090b;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 16px;
+            margin-bottom: 35px;
+        }
+
+        .toc-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+        .toc-table td {
+            padding: 8px 10px;
+            border-bottom: 1px dotted #e4e4e7;
+        }
+        .toc-table tr:hover td {
+            background-color: #fafafa;
+        }
+        .toc-role {
+            font-weight: 800;
+            color: #09090b;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="no-print-bar">
+        <div><strong>BarberOS Platform</strong> &mdash; Buku Panduan Pengguna Lengkap (Full User Manual Book)</div>
+        <button class="btn-print" onclick="window.print()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            <span>Cetak / Simpan sebagai PDF (Ctrl + P)</span>
+        </button>
+    </div>
+
+    <div class="document-container">
+
+        <!-- ==================== COVER MANUAL BOOK ==================== -->
+        <div class="cover-page">
+            <div class="cover-top">
+                <div class="cover-logo">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>
+                    <span>BARBEROS OPERATING SYSTEM</span>
+                </div>
+                <h1 style="font-size: 32px; line-height: 1.25; margin-bottom: 12px;">BUKU PANDUAN PENGGUNA LENGKAP<br><span style="color: #f59e0b;">(FULL SYSTEM MANUAL BOOK)</span></h1>
+                <p style="font-size: 15px; color: #71717a; max-width: 650px;">Dokumentasi Prosedur Operasional Standar (SOP) &amp; Panduan Antarmuka Seluruh Fitur BarberOS Multi-Tenant SaaS.</p>
+                <div style="margin-top: 14px; display: flex; gap: 8px;">
+                    <span class="badge badge-amber" style="font-size: 11px; padding: 6px 12px;">Edisi Multi-Role 2026</span>
+                    <span class="badge badge-emerald" style="font-size: 11px; padding: 6px 12px;">5 Peran Lengkap</span>
+                    <span class="badge badge-blue" style="font-size: 11px; padding: 6px 12px;">100% Fitur Terliput</span>
+                </div>
+            </div>
+
+            <div>
+                <h3 style="margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #71717a;">Daftar Isi Modul Panduan:</h3>
+                <table class="toc-table">
+                    <tr>
+                        <td class="toc-role">MODUL 1</td>
+                        <td><strong>Superadmin Platform</strong> &mdash; Kelola Barbershop, Verifikasi Langganan SaaS, Escrow Payout, Penarikan Saldo Customer, Pengumuman, &amp; Konfigurasi Global.</td>
+                    </tr>
+                    <tr>
+                        <td class="toc-role">MODUL 2</td>
+                        <td><strong>Owner Barbershop</strong> &mdash; Dashboard, POS &amp; Antrean, Staf, Presensi QR, Shift Kerja, Cuti, Payroll &amp; Komisi, Cabang, Layanan, Stok Warna, CRM, Laporan &amp; QRIS.</td>
+                    </tr>
+                    <tr>
+                        <td class="toc-role">MODUL 3</td>
+                        <td><strong>Kasir (Cashier)</strong> &mdash; Papan Antrean, Walk-In, Panggilan Suara Otomatis, Check-In Booking, Checkout POS Kasir, Cetak Struk, Presensi QR, &amp; Monitor Kursi.</td>
+                    </tr>
+                    <tr>
+                        <td class="toc-role">MODUL 4</td>
+                        <td><strong>Kapster / Barber</strong> &mdash; Dashboard Kursi Antrean Pribadi, Status Kerja (Ready/Break), Rekap Komisi Harian, Riwayat Layanan, Review, &amp; Presensi Staf.</td>
+                    </tr>
+                    <tr>
+                        <td class="toc-role">MODUL 5</td>
+                        <td><strong>Customer (Pelanggan)</strong> &mdash; Booking Jadwal Online, Scan QRIS, Tiket Digital, Batal Booking &amp; Refund Otomatis, Saldo Dompet Akun, Tarik Tunai Bebas Admin, &amp; Ulasan.</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div style="background: #fafafa; border: 1px solid #e4e4e7; border-radius: 14px; padding: 16px;">
+                <p style="font-size: 11.5px; color: #71717a; margin-bottom: 0;"><strong>Catatan Implementasi:</strong> Seluruh modul dilengkapi dengan referensi URL halaman rute, visual mockup frame untuk peletakan screenshot aktual, serta langkah operasional klik per klik.</p>
+            </div>
+        </div>
+
+        <!-- ==================== MODUL 1: SUPERADMIN ==================== -->
+        <div class="page-break"></div>
+
+        <h2>MODUL 1: Panduan Superadmin Platform SaaS</h2>
+        <p>Superadmin memegang kendali tertinggi atas platform SaaS multi-tenant, mengelola tenant barbershop, verifikasi invoice langganan, settlement dana escrow, dan monitoring transaksi lintas outlet.</p>
+
+        <h3>1.1. Dashboard Utama Platform (`/platform`)</h3>
+        <p>Menampilkan metrik bisnis global secara real-time: Total GMV transaksi seluruh barbershop, total tenant aktif, total customer terdaftar, dan notifikasi permohonan yang membutuhkan tindakan segera.</p>
+
+        <h3>1.2. Manajemen Tenant Barbershop (`/platform/tenants`)</h3>
+        <div class="mockup-frame avoid-break">
+            <div class="mockup-header">
+                <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                <span class="mockup-title">Menu Superadmin: /platform/tenants (Daftar &amp; Kontrol Tenant Barbershop)</span>
+            </div>
+            <div class="mockup-body">
+                <div class="mockup-placeholder">
+                    <strong>Tampilan Layar Manajemen Tenant Barbershop</strong><br>
+                    <span>Tabel daftar outlet terdaftar, status langganan (Trial, Active, Suspended), tombol aksi Reset Password Owner, Suspend/Aktifkan Tenant, dan Edit Detail Barbershop.</span>
+                </div>
+            </div>
+        </div>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Pendaftaran Tenant Baru:</strong> Klik tombol <em>+ Tambah Barbershop</em>. Masukkan nama brand, subdomain slug unik (misal: <span class="font-mono">gentleman</span>), nama owner, email, dan nomor WhatsApp.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Reset Password Akun Owner:</strong> Jika owner lupa kredensial login, klik icon kunci pada baris tenant untuk men-generate sandi baru instan.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    <strong>Suspend / Nonaktifkan Tenant:</strong> Jika barbershop menunggak atau melanggar TOS, klik tombol toggle status menjadi <em>Suspended</em>. Akses sistem owner dan kasir akan otomatis terkunci.
+                </div>
+            </li>
+        </ol>
+
+        <h3>1.3. Paket Langganan &amp; Verifikasi Tagihan SaaS (`/platform/plans` &amp; `/platform/subscriptions`)</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Konfigurasi Paket Harga:</strong> Buat skema harga (misal: Starter Rp99.000/bln, Pro Rp249.000/bln) dengan pembatasan kuota maksimal cabang dan maksimal barber aktif.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Verifikasi Pembayaran Langganan Owner:</strong> Saat Owner mengunggah bukti transfer bank untuk paket langganan mereka, buka menu <em>Tagihan Langganan</em> (`/platform/subscriptions`), periksa foto bukti transfer, lalu klik <strong>Konfirmasi Pembayaran</strong>. Masa aktif langganan owner otomatis diperpanjang.
+                </div>
+            </li>
+        </ol>
+
+        <h3>1.4. Pencairan Dana Escrow Booking ke Owner Barbershop (`/platform/payouts`)</h3>
+        <p>Setiap pembayaran reservasi booking online via QRIS platform ditampung di rekening escrow platform. Menu ini digunakan untuk menyalurkan hak omzet barbershop yang layanannya telah selesai.</p>
+        <ul class="avoid-break">
+            <li>Buka tab <em>Pencairan Owner</em>. Periksa daftar barbershop dengan status saldo siap dicairkan (*settled*).</li>
+            <li>Lakukan transfer manual dari rekening bank platform ke nomor rekening owner yang terdaftar.</li>
+            <li>Klik tombol <strong>ACC Pencairan</strong> dan unggah nomor referensi/resi transfer. Status saldo owner berubah menjadi telah dicairkan (*paid*).</li>
+        </ul>
+
+        <h3>1.5. Verifikasi &amp; Persetujuan Penarikan Saldo Customer (`/platform/withdrawals`)</h3>
+        <div class="mockup-frame avoid-break">
+            <div class="mockup-header">
+                <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                <span class="mockup-title">Menu Superadmin: /platform/withdrawals (Penarikan Dana Refund Customer)</span>
+            </div>
+            <div class="mockup-body">
+                <div class="mockup-placeholder">
+                    <strong>Tampilan Layar Menu Penarikan Customer</strong><br>
+                    <span>Tabel dengan tombol Salin Rekening 1-klik, tab status reaktif tanpa reload, dan tombol aksi Centang Hijau Solid (ACC) &amp; Silang Merah (Tolak).</span>
+                </div>
+            </div>
+        </div>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Salin Nomor Rekening / E-Wallet:</strong> Klik tombol <em>Salin</em> pada kolom rekening tujuan penerima (DANA, GoPay, OVO, BCA, dll).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Transfer Dana Manual Bebas Biaya Admin:</strong> Buka m-banking/e-wallet lalu kirim nominal uang utuh kepada customer.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    <strong>ACC Transfer (Centang Hijau Solid):</strong> Unggah bukti transfer (opsional) lalu tekan <em>ACC &amp; Selesaikan Transfer</em>. Saldo dompet customer resmi didebit.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-text">
+                    <strong>Tolak Permohonan (Silang Merah Solid):</strong> Jika data rekening tidak valid, klik tombol tolak dan berikan alasan. Saldo customer tetap utuh.
+                </div>
+            </li>
+        </ol>
+
+        <h3>1.6. Monitoring Transaksi, Pengumuman Broadcast, &amp; Laporan Global</h3>
+        <ul class="avoid-break">
+            <li><strong>Laporan &amp; Ekspor CSV (`/platform/transactions` &amp; `/platform/reports`):</strong> Unduh rekap transaksi finansial multi-tenant dalam format Excel/CSV untuk audit berkala.</li>
+            <li><strong>Siaran Pengumuman (`/platform/announcements`):</strong> Buat pesan pengumuman penting (misal: jadwal maintenance server atau promo update fitur) yang otomatis muncul sebagai banner pop-up di dashboard seluruh Owner dan Kasir.</li>
+        </ul>
+
+        <!-- ==================== MODUL 2: OWNER ==================== -->
+        <div class="page-break"></div>
+
+        <h2>MODUL 2: Panduan Owner Barbershop</h2>
+        <p>Owner memiliki akses penuh untuk mengatur operasional outlet, manajemen staf, absensi presensi QR, penggajian &amp; komisi, hingga monitoring laporan keuangan.</p>
+
+        <h3>2.1. Manajemen Cabang / Outlet (`/owner/branches`)</h3>
+        <p>Kelola banyak cabang dalam satu akun login. Tambahkan nama outlet, alamat lengkap, kontak telepon, koordinat Google Maps untuk radius presensi, dan jam buka-tutup cabang.</p>
+
+        <h3>2.2. Manajemen Staf &amp; Hak Akses (`/owner/staff`)</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Tambah Karyawan Baru:</strong> Masukkan nama karyawan, alamat email login, password awal, nomor WhatsApp, serta pilih peran (<strong>Kasir / Admin</strong> atau <strong>Barber / Kapster</strong>).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Penugasan Cabang:</strong> Tentukan cabang tempat karyawan ditugaskan agar mereka hanya dapat mengakses antrean dan kasir di outlet terkait.
+                </div>
+            </li>
+        </ol>
+
+        <h3>2.3. Sistem Presensi QR, Shift Kerja, &amp; Cuti Karyawan</h3>
+        <div class="mockup-frame avoid-break">
+            <div class="mockup-header">
+                <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                <span class="mockup-title">Menu Owner: /owner/attendances &amp; /owner/schedule-settings</span>
+            </div>
+            <div class="mockup-body">
+                <div class="mockup-placeholder">
+                    <strong>Layar Pengaturan Jadwal, Toleransi Absen &amp; Barcode QR Cabang</strong><br>
+                    <span>Pengaturan jam masuk, toleransi keterlambatan (menit), tombol Cetak / Regenerasi Token QR Cabang untuk ditempel di meja kasir.</span>
+                </div>
+            </div>
+        </div>
+        <ul class="avoid-break">
+            <li><strong>Jadwal Shift Kerja (`/owner/schedules`):</strong> Buat pola jam kerja staf (Shift Pagi: 09.00 - 16.00, Shift Malam: 14.00 - 21.00) dan tetapkan jadwal harian per karyawan.</li>
+            <li><strong>Pengajuan &amp; Izin Libur / Cuti (`/owner/time-offs`):</strong> Tinjau permohonan izin atau sakit dari kasir/barber. Klik tombol <em>Setujui</em> atau <em>Tolak</em>. Staf yang disetujui cuti otomatis tidak dapat dipilih dalam antrean booking hari itu.</li>
+            <li><strong>Scanner QR Absen Karyawan (`/owner/attendances/scanner`):</strong> Owner dapat menggunakan kamera perangkat untuk memindai kartu QR presensi staf secara langsung.</li>
+            <li><strong>Pengaturan Toleransi &amp; QR Dinamis (`/owner/schedule-settings`):</strong> Atur batas toleransi terlambat (contoh: 15 menit). Cetak QR Code unik cabang untuk ditempel di meja kasir agar staf melakukan presensi mandiri lewat HP.</li>
+        </ul>
+
+        <h3>2.4. Rekap Payroll, Komisi Layanan, &amp; Cetak Slip Gaji</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Standar Skema Gaji &amp; Komisi (`/owner/payroll/rules`):</strong> Tentukan besaran persentase komisi bagi hasil untuk kapster (misal: 30% dari biaya potong rambut, 40% dari cat warna rambut).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Gaji Pokok &amp; Tunjangan Staf (`/owner/payroll/staff`):</strong> Atur nominal gaji pokok bulanan, tunjangan harian, atau uang makan untuk masing-masing karyawan.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    <strong>Generate Payroll Otomatis (`/owner/payroll`):</strong> Di akhir periode/bulan, klik tombol <em>Hitung Payroll Periode Ini</em>. Sistem secara otomatis menghitung: Total Kehadiran + Gaji Pokok + Akumulasi Komisi Layanan &minus; Potongan Denda Keterlambatan.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-text">
+                    <strong>Persetujuan &amp; Cetak Slip Gaji:</strong> Klik <em>Approve</em>, tandai sudah dibayar (*Mark Paid*), lalu unduh Slip Gaji PDF resmi untuk diserahkan ke karyawan.
+                </div>
+            </li>
+        </ol>
+
+        <h3>2.5. Manajemen Layanan, Harga Dinamis, &amp; Stok Produk Warna</h3>
+        <ul class="avoid-break">
+            <li><strong>Daftar Layanan &amp; Harga (`/owner/services`):</strong> Masukkan nama menu perawatan (Haircut Fade, Hair Spa, Shaving, Coloring), estimasi durasi pengerjaan (menit), dan harga dasar. Dapat disesuaikan harga khusus per cabang jika diperlukan.</li>
+            <li><strong>Setting Warna &amp; Stok Cat Rambut (`/owner/colors`):</strong> Kelola katalog formula pewarnaan rambut (Bleaching Level 9, Ash Grey, Chocolate Brown), merk produk, nomor seri, dan sisa stok tube. Kasir dapat mencatat pemakaian saat checkout pangkas rambut.</li>
+        </ul>
+
+        <h3>2.6. CRM Pelanggan &amp; Laporan Kinerja Bisnis</h3>
+        <ul class="avoid-break">
+            <li><strong>Customer Relationship Management (`/owner/customers`):</strong> Database nomor HP, email, total kunjungan pangkas, dan catatan preferensi model rambut langganan.</li>
+            <li><strong>Laporan Keuangan &amp; Analytics (`/owner/reports`):</strong> Grafik omzet harian/bulanan, performa barber terlaris, ekspor CSV, serta moderasi ulasan dan rating kepuasan pelanggan (bisa membalas review customer langsung).</li>
+            <li><strong>Refund Transaksi Walk-in:</strong> Kasir/owner dapat melakukan refund untuk transaksi tunai langsung di tempat jika terjadi pembatalan sebelum layanan dimulai.</li>
+        </ul>
+
+        <h3>2.7. Rekening Bank, Unggah QRIS, &amp; Langganan SaaS</h3>
+        <ul class="avoid-break">
+            <li><strong>Pengaturan Barbershop &amp; QRIS (`/owner/settings`):</strong> Masukkan nama bank, nomor rekening penerima, dan unggah foto stiker barcode QRIS outlet Anda pada kotak dropzone interaktif agar pelanggan dapat langsung men-scan kode dari HP.</li>
+            <li><strong>Saldo Booking Escrow (`/owner/payouts`):</strong> Pantau saldo dari reservasi online yang telah terselesaikan dan cek riwayat pencairan dari Superadmin.</li>
+            <li><strong>Langganan SaaS Barbershop (`/owner/subscription`):</strong> Perpanjang atau tingkatkan paket langganan BarberOS (Starter / Pro), lihat riwayat invoice, dan unggah bukti pembayaran.</li>
+        </ul>
+
+        <!-- ==================== MODUL 3: KASIR ==================== -->
+        <div class="page-break"></div>
+
+        <h2>MODUL 3: Panduan Kasir &amp; Staf Front-Office</h2>
+        <p>Kasir bertanggung jawab melayani tamu walk-in, memanggil antrean suara otomatis, melakukan check-in reservasi, serta memproses pembayaran di POS kasir.</p>
+
+        <div class="mockup-frame avoid-break">
+            <div class="mockup-header">
+                <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                <span class="mockup-title">Menu Kasir: /cashier (Papan Antrean Real-time &amp; POS Kasir)</span>
+            </div>
+            <div class="mockup-body">
+                <div class="mockup-placeholder">
+                    <strong>Tampilan Layar Papan Antrean &amp; POS Kasir</strong><br>
+                    <span>Daftar kursi pangkas aktif, tombol pemanggilan suara text-to-speech, tab booking hari ini, dan formulir pendaftaran tamu walk-in baru.</span>
+                </div>
+            </div>
+        </div>
+
+        <h3>3.1. Prosedur Melayani Pelanggan Walk-In (Datang Langsung)</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Input Antrean Baru:</strong> Klik tombol <strong>+ Antrean Baru</strong>. Masukkan nama pelanggan dan nomor telepon.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Pilih Layanan &amp; Kapster:</strong> Pilih jenis paket potong rambut, dan pilih barber yang tersedia (atau pilih <em>"Barber Bebas / Siapa Saja"</em>).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    <strong>Cetak / Terbitkan Tiket:</strong> Klik <em>Simpan Tiket</em>. Tiket antrean dengan kode unik (misal: A-005) otomatis terbit dan masuk ke antrean ruang tunggu.
+                </div>
+            </li>
+        </ol>
+
+        <h3>3.2. Pemanggilan Suara &amp; Kontrol Tiket Antrean</h3>
+        <ul class="avoid-break">
+            <li><strong>Panggil Antrean (Voice Call):</strong> Klik tombol <strong>Panggil</strong>. Komputer kasir secara otomatis mengeluarkan suara audio: <em>"Nomor antrean A-005 silakan menuju kursi 2"</em> dan layar TV ruang tunggu akan berkedip.</li>
+            <li><strong>Panggil Ulang (Recall):</strong> Jika pelanggan belum merespons, klik icon panggil ulang.</li>
+            <li><strong>Lewati / Tunda (Skip):</strong> Jika pelanggan sedang keluar sebentar, klik tombol <em>Lewati</em> untuk melayani antrean berikutnya terlebih dahulu.</li>
+        </ul>
+
+        <h3>3.3. Check-In Tamu Booking Online</h3>
+        <p>Saat tamu yang telah melakukan reservasi online tiba di outlet:</p>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    Buka tab <strong>Booking Hari Ini</strong> pada papan kasir.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    Cari nama atau kode tiket reservasi (misal: <span class="font-mono">BK-SDR-8921</span>).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    Klik tombol <strong>Check-In</strong>. Status berubah menjadi aktif dan nama pelanggan langsung diarahkan ke kursi barber yang dipesan.
+                </div>
+            </li>
+        </ol>
+
+        <h3>3.4. Proses Checkout Kasir &amp; Cetak Struk POS</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    Setelah layanan potong rambut selesai, klik tombol <strong>Checkout / Bayar</strong> pada nomor antrean terkait.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    Tambahkan produk tambahan (pomade, hair tonic, atau biaya cat rambut) jika ada.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    Pilih metode pembayaran:
+                    <ul>
+                        <li><strong>Tunai:</strong> Masukkan uang tunai yang diterima, sistem otomatis menghitung kembalian uang.</li>
+                        <li><strong>QRIS Kasir:</strong> Tunjukkan barcode QRIS statis outlet kepada pelanggan untuk discan via e-wallet.</li>
+                    </ul>
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-text">
+                    Klik <strong>Selesaikan Transaksi</strong>. Klik <em>Cetak Struk</em> untuk mencetak nota kasir thermal ukuran 58mm / 80mm.
+                </div>
+            </li>
+        </ol>
+
+        <!-- ==================== MODUL 4: BARBER ==================== -->
+        <div class="page-break"></div>
+
+        <h2>MODUL 4: Panduan Kapster / Barber</h2>
+        <p>Aplikasi khusus barber didesain responsif untuk layar HP atau tablet di dekat meja kerja kursi potong.</p>
+
+        <div class="mockup-frame avoid-break">
+            <div class="mockup-header">
+                <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                <span class="mockup-title">Menu Barber: /barber (Workspace Kursi &amp; Komisi Kapster)</span>
+            </div>
+            <div class="mockup-body">
+                <div class="mockup-placeholder">
+                    <strong>Tampilan Layar Kerja Barber di HP / Tablet</strong><br>
+                    <span>Status ketersediaan kursi (Tersedia, Memotong, Istirahat), kartu antrean pelanggan yang sedang dilayani, rekap pendapatan komisi hari ini.</span>
+                </div>
+            </div>
+        </div>
+
+        <h3>4.1. Mengatur Status Kerja (Work Status)</h3>
+        <ul class="avoid-break">
+            <li><strong>Siap Melayani (Ready):</strong> Aktifkan toggle status menjadi hijau saat Anda berada di kursi siap menerima giliran pelanggan pangkas.</li>
+            <li><strong>Sedang Melayani (On Service):</strong> Saat mulai memotong rambut, sistem otomatis menandai Anda sedang sibuk melayani tamu.</li>
+            <li><strong>Istirahat (Break / Off):</strong> Saat jam makan siang atau istirahat, ubah status menjadi merah agar kasir atau sistem booking online tidak memasukkan antrean baru ke giliran Anda.</li>
+        </ul>
+
+        <h3>4.2. Melayani Antrean &amp; Selesai Pangkas</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    Lihat detail pelanggan yang duduk di kursi Anda (nama, permintaan model rambut, dan layanan).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    Jika selesai mencukur, klik tombol <strong>Selesai Pangkas</strong>. Notifikasi otomatis dikirim ke layar kasir untuk proses pembayaran checkout.
+                </div>
+            </li>
+        </ol>
+
+        <h3>4.3. Rekap Komisi &amp; Presensi Staf (`/barber/earnings` &amp; `/barber/attendance`)</h3>
+        <ul class="avoid-break">
+            <li><strong>Pantau Komisi Harian:</strong> Barber dapat memantau secara transparan total pelanggan yang telah dipangkas hari ini beserta akumulasi rupiah komisi yang diperoleh.</li>
+            <li><strong>Presensi Masuk &amp; Pulang:</strong> Buka menu presensi, arahkan kamera ke barcode QR Cabang di meja kasir untuk Clock-In pagi dan Clock-Out sore.</li>
+            <li><strong>Pengajuan Cuti / Izin:</strong> Isi form pengajuan izin libur langsung dari HP dengan melampirkan tanggal dan keterangan izin.</li>
+        </ul>
+
+        <!-- ==================== MODUL 5: CUSTOMER ==================== -->
+        <div class="page-break"></div>
+
+        <h2>MODUL 5: Panduan Pelanggan (Customer)</h2>
+        <p>Customer dapat menikmati kemudahan reservasi tanpa antre, pelacakan antrean real-time dari HP, pembatalan instan dengan garansi saldo dompet, dan tarik tunai bebas biaya admin.</p>
+
+        <div class="mockup-frame avoid-break">
+            <div class="mockup-header">
+                <span class="mockup-dot"></span><span class="mockup-dot"></span><span class="mockup-dot"></span>
+                <span class="mockup-title">Portal Customer: /customer &amp; /b/{tenant} (Reservasi &amp; Dompet Refund)</span>
+            </div>
+            <div class="mockup-body">
+                <div class="mockup-placeholder">
+                    <strong>Tampilan Layar Portal Pelanggan di Smartphone</strong><br>
+                    <span>Formulir booking slot jam, scan QRIS instan, tiket digital dinamis, kartu Saldo Dompet Refund, dan tombol pengajuan Tarik Dana ke Rekening / E-Wallet.</span>
+                </div>
+            </div>
+        </div>
+
+        <h3>5.1. Reservasi Booking Jadwal Online</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    <strong>Buka Portal Barbershop:</strong> Akses link website barbershop pilihan Anda (misal: <span class="font-mono">domain.com/b/gentleman</span>).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    <strong>Pilih Layanan &amp; Barber:</strong> Pilih cabang terdekat, jenis perawatan rambut, dan kapster favorit Anda.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    <strong>Pilih Tanggal &amp; Jam Kedatangan:</strong> Pilih slot waktu yang masih tersedia (berwarna hijau).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-text">
+                    <strong>Pembayaran Instan:</strong> Selesaikan pembayaran via scan QRIS dari BCA Mobile, Livin, DANA, GoPay, OVO, atau ShopeePay. Tiket reservasi digital otomatis terbit.
+                </div>
+            </li>
+        </ol>
+
+        <h3>5.2. Pembatalan Reservasi &amp; Pengembalian Dana Otomatis</h3>
+        <div class="callout callout-emerald avoid-break">
+            <strong>Garansi Refund Instan 100%:</strong> Jika Anda memiliki urusan mendadak dan membatalkan reservasi pangkas sebelum batas waktu layanan, uang pendaftaran Anda 100% langsung kembali detik itu juga ke <strong>Saldo Dompet Akun</strong> tanpa potongan biaya apapun.
+        </div>
+        <ul class="avoid-break">
+            <li>Buka menu <strong>Riwayat Booking</strong> &rarr; pilih tiket booking aktif.</li>
+            <li>Klik tombol merah <strong>Batalkan Reservasi</strong> dan konfirmasi pembatalan.</li>
+            <li>Dana otomatis masuk ke Saldo Dompet Anda seketika.</li>
+        </ul>
+
+        <h3>5.3. Menggunakan Saldo Dompet untuk Booking Ulang</h3>
+        <p>Saat hendak melakukan reservasi jadwal baru:</p>
+        <ul class="avoid-break">
+            <li>Di langkah pembayaran terakhir, centang kotak <strong>"Gunakan Saldo Dompet (RpXX.XXX)"</strong>.</li>
+            <li>Jika saldo mencukupi, tagihan booking langsung lunas 100% tanpa perlu scan barcode atau transfer perbankan ulang.</li>
+        </ul>
+
+        <h3>5.4. Pengajuan Penarikan Tunai Saldo ke Rekening / E-Wallet (Withdrawal)</h3>
+        <ol class="step-list avoid-break">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                    Masuk ke menu <strong>Profil Akun</strong> (`/customer/profile`).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                    Pada kartu Saldo Dompet, klik tombol kuning <strong>Tarik Dana</strong>.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-text">
+                    Ketik nominal penarikan yang diinginkan (minimal Rp10.000).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-text">
+                    Pilih bank tujuan (BCA, Mandiri, BRI, BNI) atau e-wallet (DANA, GoPay, OVO, ShopeePay).
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">5</div>
+                <div class="step-text">
+                    Masukkan nomor rekening atau nomor HP e-wallet dan nama pemilik rekening dengan benar.
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">6</div>
+                <div class="step-text">
+                    Klik <strong>Ajukan Penarikan Dana</strong>. Tim Superadmin akan memverifikasi dan mentransfer dana utuh tanpa potongan biaya admin ke rekening Anda dalam 1x24 jam. Anda dapat memantau status transfer pada tabel <em>Riwayat Pengajuan Tarik Dana</em>.
+                </div>
+            </li>
+        </ol>
+
+        <!-- ==================== PENUTUP ==================== -->
+        <div class="page-break"></div>
+
+        <h2>SOP &amp; Protokol Penyelesaian Masalah (Troubleshooting)</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 11.5px;">
+            <thead>
+                <tr style="background: #09090b; color: white;">
+                    <th style="padding: 10px; text-align: left; border-radius: 8px 0 0 0;">Kendala Teknis</th>
+                    <th style="padding: 10px; text-align: left;">Penyebab</th>
+                    <th style="padding: 10px; text-align: left; border-radius: 0 8px 0 0;">Solusi Operasional</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid #e4e4e7;">
+                    <td style="padding: 10px; font-weight: bold;">Audio Panggilan Kasir Tidak Bersuara</td>
+                    <td style="padding: 10px;">Browser memblokir autoplay audio otomatis atau speaker mati.</td>
+                    <td style="padding: 10px;">Klik sembarang tombol di layar kasir satu kali untuk memberi izin browser, dan pastikan volume speaker komputer kasir aktif.</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e4e4e7;">
+                    <td style="padding: 10px; font-weight: bold;">Karyawan Gagal Scan QR Presensi</td>
+                    <td style="padding: 10px;">Kamera HP buram atau izin lokasi GPS belum diaktifkan.</td>
+                    <td style="padding: 10px;">Bersihkan lensa kamera dan izinkan akses lokasi (GPS) pada browser HP saat memindai barcode cabang.</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e4e4e7;">
+                    <td style="padding: 10px; font-weight: bold;">Saldo Penarikan Customer Ditolak</td>
+                    <td style="padding: 10px;">Nomor rekening atau nama penerima di bank/e-wallet tidak cocok.</td>
+                    <td style="padding: 10px;">Superadmin memberikan alasan penolakan. Saldo kembali utuh dan customer dapat mengajukan ulang dengan nomor rekening yang valid.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 40px; text-align: center; color: #a1a1aa; font-size: 11px;">
+            &copy; 2026 BarberOS Multi-Tenant Platform &bull; Dokumentasi Resmi Sistem Operasional Barbershop.
+        </div>
+
+    </div>
+
+</body>
+</html>

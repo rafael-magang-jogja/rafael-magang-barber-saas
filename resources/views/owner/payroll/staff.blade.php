@@ -229,33 +229,39 @@
                                     <p class="text-[11px] text-zinc-400 mt-1">Standar: Rp{{ number_format($schemeStandard, 0, ',', '.') }}</p>
                                 </td>
                                 <td class="py-3.5 px-4 text-right">
-                                    <p class="font-extrabold text-sm num text-zinc-950">
-                                        Rp{{ number_format($effectiveSalary, 0, ',', '.') }}
-                                    </p>
-                                    @if($isCustom)
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded-md mt-1">
-                                            <span>Kenaikan Khusus</span>
-                                            @if($diff > 0)
-                                                <span>(+Rp{{ number_format($diff, 0, ',', '.') }})</span>
-                                            @endif
+                                    @if($m->role->value === 'barber')
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-black uppercase tracking-wider">
+                                            Murni Komisi
                                         </span>
+                                        <span class="text-[10px] text-zinc-400 font-medium block mt-1">Tanpa Gaji Pokok</span>
                                     @else
-                                        <span class="text-[10px] text-zinc-400 font-medium block mt-1">Standar Skema</span>
+                                        <p class="font-extrabold text-sm num text-zinc-950">
+                                            Rp{{ number_format($effectiveSalary, 0, ',', '.') }}
+                                        </p>
+                                        @if($isCustom)
+                                            <span class="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded-md mt-1">
+                                                <span>Kenaikan Khusus</span>
+                                                @if($diff > 0)
+                                                    <span>(+Rp{{ number_format($diff, 0, ',', '.') }})</span>
+                                                @endif
+                                            </span>
+                                        @else
+                                            <span class="text-[10px] text-zinc-400 font-medium block mt-1">Standar Skema</span>
+                                        @endif
                                     @endif
                                 </td>
                                 <td class="py-3.5 px-4">
                                     @if($m->role->value === 'barber')
-                                        @if(! $hasCommissionAuto)
-                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-500 text-[11px] font-semibold">
-                                                Rp0 (Nonaktif di Starter)
-                                            </span>
-                                        @elseif($m->salaryScheme?->type === 'commission_only')
+                                        @if($m->salaryScheme?->type === 'commission_only')
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
                                                 <span>Bagi Hasil {{ $m->salaryScheme->effective_commission_percentage }}%</span>
                                             </span>
                                             <p class="text-[10px] text-zinc-400 mt-1">Skema Jabatan</p>
                                         @else
-                                            <span class="text-[11px] text-zinc-600 font-medium">Standar per Layanan</span>
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-bold">
+                                                <span>Komisi per Layanan</span>
+                                            </span>
+                                            <p class="text-[10px] text-zinc-400 mt-1">Per Kepala Pangkas</p>
                                         @endif
                                     @else
                                         <span class="text-zinc-300 text-xs">-</span>
@@ -264,17 +270,18 @@
                                 <td class="py-3.5 px-4 text-right">
                                     <button
                                         type="button"
-                                        onclick="openSalaryAdjustmentModal({
-                                            id: {{ $m->id }},
-                                            name: '{{ addslashes($m->display_name ?? $m->user?->name) }}',
-                                            role: '{{ $m->role->value }}',
-                                            branch: '{{ addslashes($m->branch?->name ?? 'Semua Cabang') }}',
-                                            scheme_id: {{ $m->salary_scheme_id ?? 'null' }},
-                                            scheme_name: '{{ addslashes($m->salaryScheme?->name ?? '') }}',
-                                            scheme_base: {{ $schemeStandard }},
-                                            effective_base: {{ $effectiveSalary }},
-                                            custom_base: {{ $m->custom_base_salary ?? 'null' }}
-                                        })"
+                                        data-staff-salary="{{ json_encode([
+                                            'id' => $m->id,
+                                            'name' => $m->display_name ?? $m->user?->name,
+                                            'role' => $m->role->value,
+                                            'branch' => $m->branch?->name ?? 'Semua Cabang',
+                                            'scheme_id' => $m->salary_scheme_id,
+                                            'scheme_name' => $m->salaryScheme?->name ?? '',
+                                            'scheme_base' => $schemeStandard,
+                                            'effective_base' => $effectiveSalary,
+                                            'custom_base' => $m->custom_base_salary,
+                                        ]) }}"
+                                        onclick="openSalaryAdjustmentModal(JSON.parse(this.dataset.staffSalary))"
                                         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-xs font-bold shadow-2xs transition-all duration-500 ease-in-out cursor-pointer shrink-0"
                                     >
                                         <x-ui.icon name="sliders" class="w-3.5 h-3.5 text-amber-400" />
@@ -324,18 +331,25 @@
                             <!-- Gaji Pokok Efektif -->
                             <div class="flex flex-col justify-center px-1.5 py-1 border-r border-zinc-100 min-w-0">
                                 <span class="text-[9px] uppercase font-bold tracking-wider text-zinc-400 mb-0.5 truncate">Gaji Pokok Efektif</span>
-                                <p class="font-black text-xs sm:text-sm text-zinc-950 num truncate">
-                                    Rp{{ number_format($effectiveSalary, 0, ',', '.') }}
-                                </p>
-                                @if($isCustom)
-                                    <span class="inline-flex items-center gap-1 text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md mt-1 self-start truncate">
-                                        <span>Kenaikan</span>
-                                        @if($diff > 0)
-                                            <span>(+Rp{{ number_format($diff, 0, ',', '.') }})</span>
-                                        @endif
+                                @if($m->role->value === 'barber')
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 text-[9px] font-black uppercase tracking-wider self-start">
+                                        Murni Komisi
                                     </span>
+                                    <span class="text-[9px] text-zinc-400 font-medium mt-0.5 truncate">Tanpa Pokok</span>
                                 @else
-                                    <span class="text-[10px] text-zinc-400 font-medium mt-1 truncate">Standar Skema</span>
+                                    <p class="font-black text-xs sm:text-sm text-zinc-950 num truncate">
+                                        Rp{{ number_format($effectiveSalary, 0, ',', '.') }}
+                                    </p>
+                                    @if($isCustom)
+                                        <span class="inline-flex items-center gap-1 text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md mt-1 self-start truncate">
+                                            <span>Kenaikan</span>
+                                            @if($diff > 0)
+                                                <span>(+Rp{{ number_format($diff, 0, ',', '.') }})</span>
+                                            @endif
+                                        </span>
+                                    @else
+                                        <span class="text-[10px] text-zinc-400 font-medium mt-1 truncate">Standar Skema</span>
+                                    @endif
                                 @endif
                             </div>
 
@@ -346,16 +360,14 @@
                                     {{ $m->salaryScheme?->name ?? 'Belum ada skema' }}
                                 </p>
                                 @if($m->role->value === 'barber')
-                                    @if(! $hasCommissionAuto)
-                                        <span class="text-[10px] text-zinc-500 font-semibold mt-1 truncate">
-                                            Rp0 (Nonaktif di Starter)
-                                        </span>
-                                    @elseif($m->salaryScheme?->type === 'commission_only')
+                                    @if($m->salaryScheme?->type === 'commission_only')
                                         <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold mt-1 self-start truncate">
                                             Bagi Hasil {{ $m->salaryScheme->effective_commission_percentage }}%
                                         </span>
                                     @else
-                                        <span class="text-[10px] text-zinc-500 font-medium mt-1 truncate">Standar per Layanan</span>
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-900 text-[10px] font-bold mt-1 self-start truncate">
+                                            Komisi Layanan
+                                        </span>
                                     @endif
                                 @else
                                     <span class="text-[10px] text-zinc-400 font-medium mt-1 truncate">Gaji Tetap (Flat)</span>
@@ -366,17 +378,18 @@
                         <!-- Tombol Aksi -->
                         <button
                             type="button"
-                            onclick="openSalaryAdjustmentModal({
-                                id: {{ $m->id }},
-                                name: '{{ addslashes($m->display_name ?? $m->user?->name) }}',
-                                role: '{{ $m->role->value }}',
-                                branch: '{{ addslashes($m->branch?->name ?? 'Semua Cabang') }}',
-                                scheme_id: {{ $m->salary_scheme_id ?? 'null' }},
-                                scheme_name: '{{ addslashes($m->salaryScheme?->name ?? '') }}',
-                                scheme_base: {{ $schemeStandard }},
-                                effective_base: {{ $effectiveSalary }},
-                                custom_base: {{ $m->custom_base_salary ?? 'null' }}
-                            })"
+                            data-staff-salary="{{ json_encode([
+                                'id' => $m->id,
+                                'name' => $m->display_name ?? $m->user?->name,
+                                'role' => $m->role->value,
+                                'branch' => $m->branch?->name ?? 'Semua Cabang',
+                                'scheme_id' => $m->salary_scheme_id,
+                                'scheme_name' => $m->salaryScheme?->name ?? '',
+                                'scheme_base' => $schemeStandard,
+                                'effective_base' => $effectiveSalary,
+                                'custom_base' => $m->custom_base_salary,
+                            ]) }}"
+                            onclick="openSalaryAdjustmentModal(JSON.parse(this.dataset.staffSalary))"
                             class="w-full py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-xs font-bold shadow-2xs transition-all duration-500 ease-in-out inline-flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                             <x-ui.icon name="sliders" class="w-3.5 h-3.5 text-amber-400" />
@@ -420,64 +433,80 @@
                 <p class="text-[11px] text-zinc-400 mt-1">Mengubah skema jabatan dapat digunakan saat karyawan naik level / promosi.</p>
             </div>
 
-            <!-- Mode Penetapan Gaji Pokok -->
-            <div class="space-y-2">
-                <label class="block text-xs font-bold text-zinc-700">Penetapan Gaji Pokok</label>
-                <div class="grid grid-cols-2 gap-2">
-                    <label class="flex items-center gap-2 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40">
-                        <input
-                            type="radio"
-                            name="salary_mode"
-                            value="standard"
-                            id="mode-standard"
-                            onchange="toggleSalaryMode(this.value)"
-                            class="text-amber-600 focus:ring-amber-500"
-                        />
-                        <div class="text-xs">
-                            <span class="font-extrabold block text-zinc-900">Standar Skema</span>
-                            <span class="text-[11px] text-zinc-500" id="label-standard-amount">Rp0</span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-center gap-2 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40">
-                        <input
-                            type="radio"
-                            name="salary_mode"
-                            value="custom"
-                            id="mode-custom"
-                            onchange="toggleSalaryMode(this.value)"
-                            class="text-amber-600 focus:ring-amber-500"
-                        />
-                        <div class="text-xs">
-                            <span class="font-extrabold block text-zinc-900">Kenaikan / Khusus</span>
-                            <span class="text-[11px] text-zinc-500">Nominal individual</span>
-                        </div>
-                    </label>
+            <!-- Notice Khusus Barber (Murni Komisi per Kepala) -->
+            <div id="container-barber-no-base-salary" class="hidden p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-amber-950 flex items-start gap-2.5 text-xs shadow-2xs">
+                <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-800 grid place-items-center shrink-0 mt-0.5">
+                    <x-ui.icon name="scissors" class="w-3.5 h-3.5" />
+                </div>
+                <div class="min-w-0">
+                    <span class="font-extrabold block text-xs text-amber-950">Model Komisi per Kepala (Layanan)</span>
+                    <p class="text-[11px] text-amber-900/80 leading-relaxed mt-0.5">
+                        Staff Barber tidak memiliki model gaji pokok. Seluruh penghasilan barber dihitung murni berdasarkan komisi per kepala layanan yang diselesaikan serta tip pelanggan.
+                    </p>
                 </div>
             </div>
 
-            <!-- Input Nominal Gaji Pokok Khusus (Jika Mode Custom Dipilih) -->
-            <div id="container-custom-salary" class="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-2.5">
-                <label class="block text-xs font-bold text-amber-950">Nominal Gaji Pokok Baru (Kenaikan Gaji) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
-                <div class="relative">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">Rp</span>
-                    <input
-                        type="text"
-                        inputmode="numeric"
-                        name="custom_base_salary"
-                        id="input-custom-base"
-                        placeholder="Contoh: 2.800.000"
-                        data-currency-input
-                        oninput="formatCurrencyInput(this)"
-                        class="w-full text-xs font-black pl-9 pr-3 py-2.5 rounded-xl bg-white border border-amber-300 text-zinc-950 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                    />
+            <!-- Kontainer Pengaturan Gaji Pokok (Khusus Admin / Kasir / Staf Tetap) -->
+            <div id="container-base-salary-settings" class="space-y-3">
+                <!-- Mode Penetapan Gaji Pokok -->
+                <div class="space-y-2">
+                    <label class="block text-xs font-bold text-zinc-700">Penetapan Gaji Pokok (Staf Tetap / Kasir)</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex items-center gap-2 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40">
+                            <input
+                                type="radio"
+                                name="salary_mode"
+                                value="standard"
+                                id="mode-standard"
+                                onchange="toggleSalaryMode(this.value)"
+                                class="text-amber-600 focus:ring-amber-500"
+                            />
+                            <div class="text-xs">
+                                <span class="font-extrabold block text-zinc-900">Standar Skema</span>
+                                <span class="text-[11px] text-zinc-500" id="label-standard-amount">Rp0</span>
+                            </div>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 cursor-pointer transition has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40">
+                            <input
+                                type="radio"
+                                name="salary_mode"
+                                value="custom"
+                                id="mode-custom"
+                                onchange="toggleSalaryMode(this.value)"
+                                class="text-amber-600 focus:ring-amber-500"
+                            />
+                            <div class="text-xs">
+                                <span class="font-extrabold block text-zinc-900">Kenaikan / Khusus</span>
+                                <span class="text-[11px] text-zinc-500">Nominal individual</span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
-                <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    <span class="text-[10px] font-bold text-zinc-400">Cepat Tambah:</span>
-                    <button type="button" onclick="addIncreaseAmount(100000)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+100rb</button>
-                    <button type="button" onclick="addIncreaseAmount(250000)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+250rb</button>
-                    <button type="button" onclick="addIncreaseAmount(500000)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+500rb</button>
-                    <button type="button" onclick="addIncreasePercent(10)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+10%</button>
+
+                <!-- Input Nominal Gaji Pokok Khusus (Jika Mode Custom Dipilih) -->
+                <div id="container-custom-salary" class="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-2.5">
+                    <label class="block text-xs font-bold text-amber-950">Nominal Gaji Pokok Baru (Kenaikan Gaji) <span class="text-rose-500 font-bold ml-0.5">*</span></label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">Rp</span>
+                        <input
+                            type="text"
+                            inputmode="numeric"
+                            name="custom_base_salary"
+                            id="input-custom-base"
+                            placeholder="Contoh: 2.800.000"
+                            data-currency-input
+                            oninput="formatCurrencyInput(this)"
+                            class="w-full text-xs font-black pl-9 pr-3 py-2.5 rounded-xl bg-white border border-amber-300 text-zinc-950 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                        />
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span class="text-[10px] font-bold text-zinc-400">Cepat Tambah:</span>
+                        <button type="button" onclick="addIncreaseAmount(100000)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+100rb</button>
+                        <button type="button" onclick="addIncreaseAmount(250000)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+250rb</button>
+                        <button type="button" onclick="addIncreaseAmount(500000)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+500rb</button>
+                        <button type="button" onclick="addIncreasePercent(10)" class="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer">+10%</button>
+                    </div>
                 </div>
             </div>
 
@@ -547,10 +576,11 @@
         </form>
     </dialog>
 
+    <script type="application/json" id="salary-schemes-data-json">@json($schemesJsonData)</script>
     <script>
         let currentStaffData = null;
 
-        const salarySchemesData = @json($schemesJsonData);
+        const salarySchemesData = JSON.parse(document.getElementById('salary-schemes-data-json')?.textContent || '{}');
 
         function formatCurrencyNumber(val) {
             if (val === null || val === undefined || val === '') return '';
@@ -629,9 +659,34 @@
             const modeStandard = document.getElementById('mode-standard');
             const modeCustom = document.getElementById('mode-custom');
             const inputCustomBase = document.getElementById('input-custom-base');
+            const baseSalarySettings = document.getElementById('container-base-salary-settings');
+            const barberNoBaseNotice = document.getElementById('container-barber-no-base-salary');
 
             form.action = `/owner/payroll/staff/${staff.id}/salary`;
             subtitle.textContent = `${staff.name} · ${staff.role.toUpperCase()} (${staff.branch})`;
+
+            if (staff.role === 'barber') {
+                if (baseSalarySettings) baseSalarySettings.classList.add('hidden');
+                if (barberNoBaseNotice) barberNoBaseNotice.classList.remove('hidden');
+                if (modeStandard) modeStandard.checked = true;
+                if (inputCustomBase) {
+                    inputCustomBase.required = false;
+                    inputCustomBase.value = '';
+                }
+                toggleSalaryMode('standard');
+            } else {
+                if (baseSalarySettings) baseSalarySettings.classList.remove('hidden');
+                if (barberNoBaseNotice) barberNoBaseNotice.classList.add('hidden');
+                if (staff.custom_base !== null) {
+                    if (modeCustom) modeCustom.checked = true;
+                    if (inputCustomBase) inputCustomBase.value = formatCurrencyNumber(staff.custom_base);
+                    toggleSalaryMode('custom');
+                } else {
+                    if (modeStandard) modeStandard.checked = true;
+                    if (inputCustomBase) inputCustomBase.value = formatCurrencyNumber(staff.scheme_base || 0);
+                    toggleSalaryMode('standard');
+                }
+            }
 
             if (staff.scheme_id) {
                 const opt = document.querySelector('#modal-select-scheme-wrapper [data-select-option][data-value="' + staff.scheme_id + '"]');
@@ -640,16 +695,6 @@
 
             const activeSchemeId = staff.scheme_id || getSelectedSchemeId();
             updateSchemeDetails(activeSchemeId);
-
-            if (staff.custom_base !== null) {
-                modeCustom.checked = true;
-                inputCustomBase.value = formatCurrencyNumber(staff.custom_base);
-                toggleSalaryMode('custom');
-            } else {
-                modeStandard.checked = true;
-                inputCustomBase.value = formatCurrencyNumber(staff.scheme_base || 0);
-                toggleSalaryMode('standard');
-            }
 
             modal.showModal();
         }

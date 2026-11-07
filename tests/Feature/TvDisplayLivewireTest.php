@@ -109,7 +109,7 @@ final class TvDisplayLivewireTest extends TestCase
             'password' => bcrypt('password'),
         ]);
 
-        Membership::query()->create([
+        $fajarMembership = Membership::query()->create([
             'tenant_id' => $tenant->id,
             'user_id' => $extraUser->id,
             'branch_id' => $branch->id,
@@ -118,6 +118,15 @@ final class TvDisplayLivewireTest extends TestCase
             'specialty' => 'Buzz Cut · Two Block',
             'is_active' => true,
             'work_status' => \App\Enums\WorkStatus::Active,
+        ]);
+
+        \App\Models\Attendance::query()->create([
+            'tenant_id' => $tenant->id,
+            'branch_id' => $branch->id,
+            'membership_id' => $fajarMembership->id,
+            'date' => now()->toDateString(),
+            'check_in_at' => now()->setTime(10, 0),
+            'status' => 'present',
         ]);
 
         Livewire::test(TvQueueDisplay::class, [

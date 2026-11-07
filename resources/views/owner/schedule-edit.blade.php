@@ -189,7 +189,8 @@
                                         name="days[{{ $dayNum }}][is_off]"
                                         value="1"
                                         @checked($isOff)
-                                        onchange="toggleDay({{ $dayNum }})"
+                                        data-day="{{ $dayNum }}"
+                                        onchange="toggleDay(Number(this.dataset.day))"
                                         class="rounded border-zinc-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer"
                                     />
                                     <span id="text-off-{{ $dayNum }}">{{ $isOff ? 'Libur Shift' : 'Masuk Kerja' }}</span>

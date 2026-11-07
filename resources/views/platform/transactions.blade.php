@@ -98,7 +98,7 @@
                     <div class="w-full max-w-[48px] bg-zinc-100 rounded-xl relative flex items-end overflow-hidden" style="height: 100%;">
                         <div
                             class="w-full rounded-xl transition-all duration-500 {{ $trend['is_current'] ? 'bg-amber-500 shadow-sm' : 'bg-zinc-800 hover:bg-amber-400' }}"
-                            style="height: {{ $trend['height_percentage'] }}%;"
+                            @style(['height: ' . $trend['height_percentage'] . '%'])
                         ></div>
                     </div>
 
@@ -111,72 +111,75 @@
         </div>
     </div>
 
+    @php
+        $tenantFilterOptions = $allTenants->map(fn ($t) => [
+            'value' => (string) $t->id,
+            'label' => $t->name,
+            'sublabel' => $t->slug,
+        ])->all();
+    @endphp
+
     <!-- 3. TOOLBAR FILTER PERIODE & PENCARIAN -->
     <div class="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5 shadow-2xs mb-6">
-        <form method="GET" action="{{ route('platform.transactions') }}" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+        <form method="GET" action="{{ route('platform.transactions') }}" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
             <!-- Filter Dropdown Bulan -->
             <div class="sm:col-span-4">
-                <label class="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Pilih Periode Bulan</label>
-                <select
+                <x-ui.select
+                    label="Pilih Periode Bulan"
                     name="month"
-                    onchange="this.form.submit()"
-                    class="w-full h-10 px-3 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-800 bg-white shadow-2xs focus:outline-none focus:ring-2 focus:ring-zinc-950/10 cursor-pointer"
-                >
-                    @foreach($monthOptions as $opt)
-                        <option value="{{ $opt['value'] }}" {{ $selectedMonth === $opt['value'] ? 'selected' : '' }}>
-                            {{ $opt['label'] }}
-                        </option>
-                    @endforeach
-                </select>
+                    :value="$selectedMonth"
+                    :options="$monthOptions"
+                    icon="calendar"
+                    :auto-submit="true"
+                    placeholder="Pilih Bulan..."
+                />
             </div>
 
             <!-- Filter Pilih Barbershop Spesifik -->
             <div class="sm:col-span-4">
-                <label class="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Filter Barbershop</label>
-                <select
+                <x-ui.select
+                    label="Filter Barbershop"
                     name="tenant_id"
-                    onchange="this.form.submit()"
-                    class="w-full h-10 px-3 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-800 bg-white shadow-2xs focus:outline-none focus:ring-2 focus:ring-zinc-950/10 cursor-pointer"
-                >
-                    <option value="">Semua Barbershop</option>
-                    @foreach($allTenants as $t)
-                        <option value="{{ $t->id }}" {{ (string) $tenantId === (string) $t->id ? 'selected' : '' }}>
-                            {{ $t->name }}
-                        </option>
-                    @endforeach
-                </select>
+                    :value="$tenantId ? (string) $tenantId : ''"
+                    :options="$tenantFilterOptions"
+                    icon="store"
+                    :auto-submit="true"
+                    :searchable="true"
+                    search-placeholder="Cari barbershop..."
+                    placeholder="Semua Barbershop"
+                />
             </div>
 
             <!-- Search Nama & Tombol Aksi -->
             <div class="sm:col-span-4 flex items-end gap-2">
                 <div class="flex-1 min-w-0">
-                    <label class="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Cari Barbershop</label>
+                    <label class="block text-xs font-semibold text-zinc-700 mb-1.5">Cari Barbershop</label>
                     <div class="relative">
                         <input
                             type="text"
                             name="search"
                             value="{{ $search }}"
                             placeholder="Ketik nama outlet..."
-                            class="w-full h-10 pl-9 pr-3 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-800 bg-white shadow-2xs focus:outline-none focus:ring-2 focus:ring-zinc-950/10"
+                            class="w-full h-11 pl-9 pr-3 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-800 bg-white shadow-2xs focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500"
                         />
-                        <x-ui.icon name="search" class="w-4 h-4 text-zinc-400 absolute left-3 top-3 pointer-events-none" />
+                        <x-ui.icon name="search" class="w-4 h-4 text-zinc-400 absolute left-3 top-3.5 pointer-events-none" />
                     </div>
                 </div>
 
                 <a
                     href="{{ route('platform.transactions.export', request()->query()) }}"
-                    class="h-10 px-3.5 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 active:scale-95 text-zinc-700 font-bold text-xs transition inline-flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
+                    class="h-11 px-3.5 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 active:scale-95 text-zinc-700 font-bold text-xs transition inline-flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
                     title="Export Rekap Pendapatan Bulan Ini ke Excel (.xlsx)"
                 >
                     <x-ui.icon name="download" class="w-3.5 h-3.5 text-emerald-600" />
-                    <span class="hidden sm:inline">Export Excel (.xlsx)</span>
+                    <span class="hidden sm:inline">Export Excel</span>
                 </a>
             </div>
         </form>
     </div>
 
     <!-- 4. TABEL KINERJA OMZET BARBERSHOP BULANAN (BERSIH DARI DATA PRIBADI CUSTOMER) -->
-    <div class="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-2xs mb-6">
+    <div class="rounded-2xl border border-zinc-200/90 bg-white overflow-hidden shadow-2xs mb-6" data-pagination-container="platform-transactions">
         <div class="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
             <div>
                 <h3 class="text-sm font-black text-zinc-900 tracking-tight">Kinerja Pendapatan Barbershop ({{ $selectedMonthLabel }})</h3>
@@ -284,7 +287,7 @@
                                         {{ $sharePct }}%
                                     </span>
                                     <div class="w-16 bg-zinc-100 rounded-full h-1.5 mt-1 ml-auto overflow-hidden">
-                                        <div class="bg-amber-500 h-1.5 rounded-full" style="width: {{ min(100, $sharePct) }}%;"></div>
+                                        <div class="bg-amber-500 h-1.5 rounded-full" @style(['width: ' . min(100, $sharePct) . '%'])></div>
                                     </div>
                                 </td>
 

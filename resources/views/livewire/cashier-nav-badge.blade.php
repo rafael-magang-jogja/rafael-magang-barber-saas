@@ -1,4 +1,4 @@
-<span wire:poll.5s class="inline-flex items-center">
+<span wire:poll.15s.visible class="inline-flex items-center">
     @if($type === 'parent_dot')
         @if($hasDot)
             @if($context === 'mobile')
@@ -13,10 +13,24 @@
                 </span>
             @endif
         @endif
-    @elseif($type === 'queue' || $type === 'booking')
+    @elseif($type === 'booking')
+        @if($count > 0)
+            @if($context === 'mobile')
+                <span class="absolute -top-0.5 -right-1 flex h-2 w-2" data-nav-indicator>
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+            @else
+                <span class="relative flex h-2 w-2 shrink-0 ml-1.5" data-nav-indicator title="{{ $count }} booking masuk">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+            @endif
+        @endif
+    @elseif($type === 'queue')
         @if($count > 0)
             @php
-                $badgeBg = $type === 'queue' ? 'bg-amber-400 text-zinc-950 font-black' : 'bg-rose-500 text-white font-black';
+                $badgeBg = 'bg-amber-400 text-zinc-950 font-black';
             @endphp
             @if($context === 'mobile')
                 <span class="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-none {{ $badgeBg }} flex items-center justify-center num shadow-sm shrink-0">{{ $count > 99 ? '99+' : $count }}</span>

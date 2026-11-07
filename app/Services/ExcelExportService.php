@@ -4,15 +4,32 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class ExcelExportService
 {
+    /**
+     * Palette warna profesional untuk styling spreadsheet.
+     */
+    private const PRIMARY_NAVY = '0F172A';      // Slate 900 (Header utama)
+    private const ACCENT_GOLD = 'F59E0B';       // Amber 500 (Garis aksen elegan)
+    private const KPI_BG = 'F8FAFC';            // Slate 50 (Background kartu ringkasan)
+    private const KPI_BORDER = 'CBD5E1';        // Slate 300 (Border kartu ringkasan)
+    private const KPI_HEADER_BG = 'E2E8F0';     // Slate 200
+    private const ROW_EVEN = 'FFFFFF';          // Putih bersih
+    private const ROW_ODD = 'F8FAFC';           // Slate 50 selang-seling halus
+    private const BORDER_COLOR = 'E2E8F0';      // Slate 200
+    private const TOTAL_BG = 'F1F5F9';          // Slate 100
+    private const TOTAL_TEXT = '0F172A';        // Slate 900
+
     /**
      * @param array{
      *     title: string,
@@ -30,194 +47,327 @@ final class ExcelExportService
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle(substr($data['title'], 0, 31));
+        $sheet->setTitle(substr(preg_replace('/[\\\\\/?*\[\]:]/', '', $data['title']) ?: 'Laporan', 0, 31));
 
-        // Set default font
-        $spreadsheet->getDefaultStyle()->getFont()->setName('Segoe UI')->setSize(10);
+        // 1. TAMPILAN HALAMAN (Gridlines & Freeze Panes)
+        $sheet->setShowGridLines(true);
+        $sheet->getPageSetup()
+            ->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)
+            ->setPaperSize(PageSetup::PAPERSIZE_A4)
+            ->setFitToPage(true)
+            ->setFitToWidth(1)
+            ->setFitToHeight(0);
+
+        // Font default Segoe UI yang modern, tajam, dan sangat mudah dibaca (ukuran 12)
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Segoe UI')->setSize(12);
 
         $currentRow = 1;
         $totalColumns = count($data['headers']);
         $lastColumnLetter = $this->getColumnLetter($totalColumns);
+        $headerColor = ! empty($data['theme_color']) ? ltrim($data['theme_color'], '#') : self::PRIMARY_NAVY;
 
-        // 1. JUDUL LAPORAN UTAMA
-        $sheet->setCellValue("A{$currentRow}", strtoupper($data['title']));
-        $sheet->getStyle("A{$currentRow}")->getFont()->setSize(14)->setBold(true);
+        // 2. HEADER BANNER JUDUL LAPORAN (Hero Banner)
+        $sheet->mergeCells("A{$currentRow}:{$lastColumnLetter}{$currentRow}");
+        $sheet->setCellValue("A{$currentRow}", '  ' . strtoupper($data['title']));
+        $sheet->getStyle("A{$currentRow}")->applyFromArray([
+            'font' => [
+                'name' => 'Segoe UI',
+                'size' => 16,
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => $headerColor],
+            ],
+            'alignment' => [
+                'vertical' => Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_LEFT,
+            ],
+        ]);
+        $sheet->getRowDimension($currentRow)->setRowHeight(44);
         $currentRow++;
 
-        // 2. METADATA LAPORAN
+        // Garis aksen emas di bawah banner judul
+        $sheet->mergeCells("A{$currentRow}:{$lastColumnLetter}{$currentRow}");
+        $sheet->getStyle("A{$currentRow}:{$lastColumnLetter}{$currentRow}")->applyFromArray([
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => self::ACCENT_GOLD],
+            ],
+        ]);
+        $sheet->getRowDimension($currentRow)->setRowHeight(4);
+        $currentRow += 2; // Beri ruang bernapas
+
+        // 3. KARTU METADATA LAPORAN (Informasi Dokumen)
         if (! empty($data['meta'])) {
+            $metaStartRow = $currentRow;
             foreach ($data['meta'] as $label => $val) {
                 $sheet->setCellValue("A{$currentRow}", $label);
-                $sheet->getStyle("A{$currentRow}")->getFont()->setBold(true)->getColor()->setRGB('71717A');
-                $sheet->setCellValue("B{$currentRow}", $val);
-                $sheet->getStyle("B{$currentRow}")->getFont()->getColor()->setRGB('18181B');
+                $sheet->setCellValue("B{$currentRow}", ': ' . $val);
+
+                $sheet->getStyle("A{$currentRow}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '64748B'], 'size' => 11],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                ]);
+                $sheet->getStyle("B{$currentRow}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '0F172A'], 'size' => 12],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                ]);
+                $sheet->getRowDimension($currentRow)->setRowHeight(24);
                 $currentRow++;
             }
+            $currentRow++; // Jeda setelah metadata
         }
 
-        $currentRow++; // Baris jeda
-
-        // 3. RINGKASAN EKSEKUTIF (KPI SUMMARY BOX)
+        // 4. KARTU KPI RINGKASAN EKSEKUTIF (Executive Summary Box)
         if (! empty($data['kpi_summary'])) {
-            $sheet->setCellValue("A{$currentRow}", 'RINGKASAN EKSEKUTIF');
-            $sheet->getStyle("A{$currentRow}")->getFont()->setBold(true)->setSize(11)->getColor()->setRGB('18181B');
+            $kpiHeaderRow = $currentRow;
+            $sheet->mergeCells("A{$kpiHeaderRow}:B{$kpiHeaderRow}");
+            $sheet->setCellValue("A{$kpiHeaderRow}", 'RINGKASAN EKSEKUTIF');
+            $sheet->getStyle("A{$kpiHeaderRow}")->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => '0F172A']],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => self::KPI_HEADER_BG],
+                ],
+                'alignment' => [
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                    'horizontal' => Alignment::HORIZONTAL_LEFT,
+                    'indent' => 1,
+                ],
+            ]);
+            $sheet->getRowDimension($kpiHeaderRow)->setRowHeight(28);
             $currentRow++;
 
             $kpiStartRow = $currentRow;
             foreach ($data['kpi_summary'] as $kpiLabel => $kpiValue) {
-                $sheet->setCellValue("A{$currentRow}", $kpiLabel);
-                $sheet->getStyle("A{$currentRow}")->getFont()->getColor()->setRGB('52525B');
+                $sheet->setCellValue("A{$currentRow}", '  ' . $kpiLabel);
+                $sheet->getStyle("A{$currentRow}")->applyFromArray([
+                    'font' => ['color' => ['rgb' => '334155'], 'size' => 11.5],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                ]);
 
                 $sheet->setCellValue("B{$currentRow}", $kpiValue);
-                $sheet->getStyle("B{$currentRow}")->getFont()->setBold(true)->getColor()->setRGB('09090B');
+                $sheet->getStyle("B{$currentRow}")->applyFromArray([
+                    'font' => ['bold' => true, 'color' => ['rgb' => '0F172A'], 'size' => 12],
+                    'alignment' => [
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                        'horizontal' => is_numeric($kpiValue) ? Alignment::HORIZONTAL_RIGHT : Alignment::HORIZONTAL_LEFT,
+                    ],
+                ]);
+
                 if (is_numeric($kpiValue)) {
                     $sheet->getStyle("B{$currentRow}")->getNumberFormat()->setFormatCode('#,##0');
                 }
+                $sheet->getRowDimension($currentRow)->setRowHeight(25);
                 $currentRow++;
             }
 
-            // Style box KPI ringkasan
             $kpiEndRow = $currentRow - 1;
-            $sheet->getStyle("A{$kpiStartRow}:B{$kpiEndRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E4E4E7');
-            $sheet->getStyle("A{$kpiStartRow}:B{$kpiEndRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FAFAFA');
+            $sheet->getStyle("A{$kpiStartRow}:B{$kpiEndRow}")->applyFromArray([
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => self::KPI_BG],
+                ],
+            ]);
 
-            $currentRow++; // Baris jeda
+            // Border seluruh kartu KPI
+            $sheet->getStyle("A{$kpiHeaderRow}:B{$kpiEndRow}")->applyFromArray([
+                'borders' => [
+                    'outline' => [
+                        'borderStyle' => Border::BORDER_MEDIUM,
+                        'color' => ['rgb' => self::KPI_BORDER],
+                    ],
+                    'inside' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => self::BORDER_COLOR],
+                    ],
+                ],
+            ]);
+
+            $currentRow++; // Baris jeda sebelum tabel utama
         }
 
-        // 4. HEADER TABEL DATA
+        // 5. HEADER TABEL DATA
         $headerRow = $currentRow;
-        $themeColor = $data['theme_color'] ?? '18181B'; // Default dark zinc
-
         foreach ($data['headers'] as $colIdx => $headerText) {
             $colLetter = $this->getColumnLetter($colIdx + 1);
             $sheet->setCellValue("{$colLetter}{$headerRow}", $headerText);
         }
 
-        // Styling Header Tabel
         $headerRange = "A{$headerRow}:{$lastColumnLetter}{$headerRow}";
         $sheet->getStyle($headerRange)->applyFromArray([
             'font' => [
                 'bold' => true,
                 'color' => ['rgb' => 'FFFFFF'],
-                'size' => 10,
+                'size' => 12,
             ],
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['rgb' => $themeColor],
+                'startColor' => ['rgb' => $headerColor],
             ],
             'alignment' => [
                 'vertical' => Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
                 'wrapText' => false,
             ],
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => Border::BORDER_THIN,
-                    'color' => ['rgb' => $themeColor],
+                    'color' => ['rgb' => '334155'],
+                ],
+                'bottom' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                    'color' => ['rgb' => self::ACCENT_GOLD],
                 ],
             ],
         ]);
-        $sheet->getRowDimension($headerRow)->setRowHeight(28);
+        $sheet->getRowDimension($headerRow)->setRowHeight(34);
+
+        // Freeze pane: kunci agar baris header tetap terlihat saat scroll ke bawah
+        $sheet->freezePane('A' . ($headerRow + 1));
         $currentRow++;
 
-        // 5. ISI BARIS DATA
+        // 6. ISI BARIS DATA
         $dataStartRow = $currentRow;
         foreach ($data['rows'] as $rowIdx => $rowValues) {
             $isEven = ($rowIdx % 2 === 0);
-            $rowBgColor = $isEven ? 'FFFFFF' : 'FBFBFC';
+            $rowBgColor = $isEven ? self::ROW_EVEN : self::ROW_ODD;
 
             foreach ($rowValues as $colIdx => $val) {
                 $colLetter = $this->getColumnLetter($colIdx + 1);
                 $cellCoordinate = "{$colLetter}{$currentRow}";
 
-                $sheet->setCellValue($cellCoordinate, $val);
-
-                // Format angka jika tipe currency/number
+                // Format penulisan angka & teks
                 $formatType = $data['formats'][$colIdx] ?? 'text';
-                if ($formatType === 'currency') {
-                    $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode('#,##0');
-                } elseif ($formatType === 'integer') {
-                    $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode('#,##0');
+                if ($formatType === 'currency' || $formatType === 'integer') {
+                    if (is_numeric($val)) {
+                        $sheet->setCellValueExplicit($cellCoordinate, (float) $val, DataType::TYPE_NUMERIC);
+                        $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode('#,##0');
+                    } else {
+                        $sheet->setCellValue($cellCoordinate, $val);
+                    }
                 } elseif ($formatType === 'percentage') {
-                    $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode('0.0%');
+                    if (is_numeric($val)) {
+                        $sheet->setCellValueExplicit($cellCoordinate, (float) $val, DataType::TYPE_NUMERIC);
+                        $sheet->getStyle($cellCoordinate)->getNumberFormat()->setFormatCode('0.0%');
+                    } else {
+                        $sheet->setCellValue($cellCoordinate, $val);
+                    }
+                } else {
+                    $sheet->setCellValue($cellCoordinate, $val);
                 }
 
-                // Alignment
+                // Alignment & Font Size 12
                 $alignType = $data['alignments'][$colIdx] ?? 'left';
-                $sheet->getStyle($cellCoordinate)->getAlignment()->setHorizontal(
-                    match ($alignType) {
-                        'center' => Alignment::HORIZONTAL_CENTER,
-                        'right' => Alignment::HORIZONTAL_RIGHT,
-                        default => Alignment::HORIZONTAL_LEFT,
-                    }
-                )->setVertical(Alignment::VERTICAL_CENTER);
+                $horizontalAlign = match ($alignType) {
+                    'center' => Alignment::HORIZONTAL_CENTER,
+                    'right' => Alignment::HORIZONTAL_RIGHT,
+                    default => Alignment::HORIZONTAL_LEFT,
+                };
+
+                $sheet->getStyle($cellCoordinate)->getFont()->setSize(12);
+                $sheet->getStyle($cellCoordinate)->getAlignment()
+                    ->setHorizontal($horizontalAlign)
+                    ->setVertical(Alignment::VERTICAL_CENTER);
             }
 
-            // Border dan background baris data
+            // Styling zebra striping & border halus
             $rowRange = "A{$currentRow}:{$lastColumnLetter}{$currentRow}";
-            $sheet->getStyle($rowRange)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($rowBgColor);
-            $sheet->getStyle($rowRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('E4E4E7');
-            $sheet->getRowDimension($currentRow)->setRowHeight(22);
+            $sheet->getStyle($rowRange)->applyFromArray([
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => $rowBgColor],
+                ],
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => self::BORDER_COLOR],
+                    ],
+                ],
+            ]);
+            $sheet->getRowDimension($currentRow)->setRowHeight(26);
 
             $currentRow++;
         }
         $dataEndRow = $currentRow - 1;
 
-        // 6. BARIS TOTAL AKHIR (JIKA ADA)
+        // 7. BARIS TOTAL AKHIR (Grand Total)
         if (! empty($data['totals'])) {
             $totalRow = $currentRow;
             foreach ($data['totals'] as $colIdx => $totVal) {
                 $colLetter = $this->getColumnLetter($colIdx + 1);
                 $cellCoord = "{$colLetter}{$totalRow}";
 
-                $sheet->setCellValue($cellCoord, $totVal);
-
                 $formatType = $data['formats'][$colIdx] ?? 'text';
                 if ($formatType === 'currency' || $formatType === 'integer') {
                     if (is_numeric($totVal)) {
+                        $sheet->setCellValueExplicit($cellCoord, (float) $totVal, DataType::TYPE_NUMERIC);
                         $sheet->getStyle($cellCoord)->getNumberFormat()->setFormatCode('#,##0');
+                    } else {
+                        $sheet->setCellValue($cellCoord, $totVal);
                     }
+                } else {
+                    $sheet->setCellValue($cellCoord, $totVal);
                 }
 
                 $alignType = $data['alignments'][$colIdx] ?? 'left';
-                $sheet->getStyle($cellCoord)->getAlignment()->setHorizontal(
-                    match ($alignType) {
-                        'center' => Alignment::HORIZONTAL_CENTER,
-                        'right' => Alignment::HORIZONTAL_RIGHT,
-                        default => Alignment::HORIZONTAL_LEFT,
-                    }
-                )->setVertical(Alignment::VERTICAL_CENTER);
+                $horizontalAlign = match ($alignType) {
+                    'center' => Alignment::HORIZONTAL_CENTER,
+                    'right' => Alignment::HORIZONTAL_RIGHT,
+                    default => Alignment::HORIZONTAL_LEFT,
+                };
+
+                $sheet->getStyle($cellCoord)->getAlignment()
+                    ->setHorizontal($horizontalAlign)
+                    ->setVertical(Alignment::VERTICAL_CENTER);
             }
 
-            // Styling baris TOTAL akuntansi (Bold, Background Highlight, Top Thin Border, Bottom Double Border)
+            // Styling total akuntansi standar tinggi (font size 12)
             $totalRange = "A{$totalRow}:{$lastColumnLetter}{$totalRow}";
             $sheet->getStyle($totalRange)->applyFromArray([
                 'font' => [
                     'bold' => true,
-                    'color' => ['rgb' => '09090B'],
+                    'color' => ['rgb' => self::TOTAL_TEXT],
+                    'size' => 12,
                 ],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => 'F4F4F5'],
+                    'startColor' => ['rgb' => self::TOTAL_BG],
                 ],
                 'borders' => [
                     'top' => [
                         'borderStyle' => Border::BORDER_THIN,
-                        'color' => ['rgb' => 'A1A1AA'],
+                        'color' => ['rgb' => '94A3B8'],
                     ],
                     'bottom' => [
                         'borderStyle' => Border::BORDER_DOUBLE,
-                        'color' => ['rgb' => '18181B'],
+                        'color' => ['rgb' => '0F172A'],
+                    ],
+                    'inside' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => self::BORDER_COLOR],
                     ],
                 ],
             ]);
-            $sheet->getRowDimension($totalRow)->setRowHeight(26);
+            $sheet->getRowDimension($totalRow)->setRowHeight(32);
             $currentRow++;
         }
 
-        // 7. AUTO FIT LEBAR KOLOM
+        // 8. AUTO-FIT LEBAR KOLOM DENGAN PADDING AMAN
         for ($col = 1; $col <= $totalColumns; $col++) {
             $colLetter = $this->getColumnLetter($col);
             $sheet->getColumnDimension($colLetter)->setAutoSize(true);
+        }
+        $sheet->calculateColumnWidths();
+
+        // Tambahkan padding minimal (+3 karakter) agar angka/teks tidak mepet ke tepi border
+        for ($col = 1; $col <= $totalColumns; $col++) {
+            $colLetter = $this->getColumnLetter($col);
+            $calculatedWidth = $sheet->getColumnDimension($colLetter)->getWidth();
+            $sheet->getColumnDimension($colLetter)->setAutoSize(false);
+            $sheet->getColumnDimension($colLetter)->setWidth(max(10, $calculatedWidth + 3.5));
         }
 
         // Return Streamed Response XLSX
@@ -237,13 +387,6 @@ final class ExcelExportService
 
     private function getColumnLetter(int $colIndex): string
     {
-        $letter = '';
-        while ($colIndex > 0) {
-            $modulo = ($colIndex - 1) % 26;
-            $letter = chr(65 + $modulo) . $letter;
-            $colIndex = (int) (($colIndex - $modulo) / 26);
-        }
-
-        return $letter;
+        return Coordinate::stringFromColumnIndex($colIndex);
     }
 }

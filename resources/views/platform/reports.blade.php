@@ -1,17 +1,10 @@
-<x-layouts.app title="Laporan & Pertumbuhan Platform" subtitle="Metrik SaaS, MRR, adopsi paket dan tren pertumbuhan tenant" role="superadmin">
+<x-layouts.app title="Laporan Pertumbuhan Bisnis SaaS" subtitle="Pantau kesehatan finansial platform, MRR sewa sistem, dan laju pertumbuhan barbershop baru" role="superadmin">
     <!-- Header Actions -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <div>
-            <h1 class="text-base sm:text-lg font-black text-zinc-900 tracking-tight flex items-center gap-2">
-                <x-ui.icon name="trending-up" class="w-5 h-5 text-amber-600" />
-                <span>Analitik & Laporan Pertumbuhan Bisnis SaaS</span>
-            </h1>
-            <p class="text-xs text-zinc-500 mt-0.5">Pantau kesehatan finansial platform, MRR sewa sistem, dan laju pertumbuhan barbershop baru</p>
-        </div>
-
+    <div class="flex items-center justify-between gap-3 mb-6">
+        <span class="text-xs text-zinc-500 hidden sm:inline">Kesehatan finansial platform, MRR sewa sistem, dan laju pertumbuhan barbershop</span>
         <a
             href="{{ route('platform.reports.export') }}"
-            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-xs transition cursor-pointer self-start sm:self-auto shrink-0"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-xs transition cursor-pointer self-end sm:self-auto shrink-0"
             title="Download Laporan Ekosistem Tenant dalam format Microsoft Excel (.xlsx)"
         >
             <x-ui.icon name="download" class="w-4 h-4 text-white" />
@@ -100,9 +93,9 @@
                     $suspendedPct = $totalTenants > 0 ? (100 - $activePct - $trialPct) : 0;
                 @endphp
                 <div class="mt-5 h-3 w-full rounded-full bg-zinc-100 overflow-hidden flex">
-                    <div style="width: {{ $activePct }}%" class="bg-emerald-500" title="Aktif: {{ $activePct }}%"></div>
-                    <div style="width: {{ $trialPct }}%" class="bg-amber-400" title="Trial: {{ $trialPct }}%"></div>
-                    <div style="width: {{ $suspendedPct }}%" class="bg-rose-400" title="Suspended: {{ $suspendedPct }}%"></div>
+                    <div @style(['width: ' . $activePct . '%']) class="bg-emerald-500" title="Aktif: {{ $activePct }}%"></div>
+                    <div @style(['width: ' . $trialPct . '%']) class="bg-amber-400" title="Trial: {{ $trialPct }}%"></div>
+                    <div @style(['width: ' . $suspendedPct . '%']) class="bg-rose-400" title="Suspended: {{ $suspendedPct }}%"></div>
                 </div>
 
                 <!-- Legend & Detail Count -->
@@ -233,7 +226,7 @@
                         <!-- Bar visual -->
                         <div class="mt-4">
                             <div class="h-2 w-full rounded-full bg-zinc-200/70 overflow-hidden">
-                                <div style="width: {{ max($percentage, 8) }}%" class="h-full bg-amber-500 rounded-full"></div>
+                                <div @style(['width: ' . max($percentage, 8) . '%']) class="h-full bg-amber-500 rounded-full"></div>
                             </div>
                         </div>
                     </div>

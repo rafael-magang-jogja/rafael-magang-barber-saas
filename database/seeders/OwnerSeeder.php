@@ -101,7 +101,10 @@ final class OwnerSeeder extends Seeder
             [
                 'tenant_id' => $barberKing->id,
                 'subscription_id' => $subKing->id,
+                'type' => 'activation',
                 'amount' => $proPlan->price_monthly,
+                'period_start' => '2026-10-01 00:00:00',
+                'period_end' => '2026-10-31 23:59:59',
                 'status' => 'paid',
                 'due_at' => now()->startOfMonth()->addDays(3),
                 'paid_at' => now()->startOfMonth()->addDay(),
@@ -145,10 +148,11 @@ final class OwnerSeeder extends Seeder
         );
 
         SalaryScheme::query()->updateOrCreate(
-            ['tenant_id' => $barberKing->id, 'name' => 'Senior Barber (Pokok + Komisi)'],
+            ['tenant_id' => $barberKing->id, 'name' => 'Senior Barber (Komisi)'],
             [
-                'type' => 'base_plus_commission',
-                'base_salary' => 2_000_000,
+                'type' => 'commission_only',
+                'base_salary' => 0,
+                'alpha_penalty_nominal' => 0,
                 'period' => 'monthly',
                 'target_bonus_rules' => [
                     ['min_services' => 250, 'bonus' => 200_000],
@@ -164,6 +168,7 @@ final class OwnerSeeder extends Seeder
             [
                 'type' => 'commission_only',
                 'base_salary' => 0,
+                'alpha_penalty_nominal' => 0,
                 'period' => 'monthly',
                 'target_bonus_rules' => null,
                 'is_active' => true,
@@ -175,6 +180,7 @@ final class OwnerSeeder extends Seeder
             [
                 'type' => 'fixed',
                 'base_salary' => 2_500_000,
+                'alpha_penalty_nominal' => 0,
                 'period' => 'monthly',
                 'target_bonus_rules' => null,
                 'is_active' => true,

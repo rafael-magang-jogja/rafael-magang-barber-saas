@@ -87,6 +87,19 @@ final class StaffRepository
             ->first();
     }
 
+    public function findCashierMembershipForUser(?int $userId): ?Membership
+    {
+        if ($userId === null) {
+            return null;
+        }
+
+        return Membership::query()
+            ->withoutGlobalScope('tenant')
+            ->whereIn('role', [Role::Admin, Role::Owner])
+            ->where('user_id', $userId)
+            ->first() ?? Membership::query()->withoutGlobalScope('tenant')->where('user_id', $userId)->first();
+    }
+
     public function updateBarberWorkStatus(?int $userId, WorkStatus $status): ?Membership
     {
         $membership = $this->findBarberMembershipForUser($userId);

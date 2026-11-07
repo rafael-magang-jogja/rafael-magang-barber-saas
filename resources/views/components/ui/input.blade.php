@@ -6,8 +6,8 @@
 ])
 
 @php
-    $isRequired = $attributes->has('required') || ($label !== null && str_ends_with(trim((string) $label), '*'));
-    $cleanLabel = $label !== null ? rtrim(trim((string) $label), " *") : null;
+    $isRequired = $attributes->has('required') || ($label !== null && str_contains((string) $label, '*'));
+    $cleanLabel = $label !== null ? trim(str_replace('*', '', (string) $label)) : null;
     $isPassword = ($type === 'password');
 @endphp
 

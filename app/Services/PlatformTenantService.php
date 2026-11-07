@@ -114,6 +114,8 @@ final class PlatformTenantService
                         'subscription_id' => $subscription->id,
                         'number' => 'INV-SUB-' . now()->format('Ymd') . '-' . strtoupper(Str::random(4)),
                         'amount' => $plan->price_monthly,
+                        'period_start' => now(),
+                        'period_end' => $subscription->ends_at,
                         'status' => 'paid',
                         'due_at' => now(),
                         'paid_at' => now(),

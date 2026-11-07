@@ -26,7 +26,7 @@ final class StaffAndBarberSeeder extends Seeder
 
         $seniorScheme = SalaryScheme::query()
             ->where('tenant_id', $barberKing->id)
-            ->where('type', 'base_plus_commission')
+            ->where('name', 'like', '%Senior Barber%')
             ->firstOrFail();
 
         $shareScheme = SalaryScheme::query()
@@ -166,24 +166,64 @@ final class StaffAndBarberSeeder extends Seeder
                         'branch_id' => $b['branch_id'],
                         'start_time' => '10:00:00',
                         'end_time' => '21:00:00',
-                        'break_start' => '13:00:00',
-                        'break_end' => '14:00:00',
+                        'break_start' => '12:00:00',
+                        'break_end' => '13:00:00',
                         'is_off' => false,
                     ]
                 );
             }
+        }
 
-            // Absensi hari ini
-            Attendance::query()->updateOrCreate(
-                ['membership_id' => $membership->id, 'date' => $today],
+        // =====================================================================
+        // TENANT 2: Gentleman Cut Barbershop (Cabang Tebet)
+        // =====================================================================
+        $gentlemanCut = Tenant::query()->where('slug', 'gentleman-cut')->first();
+        if ($gentlemanCut) {
+            $tebetBranch = Branch::query()->withoutGlobalScope('tenant')
+                ->where('tenant_id', $gentlemanCut->id)
+                ->where('code', 'TBT')
+                ->first();
+
+            $gcBarberUser = User::query()->updateOrCreate(
+                ['email' => 'fajar.barber@gentlemancut.id'],
                 [
-                    'tenant_id' => $barberKing->id,
-                    'branch_id' => $b['branch_id'],
-                    'check_in_at' => now()->setTime(9, 55),
-                    'status' => 'present',
-                    'late_minutes' => 0,
+                    'name' => 'Fajar Ramadhan',
+                    'phone' => '081210000030',
+                    'password' => Hash::make('password'),
+                    'email_verified_at' => now(),
                 ]
             );
+
+            $gcMembership = Membership::query()->updateOrCreate(
+                ['tenant_id' => $gentlemanCut->id, 'user_id' => $gcBarberUser->id, 'role' => Role::Barber],
+                [
+                    'branch_id' => $tebetBranch?->id,
+                    'display_name' => 'Fajar',
+                    'specialty' => 'Classic Cut & Shaving Expert',
+                    'employment_type' => 'permanent',
+                    'salary_scheme_id' => null,
+                    'work_status' => WorkStatus::Active,
+                    'rating_avg' => 4.85,
+                    'reviews_count' => 38,
+                    'is_active' => true,
+                    'joined_at' => now()->subMonths(3)->toDateString(),
+                ]
+            );
+
+            for ($day = 0; $day <= 6; $day++) {
+                BarberSchedule::query()->updateOrCreate(
+                    ['membership_id' => $gcMembership->id, 'day_of_week' => $day],
+                    [
+                        'tenant_id' => $gentlemanCut->id,
+                        'branch_id' => $tebetBranch?->id,
+                        'start_time' => '10:00:00',
+                        'end_time' => '21:00:00',
+                        'break_start' => '12:00:00',
+                        'break_end' => '13:00:00',
+                        'is_off' => false,
+                    ]
+                );
+            }
         }
     }
 }

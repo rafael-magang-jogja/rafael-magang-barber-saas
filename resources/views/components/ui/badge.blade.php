@@ -13,6 +13,7 @@
         'completed' => ['label' => 'Selesai', 'class' => 'bg-emerald-100 text-emerald-700', 'plainClass' => 'text-emerald-600'],
         'paid' => ['label' => 'Lunas', 'class' => 'bg-emerald-100 text-emerald-700', 'plainClass' => 'text-emerald-600'],
         'unpaid' => ['label' => 'Belum Bayar', 'class' => 'bg-orange-100 text-orange-700', 'plainClass' => 'text-amber-600'],
+        'pending' => ['label' => 'Pending', 'class' => 'bg-amber-100 text-amber-800', 'plainClass' => 'text-amber-600'],
         'confirmed' => ['label' => 'Booking Aktif', 'class' => 'bg-violet-100 text-violet-700', 'plainClass' => 'text-violet-600'],
         'cancelled' => ['label' => 'Dibatalkan', 'class' => 'bg-rose-100 text-rose-700', 'plainClass' => 'text-rose-600'],
         'no_show' => ['label' => 'No-show', 'class' => 'bg-rose-100 text-rose-700', 'plainClass' => 'text-rose-600'],

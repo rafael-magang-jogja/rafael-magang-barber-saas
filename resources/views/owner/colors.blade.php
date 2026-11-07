@@ -39,41 +39,41 @@
         $paginatedColors = $filteredColors->forPage($currentPage, $perPage);
     @endphp
 
-    <!-- Navigasi Sub-Halaman Layanan & Warna -->
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div class="inline-flex items-center gap-1.5 bg-white border border-zinc-200/80 p-1.5 rounded-2xl shadow-2xs">
+    <!-- Navigasi Sub-Halaman Layanan & Warna (Khusus Mobile, Disembunyikan di Tablet & Desktop) -->
+    <div class="md:hidden mb-4">
+        <div class="grid grid-cols-2 p-1 bg-white border border-zinc-200/80 rounded-2xl shadow-2xs gap-1">
             <a
                 href="{{ route('owner.services') }}"
-                class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition"
+                class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition"
             >
                 <x-ui.icon name="scissors" class="w-3.5 h-3.5" />
-                <span>Daftar Layanan &amp; Harga</span>
+                <span>Layanan</span>
             </a>
             <a
                 href="{{ route('owner.colors') }}"
-                class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-zinc-950 text-amber-400 shadow-2xs transition"
+                class="relative flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black bg-amber-500 text-zinc-950 shadow-2xs transition"
             >
                 <x-ui.icon name="sparkles" class="w-3.5 h-3.5" />
-                <span>Setting Warna &amp; Stok Coloring</span>
+                <span>Stok Warna</span>
                 @if($lowStockCount > 0)
-                    <span class="relative flex h-2.5 w-2.5 shrink-0" title="{{ $lowStockCount }} warna mendekati minimum stok">
+                    <span class="relative flex h-2 w-2 shrink-0 ml-0.5" title="{{ $lowStockCount }} warna mendekati minimum stok">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                     </span>
                 @endif
             </a>
         </div>
-
-        @if($lowStockCount > 0)
-            <div class="inline-flex items-center gap-2 text-amber-700 text-xs font-bold">
-                <span class="relative flex h-2.5 w-2.5 shrink-0">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                </span>
-                <span>{{ $lowStockCount }} warna mendekati atau berada di bawah batas minimum stok</span>
-            </div>
-        @endif
     </div>
+
+    @if($lowStockCount > 0)
+        <div class="inline-flex items-center gap-2 text-amber-700 text-xs font-bold mb-4">
+            <span class="relative flex h-2.5 w-2.5 shrink-0">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+            </span>
+            <span>{{ $lowStockCount }} warna mendekati minimum stok</span>
+        </div>
+    @endif
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
         <!-- Form Tambah / Edit Warna Coloring -->
@@ -132,7 +132,7 @@
                                 data-hex="{{ $preset['hex'] }}"
                                 data-name="{{ $preset['name'] }}"
                                 class="w-8 h-8 rounded-full border shadow-2xs cursor-pointer hover:scale-105 transition {{ $isPresetSelected ? 'ring-2 ring-amber-500 ring-offset-2 border-zinc-900' : 'border-zinc-300' }}"
-                                style="background-color: {{ $preset['hex'] }}"
+                                @style(['background-color: ' . $preset['hex']])
                                 title="Pilih {{ $preset['name'] }} ({{ $preset['hex'] }})"
                             ></button>
                         @endforeach
@@ -236,12 +236,12 @@
         <!-- Daftar Stok Warna Coloring -->
         <x-ui.card class="lg:col-span-2">
             <x-slot:header>
-                <div class="flex flex-wrap items-center justify-between gap-2 w-full">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
                     <div>
                         <h2 class="font-bold">Daftar Warna &amp; Monitoring Stok</h2>
                         <span class="text-xs text-zinc-400">Stok hanya ditampilkan untuk Owner &amp; Kasir (disembunyikan dari halaman Customer)</span>
                     </div>
-                    <form method="GET" action="{{ route('owner.colors') }}" class="flex items-center gap-2">
+                    <form method="GET" action="{{ route('owner.colors') }}" class="w-full sm:w-auto">
                         <x-ui.select
                             name="stock_status"
                             size="sm"
@@ -250,7 +250,7 @@
                             icon="filter"
                             :options="$stockFilterOptions"
                             :value="request('stock_status')"
-                            class="w-52"
+                            class="w-full sm:w-52"
                             auto-submit
                         />
                     </form>
@@ -288,7 +288,7 @@
                         <div class="flex items-center gap-3 min-w-0 flex-1">
                             <span
                                 class="w-9 h-9 rounded-xl border border-zinc-300 shadow-2xs shrink-0"
-                                style="background-color: {{ $color->hex_code }}"
+                                @style(['background-color: ' . $color->hex_code])
                             ></span>
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">

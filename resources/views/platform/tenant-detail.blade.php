@@ -22,10 +22,22 @@
     </div>
 
     <!-- Header Profil Singkat Tenant -->
+    @php
+        $tenantBrandHex = $tenant->brand_color ?: '#18181b';
+        $cleanTenantHex = ltrim($tenantBrandHex, '#');
+        if (strlen($cleanTenantHex) === 3) {
+            $cleanTenantHex = $cleanTenantHex[0].$cleanTenantHex[0].$cleanTenantHex[1].$cleanTenantHex[1].$cleanTenantHex[2].$cleanTenantHex[2];
+        }
+        $tr = hexdec(substr($cleanTenantHex, 0, 2));
+        $tg = hexdec(substr($cleanTenantHex, 2, 2));
+        $tb = hexdec(substr($cleanTenantHex, 4, 2));
+        $tenantLum = (0.299 * $tr + 0.587 * $tg + 0.114 * $tb) / 255;
+        $tenantBrandContrast = $tenantLum > 0.58 ? '#09090b' : '#ffffff';
+    @endphp
     <div class="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-2xs mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div class="flex items-center gap-3.5 min-w-0">
-                <div class="w-12 h-12 rounded-2xl text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs ring-1 ring-black/10" style="background-color: {{ $tenant->brand_color ?: '#18181b' }}">
+                <div class="w-12 h-12 rounded-2xl font-black text-xl flex items-center justify-center shrink-0 shadow-xs ring-1 ring-black/10" @style(['background-color: ' . $tenantBrandHex, 'color: ' . $tenantBrandContrast])>
                     {{ strtoupper(substr($tenant->name, 0, 1)) }}
                 </div>
                 <div class="min-w-0">
@@ -176,7 +188,7 @@
 
                     <div>
                         <label class="block text-xs font-bold text-zinc-700 mb-1">Alamat Kantor / Pusat</label>
-                        <textarea name="address" rows="2" class="w-full text-xs font-semibold p-3 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-zinc-50" placeholder="Jl. Sudirman No...">{{ $tenant->address }}</textarea>
+                        <textarea name="address" rows="2" class="w-full text-xs font-semibold p-3 rounded-xl border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500 bg-zinc-50" placeholder="Jl. Sudirman No...">{{ $tenant->address }}</textarea>
                     </div>
 
                     <div class="pt-3 border-t border-zinc-100 flex justify-end">
